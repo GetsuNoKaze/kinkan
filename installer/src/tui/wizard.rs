@@ -409,7 +409,8 @@ impl Wizard {
             return;
         }
         let site = self.rows[self.pick].clone();
-        self.apply = Task::start(move || sites::apply(&site));
+        let own = self.own.clone();
+        self.apply = Task::start(move || sites::apply(&site, own.as_ref()));
     }
 
     fn scan_finished(&mut self) {
