@@ -7,6 +7,7 @@ import { Button, Field, Pill } from "../../../components/ui";
 import { t, useLocale } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
 import { useSaveSettings } from "./shared";
+import { TemplateCard } from "./template";
 
 type Routes = Schemas["Routes"];
 type DNS = NonNullable<Routes["dns"]>;
@@ -101,7 +102,31 @@ export function RoutingSection({ s }: { s: Schemas["SettingsView"] }) {
   };
   const nodeName = (n: { name: string; local: boolean }) => t("settings.routesOnServer", { name: n.name || (n.local ? t("settings.routesThisServer") : "—") });
   const routed = Object.keys(routes.services ?? {}).length + (routes.direct ?? []).length;
+  // The own profile opens where it is in use; its text lives here, so switching views keeps it.
+  const [view, setView] = useState<"simple" | "yaml">(s.sub_template.trim() ? "yaml" : "simple");
+  const [yaml, setYaml] = useState(s.sub_template);
+  const starter = () => unwrap(api.POST("/api/v1/settings/routes/preview", { body: { sub_routing: draft.mode, sub_routes: draft.routes, starter: true } })).then((r) => r.profile);
+  const views = (
+    <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label={t("settings.routesView")}>
+      {(["simple", "yaml"] as const).map((v) => (
+        <button key={v} type="button" aria-pressed={view === v} className="chip" onClick={() => setView(v)}>
+          {t(v === "simple" ? "settings.routesViewSimple" : "settings.routesViewYaml")}
+        </button>
+      ))}
+    </div>
+  );
+  if (view === "yaml") {
+    return (
+      <>
+        {views}
+        <Columns wide="left" left={<TemplateCard s={s} text={yaml} setText={setYaml} starter={starter} />} right={<PreviewCard mode={draft.mode} routes={draft.routes} template={yaml} />} />
+      </>
+    );
+  }
   return (
+    <>
+    {views}
+    {s.sub_template.trim() ? <div className="banner mb-4">{t("settings.routesYamlLive")}</div> : null}
     <Columns
       wide="left"
       left={
@@ -211,13 +236,14 @@ export function RoutingSection({ s }: { s: Schemas["SettingsView"] }) {
       }
       right={<PreviewCard mode={draft.mode} routes={draft.routes} />}
     />
+    </>
   );
 }
 
 // The profile a user with every connection gets, before anything is saved.
-function PreviewCard({ mode, routes }: { mode: Schemas["SettingsView"]["sub_routing"]; routes: Routes }) {
+function PreviewCard({ mode, routes, template }: { mode: Schemas["SettingsView"]["sub_routing"]; routes: Routes; template?: string }) {
   const preview = useMutation({
-    mutationFn: () => unwrap(api.POST("/api/v1/settings/routes/preview", { body: { sub_routing: mode, sub_routes: routes } })),
+    mutationFn: () => unwrap(api.POST("/api/v1/settings/routes/preview", { body: { sub_routing: mode, sub_routes: routes, ...(template?.trim() ? { sub_template: template } : {}) } })),
   });
   return (
     <section className="card glass reveal" style={{ "--i": 2 } as React.CSSProperties}>
