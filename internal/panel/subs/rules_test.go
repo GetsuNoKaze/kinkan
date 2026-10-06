@@ -1,7 +1,6 @@
 package subs
 
 import (
-	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -92,7 +91,7 @@ func TestRulesInProfile(t *testing.T) {
 	var cfg struct {
 		Rules []string `json:"rules"`
 	}
-	if err := json.Unmarshal(raw, &cfg); err != nil {
+	if err := unmarshalProfile(raw, &cfg); err != nil {
 		t.Fatal(err)
 	}
 	at := func(r string) int {

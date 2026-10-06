@@ -921,8 +921,7 @@ func (h *Handler) stub(w http.ResponseWriter, u db.User, cfg Config, format stri
 	}
 	if format == "clash" {
 		main := cfg.Groups.WithDefaults(cfg.Lang).Main
-		// JSON is YAML: the same as the real profile (see Mihomo).
-		body, _ := json.Marshal(map[string]any{
+		body, _ := marshalYAML(map[string]any{
 			"proxies":      []map[string]any{{"name": name, "type": "socks5", "server": "127.0.0.1", "port": 1}},
 			"proxy-groups": []map[string]any{{"name": main, "type": "select", "proxies": []string{name}}},
 			"rules":        []string{"MATCH," + main},

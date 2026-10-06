@@ -3,7 +3,6 @@
 package subs
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/netip"
@@ -232,7 +231,7 @@ func URIs(p Profile) (string, error) {
 	return strings.Join(lines, "\n"), nil
 }
 
-// Mihomo renders a complete client profile. mihomo's parser accepts JSON as YAML.
+// Mihomo renders a complete client profile.
 func Mihomo(p Profile, g Groups, r Routing) ([]byte, error) {
 	ps, err := build(p)
 	if err != nil {
@@ -290,7 +289,7 @@ func Mihomo(p Profile, g Groups, r Routing) ([]byte, error) {
 		dns["nameserver-policy"] = map[string]any{"geosite:category-ru": []string{"77.88.8.8", "77.88.8.1"}}
 	}
 	cfg["rules"] = append(rules, "MATCH,"+g.Main)
-	return json.MarshalIndent(cfg, "", "  ")
+	return marshalYAML(cfg)
 }
 
 func urlTest(name string, proxies []string) map[string]any {
