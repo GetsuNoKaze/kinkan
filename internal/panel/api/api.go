@@ -30,6 +30,7 @@ import (
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/panel/subs"
 	"mikan/internal/panel/tgbackup"
 	"mikan/internal/panel/tgbot"
 	"mikan/internal/panel/tlscert"
@@ -58,6 +59,9 @@ type Deps struct {
 	Online    func() map[string]nodeapi.Online
 	Cert      func() acme.Status
 	RenewCert func()
+	// RoutesPreview renders a Clash profile with routing in place of the saved one
+	// (subs.Handler.Preview); nil: no preview.
+	RoutesPreview func(ctx context.Context, r subs.Routing, routes subs.Routes) ([]byte, error)
 	// Nodes is the live side of the nodes; nil when the panel runs without them.
 	Nodes NodeRuntime
 	// PanelCert is the client certificate remote nodes pin; their join keys carry its hash.
@@ -216,6 +220,7 @@ func New(d Deps) (http.Handler, huma.API, error) {
 	h.registerBackups()
 	h.registerImport()
 	h.registerSettings()
+	h.registerRoutes()
 	h.registerCerts()
 	h.registerTelegram()
 	h.registerUpdates()

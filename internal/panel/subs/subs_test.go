@@ -256,7 +256,7 @@ func TestRouting(t *testing.T) {
 		t.Errorf("all mode keeps plain DNS: %+v %v", all.DNS, all.GeoxURL)
 	}
 
-	for in, want := range map[string]Routing{"": RoutingRUDirect, "all": RoutingAll, "ru_direct": RoutingRUDirect, "blocked": RoutingRUDirect} {
+	for in, want := range map[string]Routing{"": RoutingRUDirect, "all": RoutingAll, "ru_direct": RoutingRUDirect, "blocked": RoutingBlocked, "nope": RoutingRUDirect} {
 		if got := ParseRouting(in); got != want {
 			t.Errorf("ParseRouting(%q) = %q, want %q", in, got, want)
 		}

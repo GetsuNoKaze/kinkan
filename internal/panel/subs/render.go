@@ -51,13 +51,17 @@ const (
 	// foreign IPs, and the node does not carry traffic that needs no VPN.
 	RoutingRUDirect Routing = "ru_direct"
 	// RoutingAll sends everything but the LAN through the tunnel and needs no geodata.
-	RoutingAll     Routing = "all"
+	RoutingAll Routing = "all"
+	// RoutingBlocked sends only what is blocked or slowed down in Russia through the
+	// tunnel (blockedLists, and the services sent to it), the rest goes direct. Apps that
+	// cannot take rule lists get RoutingRUDirect.
+	RoutingBlocked Routing = "blocked"
 	DefaultRouting         = RoutingRUDirect
 )
 
 // ParseRouting maps a stored setting to a mode; empty and unknown values get the default.
 func ParseRouting(s string) Routing {
-	if r := Routing(s); r == RoutingRUDirect || r == RoutingAll {
+	if r := Routing(s); r == RoutingRUDirect || r == RoutingAll || r == RoutingBlocked {
 		return r
 	}
 	return DefaultRouting
@@ -131,6 +135,11 @@ type Profile struct {
 	Fingerprint string
 	// Rules are the admin's own Clash rules (ServedRules), before the built-in routing.
 	Rules []string
+	// Routes go after the admin's rules, for the apps that take rule lists (App); Lang
+	// names the groups they add.
+	Routes Routes
+	App    App
+	Lang   string
 }
 
 type proxy struct {
@@ -257,6 +266,18 @@ func Mihomo(p Profile, g Groups, r Routing) ([]byte, error) {
 		urlTest(g.Auto, names),
 	}
 	groups = append(groups, countries...)
+	taken := map[string]bool{}
+	for _, n := range append(append([]string{}, names...), g.Main, g.Auto, AliasGroup) {
+		taken[strings.ToLower(n)] = true
+	}
+	for _, c := range countries {
+		taken[strings.ToLower(c["name"].(string))] = true
+	}
+	if !p.routable() && r == RoutingBlocked {
+		r = RoutingRUDirect
+	}
+	rt := p.route(g, ps, taken, r)
+	groups = append(groups, rt.groups...)
 	if g.Main != AliasGroup {
 		groups = append(groups, map[string]any{"name": AliasGroup, "type": "select", "proxies": []string{g.Main}, "hidden": true})
 	}
@@ -268,6 +289,7 @@ func Mihomo(p Profile, g Groups, r Routing) ([]byte, error) {
 	// The panel and the nodes stay out of the tunnel whatever the admin's rules say.
 	rules := append(directRules(p.Direct), "GEOIP,LAN,DIRECT,no-resolve")
 	rules = append(rules, p.Rules...)
+	rules = append(rules, rt.rules...)
 	cfg := map[string]any{
 		"mixed-port": 7890, "allow-lan": false, "mode": "rule", "log-level": "warning",
 		// The node has no IPv6 on most VPS: with it on, apps first try IPv6 through the
@@ -277,9 +299,16 @@ func Mihomo(p Profile, g Groups, r Routing) ([]byte, error) {
 		"proxies":      proxies,
 		"proxy-groups": groups,
 	}
+	if len(rt.providers) > 0 {
+		cfg["rule-providers"] = rt.providers
+	}
+	if rt.geodata || r != RoutingAll {
+		cfg["geodata-mode"], cfg["geox-url"] = false, geoxURL
+	}
 	if r == RoutingRUDirect {
 		rules = append(rules, "GEOSITE,category-ru,DIRECT", "GEOIP,ru,DIRECT")
-		cfg["geodata-mode"], cfg["geox-url"] = false, geoxURL
+	}
+	if r != RoutingAll {
 		// GEOIP,ru makes the app resolve every domain itself. DoH straight from Russia
 		// stalls under TSPU throttling, so it goes through the tunnel (the alias group has
 		// a fixed name: "&" or "=" in a renamed group would break the "#group" suffix).
@@ -288,7 +317,12 @@ func Mihomo(p Profile, g Groups, r Routing) ([]byte, error) {
 		dns["proxy-server-nameserver"] = []string{"https://1.1.1.1/dns-query", "https://dns.google/dns-query"}
 		dns["nameserver-policy"] = map[string]any{"geosite:category-ru": []string{"77.88.8.8", "77.88.8.1"}}
 	}
-	cfg["rules"] = append(rules, "MATCH,"+g.Main)
+	p.Routes.DNS.apply(dns)
+	last := g.Main
+	if r == RoutingBlocked {
+		last = "DIRECT"
+	}
+	cfg["rules"] = append(rules, "MATCH,"+last)
 	return marshalYAML(cfg)
 }
 

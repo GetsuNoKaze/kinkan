@@ -242,6 +242,11 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	}
 	deps.Importer = importer
 	p.Importer = importer
+	// The subscriptions' handler comes later; the preview reaches it once it is there.
+	var subHandler *subs.Handler
+	deps.RoutesPreview = func(ctx context.Context, r subs.Routing, routes subs.Routes) ([]byte, error) {
+		return subHandler.Preview(ctx, r, routes)
+	}
 	apiHandler, _, err := api.New(deps)
 	if err != nil {
 		return nil, err
@@ -284,6 +289,9 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		}
 		cfg := subs.Config{Brand: brand, SupportURL: support, Groups: groups, Routing: subs.ParseRouting(routing), Fingerprint: fingerprint,
 			Direct: []string{publicHost, domainName}, Lang: lang, Rules: subs.ServedRules(rules, groups.WithDefaults(lang))}
+		if cfg.Routes, _, err = settings.Get[subs.Routes](ctx, set, settings.KeyRoutes); err != nil {
+			return subs.Config{}, err
+		}
 		if cfg.Binding, err = set.On(ctx, settings.DeviceBinding); err != nil {
 			return subs.Config{}, err
 		}
@@ -345,7 +353,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		return g
 	}}
 	subCfg := func(ctx context.Context) (subs.Config, error) { return cache.get(ctx, buildSubCfg) }
-	subHandler := subs.NewHandler(st, subCfg, subPageHandler, o.Now, deps.Devices, o.TrustProxy)
+	subHandler = subs.NewHandler(st, subCfg, subPageHandler, o.Now, deps.Devices, o.TrustProxy)
 	subHandler.SetLogger(o.Log)
 	subHandler.SetTelegram(p.Telegram)
 	subHandler.SetShop(p.Billing)

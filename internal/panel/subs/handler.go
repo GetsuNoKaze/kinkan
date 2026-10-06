@@ -48,6 +48,7 @@ type Config struct {
 	Groups  Groups
 	Routing Routing
 	Rules   []string // the admin's own Clash rules, checked (ServedRules)
+	Routes  Routes   // services, direct apps and DNS (settings.KeyRoutes)
 	// Fingerprint is the default uTLS profile for inbounds that set none.
 	Fingerprint string
 	// Binding gives every device that sends its id keys of its own (domain.Devices);
@@ -229,6 +230,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch format {
 	case "clash":
 		prof.Rules = RulesFor(cfg.Rules, app)
+		prof.Routes, prof.App, prof.Lang = cfg.Routes, app, cfg.Lang
 		body, err := Mihomo(prof, cfg.Groups.WithDefaults(cfg.Lang), cfg.Routing)
 		if errors.Is(err, ErrNoProxies) {
 			h.stub(w, u, cfg, format, err)
@@ -1005,4 +1007,20 @@ func (h *Handler) poolInfo(ctx context.Context, userID int64, grants domain.Gran
 		out = append(out, pi)
 	}
 	return out, nil
+}
+
+// Preview is the Clash profile of a user given every inbound, with routing and routes in
+// place of the saved ones: what the admin panel shows before they are saved. Its keys are
+// placeholders.
+func (h *Handler) Preview(ctx context.Context, routing Routing, routes Routes) ([]byte, error) {
+	cfg, err := h.cfg(ctx)
+	if err != nil {
+		return nil, err
+	}
+	prof, err := h.profile(ctx, db.User{}, cfg, db.Slot{Name: "preview", Uuid: "00000000-0000-0000-0000-000000000000", Secret: "preview"})
+	if err != nil {
+		return nil, err
+	}
+	prof.Rules, prof.Routes, prof.Lang = cfg.Rules, routes, cfg.Lang
+	return Mihomo(prof, cfg.Groups.WithDefaults(cfg.Lang), routing)
 }

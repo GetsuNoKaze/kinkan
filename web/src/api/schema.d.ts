@@ -1011,6 +1011,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/routes/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Сервисы и списки для маршрутизации */
+        get: operations["routes-catalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/routes/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Профиль Clash с этой маршрутизацией, без сохранения */
+        post: operations["routes-preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/stats/overview": {
         parameters: {
             query?: never;
@@ -1919,6 +1953,16 @@ export interface components {
             /** Format: int64 */
             tariff_id: number;
         };
+        DNS: {
+            default_nameserver?: string[];
+            nameserver?: string[];
+            policy?: components["schemas"]["DNSPolicy"][];
+            proxy_server_nameserver?: string[];
+        };
+        DNSPolicy: {
+            match: string;
+            servers: string[];
+        };
         DeviceView: {
             /** Format: date-time */
             first_seen: string;
@@ -2555,8 +2599,9 @@ export interface components {
              * @description Отдельный порт подписок на сервере панели; 0 — убрать. Ссылки переезжают на него, старые продолжают работать
              */
             sub_port?: number;
+            sub_routes?: components["schemas"]["Routes"];
             /** @enum {string} */
-            sub_routing?: "ru_direct" | "all";
+            sub_routing?: "ru_direct" | "all" | "blocked";
             /** @description Свои правила Clash, до 500 строк; ошибка указывает номер строки */
             sub_rules?: string;
             /** @description Переменные — см. SettingsView.sub_title */
@@ -2947,6 +2992,18 @@ export interface components {
             tls13: boolean;
             x25519: boolean;
         };
+        RouteDirectSet: {
+            id: string;
+            name: string;
+            name_en: string;
+        };
+        RouteService: {
+            icon: string;
+            id: string;
+            /** @description По-русски */
+            name: string;
+            name_en: string;
+        };
         RouteStruct: {
             /** @enum {string} */
             mode: "direct" | "node" | "proxy";
@@ -2957,6 +3014,26 @@ export interface components {
             node_id?: number;
             /** @description socks5://user:pass@host:port, http://… или https://…; не передан — прежний (mode=proxy) */
             proxy?: string;
+        };
+        Routes: {
+            direct?: string[];
+            dns?: components["schemas"]["DNS"];
+            services?: {
+                [key: string]: string;
+            };
+        };
+        RoutesCatalogOutputBody: {
+            direct: components["schemas"]["RouteDirectSet"][];
+            services: components["schemas"]["RouteService"][];
+        };
+        RoutesPreviewInputBody: {
+            sub_routes: components["schemas"]["Routes"];
+            /** @enum {string} */
+            sub_routing: "ru_direct" | "all" | "blocked";
+        };
+        RoutesPreviewOutputBody: {
+            /** @description Профиль Clash (YAML) пользователя со всеми подключениями; ключи — заглушки */
+            profile: string;
         };
         ScanTargetsOutputBody: {
             /** @description Адрес сервера, вокруг которого искали */
@@ -3029,11 +3106,13 @@ export interface components {
             sub_port: number;
             /** @description sub_port_busy — сохранённый порт занят на сервере, подписки пока идут через порт панели */
             sub_port_error?: string;
+            /** @description Куда идут сервисы (services: id → vpn, direct, block или node:<id>), какие приложения и сайты идут мимо VPN (direct) и свои DNS (dns). Каталог — GET /api/v1/settings/routes/catalog */
+            sub_routes: components["schemas"]["Routes"];
             /**
-             * @description Маршруты в Clash-приложениях: ru_direct — российские сайты и IP напрямую по геобазам mihomo, all — всё через VPN
+             * @description Маршруты в Clash-приложениях: ru_direct — российские сайты и IP напрямую по геобазам mihomo, all — всё через VPN, blocked — через VPN только заблокированное (списки privWL-clash), остальное напрямую
              * @enum {string}
              */
-            sub_routing: "ru_direct" | "all";
+            sub_routing: "ru_direct" | "all" | "blocked";
             /** @description Свои правила Clash: по строке TYPE,VALUE,TARGET[,no-resolve]; # — комментарий */
             sub_rules: string;
             /** @description Название подписки в приложениях (заголовок profile-title); пусто — бренд. Переменные: {brand} — бренд, {name} — имя пользователя, {date} — дата окончания (ДД.ММ.ГГГГ, МСК), {days} — дней осталось, {used} — израсходовано, {left} — осталось трафика, {total} — всего; без срока или лимита — ∞ */
@@ -6029,6 +6108,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResetPathOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "routes-catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoutesCatalogOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "routes-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoutesPreviewInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoutesPreviewOutputBody"];
                 };
             };
             /** @description Error */

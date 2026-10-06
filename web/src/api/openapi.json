@@ -1194,6 +1194,55 @@
         ],
         "type": "object"
       },
+      "DNS": {
+        "additionalProperties": false,
+        "properties": {
+          "default_nameserver": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "nameserver": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "policy": {
+            "items": {
+              "$ref": "#/components/schemas/DNSPolicy"
+            },
+            "type": "array"
+          },
+          "proxy_server_nameserver": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "DNSPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "match": {
+            "type": "string"
+          },
+          "servers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "match",
+          "servers"
+        ],
+        "type": "object"
+      },
       "DeviceView": {
         "additionalProperties": false,
         "properties": {
@@ -2929,10 +2978,14 @@
             "minimum": 0,
             "type": "integer"
           },
+          "sub_routes": {
+            "$ref": "#/components/schemas/Routes"
+          },
           "sub_routing": {
             "enum": [
               "ru_direct",
-              "all"
+              "all",
+              "blocked"
             ],
             "type": "string"
           },
@@ -3997,6 +4050,51 @@
         ],
         "type": "object"
       },
+      "RouteDirectSet": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "name_en": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "name_en"
+        ],
+        "type": "object"
+      },
+      "RouteService": {
+        "additionalProperties": false,
+        "properties": {
+          "icon": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "description": "По-русски",
+            "type": "string"
+          },
+          "name_en": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "icon",
+          "name",
+          "name_en"
+        ],
+        "type": "object"
+      },
       "RouteStruct": {
         "additionalProperties": false,
         "properties": {
@@ -4022,6 +4120,83 @@
         },
         "required": [
           "mode"
+        ],
+        "type": "object"
+      },
+      "Routes": {
+        "additionalProperties": false,
+        "properties": {
+          "direct": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "dns": {
+            "$ref": "#/components/schemas/DNS"
+          },
+          "services": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "RoutesCatalogOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "direct": {
+            "items": {
+              "$ref": "#/components/schemas/RouteDirectSet"
+            },
+            "type": "array"
+          },
+          "services": {
+            "items": {
+              "$ref": "#/components/schemas/RouteService"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "services",
+          "direct"
+        ],
+        "type": "object"
+      },
+      "RoutesPreviewInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "sub_routes": {
+            "$ref": "#/components/schemas/Routes"
+          },
+          "sub_routing": {
+            "enum": [
+              "ru_direct",
+              "all",
+              "blocked"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "sub_routing",
+          "sub_routes"
+        ],
+        "type": "object"
+      },
+      "RoutesPreviewOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "description": "Профиль Clash (YAML) пользователя со всеми подключениями; ключи — заглушки",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile"
         ],
         "type": "object"
       },
@@ -4191,11 +4366,16 @@
             "description": "sub_port_busy — сохранённый порт занят на сервере, подписки пока идут через порт панели",
             "type": "string"
           },
+          "sub_routes": {
+            "$ref": "#/components/schemas/Routes",
+            "description": "Куда идут сервисы (services: id → vpn, direct, block или node:\u003cid\u003e), какие приложения и сайты идут мимо VPN (direct) и свои DNS (dns). Каталог — GET /api/v1/settings/routes/catalog"
+          },
           "sub_routing": {
-            "description": "Маршруты в Clash-приложениях: ru_direct — российские сайты и IP напрямую по геобазам mihomo, all — всё через VPN",
+            "description": "Маршруты в Clash-приложениях: ru_direct — российские сайты и IP напрямую по геобазам mihomo, all — всё через VPN, blocked — через VPN только заблокированное (списки privWL-clash), остальное напрямую",
             "enum": [
               "ru_direct",
-              "all"
+              "all",
+              "blocked"
             ],
             "type": "string"
           },
@@ -4232,6 +4412,7 @@
           "sub_rules",
           "rule_targets",
           "sub_routing",
+          "sub_routes",
           "client_fingerprint",
           "auto_port",
           "auto_sni",
@@ -8921,6 +9102,78 @@
           "settings"
         ],
         "x-session-only": true
+      }
+    },
+    "/api/v1/settings/routes/catalog": {
+      "get": {
+        "operationId": "routes-catalog",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutesCatalogOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Сервисы и списки для маршрутизации",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/routes/preview": {
+      "post": {
+        "operationId": "routes-preview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoutesPreviewInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutesPreviewOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Профиль Clash с этой маршрутизацией, без сохранения",
+        "tags": [
+          "settings"
+        ]
       }
     },
     "/api/v1/stats/overview": {
