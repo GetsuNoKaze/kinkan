@@ -2994,6 +2994,11 @@
             "maxLength": 65536,
             "type": "string"
           },
+          "sub_template": {
+            "description": "Свой профиль Clash; пусто — вернуть встроенный",
+            "maxLength": 524288,
+            "type": "string"
+          },
           "sub_title": {
             "description": "Переменные — см. SettingsView.sub_title",
             "maxLength": 200,
@@ -4169,6 +4174,10 @@
       "RoutesPreviewInputBody": {
         "additionalProperties": false,
         "properties": {
+          "starter": {
+            "description": "Встроенный профиль с этими sub_routing и sub_routes как начало своего: без серверов, группы просят их сами",
+            "type": "boolean"
+          },
           "sub_routes": {
             "$ref": "#/components/schemas/Routes"
           },
@@ -4178,6 +4187,11 @@
               "all",
               "blocked"
             ],
+            "type": "string"
+          },
+          "sub_template": {
+            "description": "Свой профиль Clash: показать его вместо встроенного",
+            "maxLength": 524288,
             "type": "string"
           }
         },
@@ -4383,6 +4397,10 @@
             "description": "Свои правила Clash: по строке TYPE,VALUE,TARGET[,no-resolve]; # — комментарий",
             "type": "string"
           },
+          "sub_template": {
+            "description": "Свой профиль Clash (YAML) вместо встроенного для приложений на mihomo; пусто — встроенный. Серверы панель подставляет сама: в proxies и в группы с include-all-proxies или mikan: {nodes, types}",
+            "type": "string"
+          },
           "sub_title": {
             "description": "Название подписки в приложениях (заголовок profile-title); пусто — бренд. Переменные: {brand} — бренд, {name} — имя пользователя, {date} — дата окончания (ДД.ММ.ГГГГ, МСК), {days} — дней осталось, {used} — израсходовано, {left} — осталось трафика, {total} — всего; без срока или лимита — ∞",
             "type": "string"
@@ -4412,6 +4430,7 @@
           "sub_rules",
           "rule_targets",
           "sub_routing",
+          "sub_template",
           "sub_routes",
           "client_fingerprint",
           "auto_port",

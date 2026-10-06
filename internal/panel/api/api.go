@@ -61,7 +61,9 @@ type Deps struct {
 	RenewCert func()
 	// RoutesPreview renders a Clash profile with routing in place of the saved one
 	// (subs.Handler.Preview); nil: no preview.
-	RoutesPreview func(ctx context.Context, r subs.Routing, routes subs.Routes) ([]byte, error)
+	RoutesPreview func(ctx context.Context, req subs.PreviewRequest) ([]byte, error)
+	// CheckTemplate checks an own Clash profile (subs.Handler.CheckTemplate); nil: unchecked.
+	CheckTemplate func(ctx context.Context, src string) error
 	// Nodes is the live side of the nodes; nil when the panel runs without them.
 	Nodes NodeRuntime
 	// PanelCert is the client certificate remote nodes pin; their join keys carry its hash.

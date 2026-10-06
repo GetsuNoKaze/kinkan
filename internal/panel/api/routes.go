@@ -35,8 +35,10 @@ type routesCatalogOutput struct {
 
 type routesPreviewInput struct {
 	Body struct {
-		SubRouting string      `json:"sub_routing" enum:"ru_direct,all,blocked"`
-		SubRoutes  subs.Routes `json:"sub_routes"`
+		SubRouting  string      `json:"sub_routing" enum:"ru_direct,all,blocked"`
+		SubRoutes   subs.Routes `json:"sub_routes"`
+		SubTemplate string      `json:"sub_template,omitempty" maxLength:"524288" doc:"Свой профиль Clash: показать его вместо встроенного"`
+		Starter     bool        `json:"starter,omitempty" doc:"Встроенный профиль с этими sub_routing и sub_routes как начало своего: без серверов, группы просят их сами"`
 	}
 }
 
@@ -75,9 +77,13 @@ func (h *handlers) routesPreview(ctx context.Context, in *routesPreviewInput) (*
 	if err := in.Body.SubRoutes.Check(exists); err != nil {
 		return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.sub_routes", Message: err.Error()})
 	}
-	raw, err := h.d.RoutesPreview(ctx, subs.ParseRouting(in.Body.SubRouting), in.Body.SubRoutes)
+	raw, err := h.d.RoutesPreview(ctx, subs.PreviewRequest{Routing: subs.ParseRouting(in.Body.SubRouting), Routes: in.Body.SubRoutes, Template: in.Body.SubTemplate, Starter: in.Body.Starter})
 	if errors.Is(err, subs.ErrNoProxies) {
 		return nil, huma.Error409Conflict("no_proxies")
+	}
+	var te *subs.TemplateError
+	if errors.As(err, &te) {
+		return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.sub_template", Message: te.Code, Value: te.Detail})
 	}
 	if err != nil {
 		return nil, err

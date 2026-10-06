@@ -49,6 +49,9 @@ type Config struct {
 	Routing Routing
 	Rules   []string // the admin's own Clash rules, checked (ServedRules)
 	Routes  Routes   // services, direct apps and DNS (settings.KeyRoutes)
+	// Template is the admin's own Clash profile (settings.KeyTemplate, see Template); it
+	// takes the place of Groups, Routing, Rules and Routes for mihomo apps. "": none.
+	Template string
 	// Fingerprint is the default uTLS profile for inbounds that set none.
 	Fingerprint string
 	// Binding gives every device that sends its id keys of its own (domain.Devices);
@@ -231,7 +234,18 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "clash":
 		prof.Rules = RulesFor(cfg.Rules, app)
 		prof.Routes, prof.App, prof.Lang = cfg.Routes, app, cfg.Lang
-		body, err := Mihomo(prof, cfg.Groups.WithDefaults(cfg.Lang), cfg.Routing)
+		var body []byte
+		if cfg.Template != "" && prof.routable() {
+			body, err = Template(prof, cfg.Template)
+			var te *TemplateError
+			if errors.As(err, &te) {
+				// Saved templates are checked; one that went bad must not leave apps without a profile.
+				h.warn("template/"+te.Code, "subscription: the own Clash profile does not render, the built-in one goes out", "err", err)
+				body, err = Mihomo(prof, cfg.Groups.WithDefaults(cfg.Lang), cfg.Routing)
+			}
+		} else {
+			body, err = Mihomo(prof, cfg.Groups.WithDefaults(cfg.Lang), cfg.Routing)
+		}
 		if errors.Is(err, ErrNoProxies) {
 			h.stub(w, u, cfg, format, err)
 			return
@@ -1009,18 +1023,52 @@ func (h *Handler) poolInfo(ctx context.Context, userID int64, grants domain.Gran
 	return out, nil
 }
 
-// Preview is the Clash profile of a user given every inbound, with routing and routes in
-// place of the saved ones: what the admin panel shows before they are saved. Its keys are
-// placeholders.
-func (h *Handler) Preview(ctx context.Context, routing Routing, routes Routes) ([]byte, error) {
-	cfg, err := h.cfg(ctx)
+// PreviewRequest is what the admin panel shows a profile with, in place of the saved
+// settings.
+type PreviewRequest struct {
+	Routing  Routing
+	Routes   Routes
+	Template string // the own Clash profile; "": the built-in one with Routing and Routes
+	Starter  bool   // the built-in one as the start of an own (Starter)
+}
+
+// Preview is the Clash profile of a user given every inbound, as req sets it: what the
+// admin panel shows before it is saved. Its keys are placeholders.
+func (h *Handler) Preview(ctx context.Context, req PreviewRequest) ([]byte, error) {
+	prof, cfg, err := h.sample(ctx)
 	if err != nil {
 		return nil, err
+	}
+	prof.Routes = req.Routes
+	g := cfg.Groups.WithDefaults(cfg.Lang)
+	switch {
+	case req.Starter:
+		return Starter(prof, g, req.Routing)
+	case req.Template != "":
+		return Template(prof, req.Template)
+	}
+	return Mihomo(prof, g, req.Routing)
+}
+
+// CheckTemplate checks an own Clash profile against a user given every inbound.
+func (h *Handler) CheckTemplate(ctx context.Context, src string) error {
+	prof, _, err := h.sample(ctx)
+	if err != nil {
+		return err
+	}
+	return CheckTemplate(prof, src)
+}
+
+// sample is the profile of a user given every inbound, with placeholder keys.
+func (h *Handler) sample(ctx context.Context) (Profile, Config, error) {
+	cfg, err := h.cfg(ctx)
+	if err != nil {
+		return Profile{}, cfg, err
 	}
 	prof, err := h.profile(ctx, db.User{}, cfg, db.Slot{Name: "preview", Uuid: "00000000-0000-0000-0000-000000000000", Secret: "preview"})
 	if err != nil {
-		return nil, err
+		return Profile{}, cfg, err
 	}
-	prof.Rules, prof.Routes, prof.Lang = cfg.Rules, routes, cfg.Lang
-	return Mihomo(prof, cfg.Groups.WithDefaults(cfg.Lang), routing)
+	prof.Rules, prof.Routes, prof.Lang = cfg.Rules, cfg.Routes, cfg.Lang
+	return prof, cfg, nil
 }

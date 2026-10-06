@@ -242,13 +242,22 @@ func URIs(p Profile) (string, error) {
 
 // Mihomo renders a complete client profile.
 func Mihomo(p Profile, g Groups, r Routing) ([]byte, error) {
-	ps, err := build(p)
+	cfg, _, err := mihomoConfig(p, g, r)
 	if err != nil {
 		return nil, err
 	}
+	return marshalYAML(cfg)
+}
+
+// mihomoConfig is the profile Mihomo renders, and the proxies in it.
+func mihomoConfig(p Profile, g Groups, r Routing) (map[string]any, []proxy, error) {
+	ps, err := build(p)
+	if err != nil {
+		return nil, nil, err
+	}
 	if len(ps) == 0 {
 		// Groups with no proxies in them are a profile mihomo may refuse whole.
-		return nil, ErrNoProxies
+		return nil, nil, ErrNoProxies
 	}
 	g = g.WithDefaults("")
 	proxies := make([]map[string]any, len(ps))
@@ -323,7 +332,7 @@ func Mihomo(p Profile, g Groups, r Routing) ([]byte, error) {
 		last = "DIRECT"
 	}
 	cfg["rules"] = append(rules, "MATCH,"+last)
-	return marshalYAML(cfg)
+	return cfg, ps, nil
 }
 
 func urlTest(name string, proxies []string) map[string]any {

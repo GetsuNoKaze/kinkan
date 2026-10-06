@@ -2604,6 +2604,8 @@ export interface components {
             sub_routing?: "ru_direct" | "all" | "blocked";
             /** @description Свои правила Clash, до 500 строк; ошибка указывает номер строки */
             sub_rules?: string;
+            /** @description Свой профиль Clash; пусто — вернуть встроенный */
+            sub_template?: string;
             /** @description Переменные — см. SettingsView.sub_title */
             sub_title?: string;
             /** @description https://… или tg://… */
@@ -3027,9 +3029,13 @@ export interface components {
             services: components["schemas"]["RouteService"][];
         };
         RoutesPreviewInputBody: {
+            /** @description Встроенный профиль с этими sub_routing и sub_routes как начало своего: без серверов, группы просят их сами */
+            starter?: boolean;
             sub_routes: components["schemas"]["Routes"];
             /** @enum {string} */
             sub_routing: "ru_direct" | "all" | "blocked";
+            /** @description Свой профиль Clash: показать его вместо встроенного */
+            sub_template?: string;
         };
         RoutesPreviewOutputBody: {
             /** @description Профиль Clash (YAML) пользователя со всеми подключениями; ключи — заглушки */
@@ -3115,6 +3121,8 @@ export interface components {
             sub_routing: "ru_direct" | "all" | "blocked";
             /** @description Свои правила Clash: по строке TYPE,VALUE,TARGET[,no-resolve]; # — комментарий */
             sub_rules: string;
+            /** @description Свой профиль Clash (YAML) вместо встроенного для приложений на mihomo; пусто — встроенный. Серверы панель подставляет сама: в proxies и в группы с include-all-proxies или mikan: {nodes, types} */
+            sub_template: string;
             /** @description Название подписки в приложениях (заголовок profile-title); пусто — бренд. Переменные: {brand} — бренд, {name} — имя пользователя, {date} — дата окончания (ДД.ММ.ГГГГ, МСК), {days} — дней осталось, {used} — израсходовано, {left} — осталось трафика, {total} — всего; без срока или лимита — ∞ */
             sub_title: string;
             support_url: string;

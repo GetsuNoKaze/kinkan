@@ -43,6 +43,7 @@ type SettingsView struct {
 	SubRules     string      `json:"sub_rules" doc:"Свои правила Clash: по строке TYPE,VALUE,TARGET[,no-resolve]; # — комментарий"`
 	RuleTargets  []string    `json:"rule_targets" doc:"Куда правило может направить трафик: DIRECT, REJECT, REJECT-DROP, PROXY и группы"`
 	SubRouting   string      `json:"sub_routing" enum:"ru_direct,all,blocked" doc:"Маршруты в Clash-приложениях: ru_direct — российские сайты и IP напрямую по геобазам mihomo, all — всё через VPN, blocked — через VPN только заблокированное (списки privWL-clash), остальное напрямую"`
+	SubTemplate  string      `json:"sub_template" doc:"Свой профиль Clash (YAML) вместо встроенного для приложений на mihomo; пусто — встроенный. Серверы панель подставляет сама: в proxies и в группы с include-all-proxies или mikan: {nodes, types}"`
 	SubRoutes    subs.Routes `json:"sub_routes" doc:"Куда идут сервисы (services: id → vpn, direct, block или node:<id>), какие приложения и сайты идут мимо VPN (direct) и свои DNS (dns). Каталог — GET /api/v1/settings/routes/catalog"`
 	Fingerprint  string      `json:"client_fingerprint" doc:"Отпечаток TLS (uTLS) у клиентов, если у подключения не задан свой: chrome, firefox, safari, ios, android, edge, 360, qq, random, randomized или своё значение"`
 	AutoPort     bool        `json:"auto_port" doc:"Переносить подключение на другой порт, если клиенты перестали до него доходить"`
@@ -73,6 +74,7 @@ type patchSettingsInput struct {
 		SubGroupAuto  *string      `json:"sub_group_auto,omitempty" maxLength:"200"`
 		SubRouting    *string      `json:"sub_routing,omitempty" enum:"ru_direct,all,blocked"`
 		SubRoutes     *subs.Routes `json:"sub_routes,omitempty"`
+		SubTemplate   *string      `json:"sub_template,omitempty" maxLength:"524288" doc:"Свой профиль Clash; пусто — вернуть встроенный"`
 		SubRules      *string      `json:"sub_rules,omitempty" maxLength:"65536" doc:"Свои правила Clash, до 500 строк; ошибка указывает номер строки"`
 		Fingerprint   *string      `json:"client_fingerprint,omitempty" pattern:"^[a-z0-9_]{1,32}$" doc:"Из списка или своё: латиница в нижнем регистре, цифры и _, до 32 символов"`
 		AutoPort      *bool        `json:"auto_port,omitempty"`
@@ -131,6 +133,7 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 	if err == nil {
 		v.SubRoutes, _, err = settings.Get[subs.Routes](ctx, h.d.Settings, settings.KeyRoutes)
 	}
+	get(settings.KeyTemplate, &v.SubTemplate)
 	get(settings.KeyFingerprint, &v.Fingerprint)
 	if !proto.ValidFingerprint(v.Fingerprint) {
 		v.Fingerprint = proto.DefaultFingerprint
@@ -214,7 +217,7 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 	// Where clients are sent, and what they are told to trust: a leaked API key must not
 	// move subscriptions to another server or add rules to every client.
 	for field, touched := range map[string]bool{"public_host": b.PublicHost != nil, "domain": b.Domain != nil, "sub_port": b.SubPort != nil,
-		"sub_rules": b.SubRules != nil, "sub_routes": b.SubRoutes != nil, "support_url": b.SupportURL != nil,
+		"sub_rules": b.SubRules != nil, "sub_routes": b.SubRoutes != nil, "sub_template": b.SubTemplate != nil, "support_url": b.SupportURL != nil,
 		// What every subscriber's app shows: text, links and the logo it downloads.
 		"sub_title": b.SubTitle != nil, "sub_announce": b.Announce != nil, "sub_announce_url": b.AnnounceURL != nil, "app_branding": b.AppBranding != nil,
 		"brand_accent": b.BrandAccent != nil, "brand_logo_url": b.BrandLogoURL != nil} {
@@ -308,6 +311,16 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 			details = append(details, &huma.ErrorDetail{Location: "body.sub_routes", Message: err.Error()})
 		}
 	}
+	if b.SubTemplate != nil && strings.TrimSpace(*b.SubTemplate) != "" && h.d.CheckTemplate != nil {
+		err := h.d.CheckTemplate(ctx, *b.SubTemplate)
+		var te *subs.TemplateError
+		switch {
+		case errors.As(err, &te):
+			details = append(details, &huma.ErrorDetail{Location: "body.sub_template", Message: te.Code, Value: te.Detail})
+		case err != nil && !errors.Is(err, subs.ErrNoProxies):
+			return nil, err
+		}
+	}
 	// The domain must lead to this server: checked when it or the server's address changes,
 	// after the cheap checks, since it asks public DNS.
 	if (b.Domain != nil || b.PublicHost != nil) && len(details) == 0 {
@@ -366,6 +379,15 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 		}
 		if b.SubRoutes != nil {
 			if err := settings.Set(ctx, set, settings.KeyRoutes, *b.SubRoutes); err != nil {
+				return err
+			}
+		}
+		if b.SubTemplate != nil {
+			tpl := *b.SubTemplate
+			if strings.TrimSpace(tpl) == "" {
+				tpl = ""
+			}
+			if err := settings.Set(ctx, set, settings.KeyTemplate, tpl); err != nil {
 				return err
 			}
 		}

@@ -244,9 +244,10 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	p.Importer = importer
 	// The subscriptions' handler comes later; the preview reaches it once it is there.
 	var subHandler *subs.Handler
-	deps.RoutesPreview = func(ctx context.Context, r subs.Routing, routes subs.Routes) ([]byte, error) {
-		return subHandler.Preview(ctx, r, routes)
+	deps.RoutesPreview = func(ctx context.Context, req subs.PreviewRequest) ([]byte, error) {
+		return subHandler.Preview(ctx, req)
 	}
+	deps.CheckTemplate = func(ctx context.Context, src string) error { return subHandler.CheckTemplate(ctx, src) }
 	apiHandler, _, err := api.New(deps)
 	if err != nil {
 		return nil, err
@@ -290,6 +291,9 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		cfg := subs.Config{Brand: brand, SupportURL: support, Groups: groups, Routing: subs.ParseRouting(routing), Fingerprint: fingerprint,
 			Direct: []string{publicHost, domainName}, Lang: lang, Rules: subs.ServedRules(rules, groups.WithDefaults(lang))}
 		if cfg.Routes, _, err = settings.Get[subs.Routes](ctx, set, settings.KeyRoutes); err != nil {
+			return subs.Config{}, err
+		}
+		if cfg.Template, err = set.String(ctx, settings.KeyTemplate); err != nil {
 			return subs.Config{}, err
 		}
 		if cfg.Binding, err = set.On(ctx, settings.DeviceBinding); err != nil {
