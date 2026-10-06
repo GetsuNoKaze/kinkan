@@ -428,6 +428,11 @@ func (s *Inbounds) CheckTemplate(ctx context.Context, node db.Node, config, port
 	if fp := t.Ext().Client.Fingerprint; fp != "" && !proto.ValidFingerprint(fp) {
 		return nil, &proto.Error{Code: "config_fingerprint", Field: "mikan.client.fingerprint", Detail: fp}
 	}
+	// mihomo's ws client ignores reality-opts and Xray has no REALITY over WebSocket: the
+	// client would do plain TLS to the masking site.
+	if t["ws-path"] != nil && t["reality-config"] != nil {
+		return nil, &proto.Error{Code: "config_ws_reality", Field: "ws-path"}
+	}
 	if err := s.checkDestResolves(ctx, t); err != nil {
 		return nil, err
 	}

@@ -163,6 +163,7 @@
       "config_both_tls": "REALITY и mikan.tls: node вместе не работают — выберите одно",
       "config_tls": "mikan.tls может быть только node",
       "config_flow": "flow: xtls-rprx-vision — только для vless поверх TCP",
+      "config_ws_reality": "REALITY не работает поверх WebSocket — уберите ws-path или замените reality-config на mikan.tls: node",
       "config_xhttp_mode": "mode: stream-one, stream-up или packet-up (auto зависает в mihomo)",
       "config_path": "Путь должен начинаться с /",
       "config_masquerade": "masquerade — только https:// на публичный сайт",
