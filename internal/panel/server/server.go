@@ -18,11 +18,15 @@ type Server struct {
 	admin  http.Handler
 	sub    http.Handler
 	legacy http.Handler // the old panel's links (settings.Paths.Legacy); nil: none
+	site   http.Handler // every other path (OwnSite); nil: NotFound
 	hsts   atomic.Pointer[func() bool]
 }
 
 // SetLegacy takes the handler of the old panel's subscription links.
 func (s *Server) SetLegacy(h http.Handler) { s.legacy = h }
+
+// SetSite takes the handler of the paths the panel does not own (OwnSite).
+func (s *Server) SetSite(h http.Handler) { s.site = h }
 
 func New(admin, sub http.Handler) *Server {
 	s := &Server{admin: admin, sub: sub}
@@ -61,7 +65,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, admin bool) {
 	p := r.URL.Path
 	// Reject non-canonical paths ("//", "/./", "/../") instead of guessing what they mean.
 	if p == "" || p[0] != '/' || (path.Clean(p) != p && path.Clean(p)+"/" != p) {
-		NotFound(w)
+		s.other(w, r)
 		return
 	}
 	seg, rest, _ := strings.Cut(p[1:], "/")
@@ -78,8 +82,16 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, admin bool) {
 		r2.URL.RawPath = ""
 		s.legacy.ServeHTTP(w, r2)
 	default:
-		NotFound(w)
+		s.other(w, r)
 	}
+}
+
+func (s *Server) other(w http.ResponseWriter, r *http.Request) {
+	if s.site == nil {
+		NotFound(w)
+		return
+	}
+	s.site.ServeHTTP(w, r)
 }
 
 func (s *Server) forward(w http.ResponseWriter, r *http.Request, h http.Handler, seg, rest, full string) {
