@@ -387,6 +387,11 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 	if b.SubPort != nil && h.d.Telegram != nil {
 		h.d.Telegram.Reload()
 	}
+	// The certificate is for the domain, or the address without one: a new name gets its
+	// certificate now, not at the next six-hourly check.
+	if (b.Domain != nil || b.PublicHost != nil) && h.d.RenewCert != nil {
+		h.d.RenewCert()
+	}
 	var auditDetails map[string]any
 	if b.SubPort != nil {
 		auditDetails = map[string]any{"sub_port": *b.SubPort}
