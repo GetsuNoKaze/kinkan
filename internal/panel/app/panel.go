@@ -356,6 +356,9 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	adminMux.Handle("/", p.spa)
 	p.server = server.New(adminMux, subHandler)
 	p.server.SetLegacy(subHandler.Legacy())
+	if o.DataDir != "" {
+		p.server.SetSite(server.OwnSite(filepath.Join(o.DataDir, "www")))
+	}
 	p.server.SetHSTS(o.HSTS)
 	p.Handler = p.server
 	return p, nil

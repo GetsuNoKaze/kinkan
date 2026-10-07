@@ -399,11 +399,12 @@ impl Menu {
                 }
             }
             Section::Sites => match self.scan.done() {
-                Some(Ok(_)) if self.pick < self.rows.len() => {
+                Some(Ok(scan)) if self.pick < self.rows.len() => {
                     let site = self.rows[self.pick].clone();
+                    let own = scan.self_steal.clone();
                     self.job_title = format!("REALITY site {}", site.sni);
                     self.job_at = Section::Sites;
-                    self.job = job(move || sites::apply(&site));
+                    self.job = job(move || sites::apply(&site, own.as_ref()));
                 }
                 Some(Ok(_)) => {}
                 _ if !self.scan.running() => self.scan = Task::start(sites::scan),

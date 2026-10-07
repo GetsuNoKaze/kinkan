@@ -68,8 +68,8 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 	if host == "" {
 		host = "localhost"
 	}
-	// The self-signed certificate is long-lived and pinned in Hysteria2/TUIC links, so
-	// renewing the panel's public certificate never recreates the node's QUIC listeners.
+	// The self-signed certificate is long-lived and pinned in Hysteria2/TUIC links where
+	// the local node has no public one.
 	tlsDir := filepath.Join(cfg.DataDir, "tls")
 	self, err := tlscert.LoadOrCreateSelfSigned(tlsDir, host, time.Now())
 	if err != nil {
@@ -87,8 +87,11 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 	set := settings.New(st.Q)
 	// A node's own certificate (Nodes → Certificate) goes first: links pin it only when
 	// clients cannot trust it, so a renewal of a public one changes nothing for them.
-	// Otherwise the local node shares the panel's self-signed certificate and each remote
-	// node gets its own for its address, pinned in links the same way.
+	// Otherwise the local node serves the panel's public certificate for its domain, with no
+	// pin: a scanner sees the same certificate on the site and on the QUIC ports. Without
+	// one it shares the panel's self-signed certificate, and each remote node gets its own
+	// for its address, pinned in links the same way.
+	var certs *acme.Manager
 	opts.QUIC = func(n db.Node) (*nodeapi.TLSFiles, string, error) {
 		host := domain.NodeHost(n)
 		if n.Address == "" {
@@ -108,6 +111,17 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 			return &nodeapi.TLSFiles{CertPEM: certPEM, KeyPEM: keyPEM}, pin, nil
 		} else if err != nil {
 			logger.Warn("tls: a node's own certificate is not used", "node", n.ID, "err", err)
+		}
+		// A domain only: an IP certificate lives six days, and older phones may not trust
+		// the chain where a pin would have worked.
+		if n.Address == "" && certs != nil && net.ParseIP(host) == nil {
+			if c := certs.Public(); c != nil && tlscert.Covers(c.Leaf, host) {
+				certPEM, keyPEM, err := tlscert.CustomPEM(c)
+				if err != nil {
+					return nil, "", err
+				}
+				return &nodeapi.TLSFiles{CertPEM: certPEM, KeyPEM: keyPEM}, "", nil
+			}
 		}
 		dir := tlsDir
 		if n.Address != "" {
@@ -145,7 +159,6 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 	subPort := NewSubPort(listenHost, panelTLS, logger)
 	defer subPort.Close()
 	opts.SubPort, opts.SubPortError = subPort.Set, subPort.Error
-	var certs *acme.Manager
 	if !cfg.Dev {
 		certs = acme.New(cfg.DataDir, holder, self, settings.New(st.Q), logger, time.Now)
 		opts.Certs = certs
