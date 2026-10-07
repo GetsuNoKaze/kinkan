@@ -60,6 +60,8 @@
     "nodeDown": "The node is not responding",
     "twoFactorOn": "2FA on",
     "owner": "owner",
+    "fold": "Fold the menu",
+    "unfold": "Unfold the menu",
     "logout": "Sign out",
     "more": "More"
   },
