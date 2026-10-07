@@ -408,6 +408,9 @@ func TestStarsNewSubscription(t *testing.T) {
 	if u.Name != "@buyer" || time.Unix(u.ExpiresAt.Int64, 0).Sub(e.now) != 30*24*time.Hour {
 		t.Fatalf("user: %+v", u)
 	}
+	if u.Source != domain.UserFromBot {
+		t.Fatalf("a subscription bought in the bot came from %q", u.Source)
+	}
 	// Paid once: the invoice cannot be paid again.
 	if err := e.s.PreCheckout(ctx, 555, p.Payload, "XTR", 150); err == nil {
 		t.Fatal("an applied invoice passed pre-checkout")
@@ -450,6 +453,10 @@ func TestRenewal(t *testing.T) {
 	}
 	if e.payment(p.ID).UserID.Int64 != u.ID {
 		t.Fatal("payment not tied to the renewed user")
+	}
+	// A renewal of a subscription the admin made does not make it a purchase of the bot.
+	if after.Source != domain.UserFromAdmin {
+		t.Fatalf("a renewed user came from %q, want the admin", after.Source)
 	}
 }
 

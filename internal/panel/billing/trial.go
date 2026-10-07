@@ -76,7 +76,7 @@ func (s *Service) Trial(ctx context.Context, tgID int64) (db.User, error) {
 		} else if n == 0 {
 			return ErrTrialUsed
 		}
-		if u, err = s.d.Users.CreateOn(ctx, q, domain.CreateInput{Name: buyerName(ctx, q, tgID), Note: "Telegram · trial", TariffID: t.ID}, domain.Patch{}); err != nil {
+		if u, err = s.d.Users.CreateOn(ctx, q, domain.CreateInput{Name: buyerName(ctx, q, tgID), Note: "Telegram · trial", TariffID: t.ID, Source: domain.UserFromTrial}, domain.Patch{}); err != nil {
 			return err
 		}
 		if err := q.LinkTg(ctx, db.LinkTgParams{UserID: u.ID, TgID: tgID, CreatedAt: now.Unix()}); err != nil {

@@ -41,6 +41,9 @@ func TestTrialOncePerAccount(t *testing.T) {
 		u.ExpiresAt.Int64 != e.now.Add(time.Duration(trial.DurationDays)*24*time.Hour).Unix() {
 		t.Fatalf("trial user %+v on %+v", u, trial)
 	}
+	if u.Source != domain.UserFromTrial {
+		t.Fatalf("a trial user came from %q", u.Source)
+	}
 	links, err := e.st.Q.ListTgLinksOf(ctx, 901)
 	if err != nil || len(links) != 1 || links[0].ID != u.ID {
 		t.Fatalf("the trial is not linked to the account: %+v %v", links, err)

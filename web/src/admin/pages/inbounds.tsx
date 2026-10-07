@@ -10,7 +10,7 @@ import { Button, EmptyState, PageHeader, Pill, Segmented, Skeleton } from "../..
 import { Switch } from "../../components/switch";
 import { t, tMaybe } from "../../i18n";
 import { ago, maskedAs } from "../../lib/format";
-import { nodeLabel } from "./nodes";
+import { nodeLabel } from "../../lib/node-label";
 import { hostPort, listenerError } from "./inbound/shared";
 import { AddDrawer } from "./inbound/add";
 import { EditDrawer } from "./inbound/edit";

@@ -43,6 +43,8 @@ type NodeInfo struct {
 	MemUsed     uint64     `json:"mem_used"`
 	MemTotal    uint64     `json:"mem_total"`
 	CheckedAt   *time.Time `json:"checked_at,omitempty"`
+	// Traffic24h is what the node carried in the last day, both ways.
+	Traffic24h int64 `json:"traffic_24h" doc:"Сколько унесла нода за последние сутки (вверх и вниз вместе), байты; у только что добавленной ноды 0"`
 	// Behind: the node runs an older version than the panel.
 	Behind bool `json:"behind" doc:"Нода старее панели"`
 	// CanUpdate: the panel can update the node itself (a remote node that answers and has
@@ -188,9 +190,15 @@ func (h *handlers) listNodes(ctx context.Context, _ *struct{}) (*nodesOutput, er
 	if err != nil {
 		return nil, err
 	}
+	day, err := h.nodeBytes(ctx, "24h")
+	if err != nil {
+		return nil, err
+	}
 	out := &nodesOutput{Body: make([]NodeInfo, 0, len(nodes))}
 	for _, n := range nodes {
-		out.Body = append(out.Body, h.viewNode(ctx, n, inbounds))
+		v := h.viewNode(ctx, n, inbounds)
+		v.Traffic24h = day[n.ID].Up + day[n.ID].Down
+		out.Body = append(out.Body, v)
 	}
 	return out, nil
 }
@@ -349,7 +357,13 @@ func (h *handlers) nodeInfo(ctx context.Context, id int64) (*nodeInfoOutput, err
 	if err != nil {
 		return nil, err
 	}
-	return &nodeInfoOutput{Body: h.viewNode(ctx, n, inbounds)}, nil
+	day, err := h.nodeBytes(ctx, "24h")
+	if err != nil {
+		return nil, err
+	}
+	v := h.viewNode(ctx, n, inbounds)
+	v.Traffic24h = day[n.ID].Up + day[n.ID].Down
+	return &nodeInfoOutput{Body: v}, nil
 }
 
 func (h *handlers) rekeyNode(ctx context.Context, in *nodeIDInput) (*nodeKeyOutput, error) {

@@ -13,7 +13,7 @@ import { t } from "../../i18n";
 import { useDraft } from "../../lib/draft";
 import { fieldErrors } from "../../lib/fields";
 import { ago } from "../../lib/format";
-import { nodeLabel } from "./nodes";
+import { nodeLabel } from "../../lib/node-label";
 
 type Cascade = Schemas["CascadeView"];
 type Route = "direct" | "warp" | "node";
