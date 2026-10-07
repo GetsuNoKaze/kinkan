@@ -82,6 +82,9 @@ const (
 	KeyLegacySubSecret = "legacy_sub_secret"
 	// KeyQuietHour is the UTC hour the slot pool is refilled, which reconnects QUIC clients.
 	KeyQuietHour = "quiet_hour_utc"
+	// KeySubPage is the subscription page as the admin built it (subpage.Config): its look,
+	// blocks, apps and own CSS; unset: the page as it always was.
+	KeySubPage = "sub_page"
 )
 
 // Switch is an on/off setting with its default: read it with On, so the default lives
@@ -161,6 +164,10 @@ var generation atomic.Uint64
 
 // Generation is how many settings have been written by this process so far.
 func Generation() uint64 { return generation.Load() }
+
+// Touch moves the generation for a change kept outside the settings table that what is
+// built from settings reads too (the subscription page's uploaded logo).
+func Touch() { generation.Add(1) }
 
 func (s *Settings) String(ctx context.Context, key string) (string, error) {
 	v, _, err := Get[string](ctx, s, key)

@@ -35,6 +35,8 @@ export const qk = {
   torrent: ["torrent"] as const,
   torrentHits: (user: number) => ["torrent", "hits", user] as const,
   speedTests: (node: number) => ["speedtests", node] as const,
+  subPage: ["sub-page"] as const,
+  subDocs: ["sub-docs"] as const,
   folders: ["folders"] as const,
   nodeTraffic: (node: number, range: string) => ["node-traffic", node, range] as const,
   nodeShares: (range: string) => ["node-shares", range] as const,

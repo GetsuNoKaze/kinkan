@@ -34,6 +34,7 @@ import (
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/panel/subpage"
 	"mikan/internal/panel/subs"
 	"mikan/internal/panel/tgbackup"
 	"mikan/internal/panel/tgbot"
@@ -261,6 +262,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	if sp, err := server.NewSPA(o.Web, "sub.html"); err == nil {
 		p.subPage, subPageHandler = sp, sp
 	}
+	pages := subpage.NewService(st.Q)
 	buildSubCfg := func(ctx context.Context) (subs.Config, error) {
 		ep, err := set.Endpoint(ctx)
 		if err != nil {
@@ -325,6 +327,16 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 				return subs.Config{}, err
 			}
 		}
+		// The apps take the logo uploaded for the page when no link of its own is given.
+		if cfg.App.Enabled && cfg.App.LogoURL == "" && cfg.SubBase != "" {
+			assets, err := pages.Assets(ctx)
+			if err != nil {
+				return subs.Config{}, err
+			}
+			if a, ok := assets[subpage.AssetLogo]; ok {
+				cfg.App.LogoURL = cfg.SubBase + "/" + subpage.AssetPath(subpage.AssetLogo, a.Hash)
+			}
+		}
 		nodes, err := st.Q.ListNodes(ctx)
 		if err != nil {
 			return subs.Config{}, err
@@ -367,6 +379,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	subHandler.SetTelegram(p.Telegram)
 	subHandler.SetShop(p.Billing)
 	subHandler.SetPromo(promos)
+	subHandler.SetPages(pages)
 
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/api/", apiHandler)

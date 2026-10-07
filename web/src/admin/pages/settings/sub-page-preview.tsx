@@ -1,0 +1,177 @@
+// The subscription page as the editor's draft makes it, in a frame of its own: the page's
+// look and the admin's CSS stay inside it (they would restyle the panel otherwise), and the
+// frame is as wide as a phone or a laptop, scaled down to the column it sits in.
+import "../../../sub/look.css";
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { Button } from "../../../components/ui";
+import { getLocale, t } from "../../../i18n";
+import type { Platform } from "../../../sub/apps";
+import { cleanCSS, paintLook, titleOf, type DocItem, type DocView, type PageConfig } from "../../../sub/page";
+import { Shop, type ShopData } from "../../../sub/shop";
+import type { Info } from "../../../sub/types";
+import { DocScreen, PageBackdrop, PageBlocks, PageShell } from "../../../sub/view";
+
+export type PreviewDevice = "phone" | "desktop";
+
+export type PreviewProps = {
+  config: PageConfig;
+  brand: string;
+  /** The brand's colour when the page takes it. */
+  accent?: string;
+  logo?: string;
+  background?: string;
+  docs: DocView[];
+  info: Info;
+  subURL: string;
+  device: PreviewDevice;
+  scheme: "light" | "dark";
+  /** Shown as the Mini App: the shop and promo codes are there. */
+  tg: boolean;
+  platform: Platform;
+  shop: ShopData;
+};
+
+const SIZE: Record<PreviewDevice, { w: number; h: number }> = { phone: { w: 390, h: 780 }, desktop: { w: 1024, h: 720 } };
+
+// The frame's own page: the panel's styles are copied in once it has loaded.
+const FRAME_HTML = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root"></div></body></html>';
+
+export function PagePreview(props: PreviewProps) {
+  const stage = useRef<HTMLDivElement>(null);
+  const frame = useRef<HTMLIFrameElement>(null);
+  const root = useRef<Root | null>(null);
+  const [ready, setReady] = useState(false);
+  const [width, setWidth] = useState(0);
+  const [viewport, setViewport] = useState(() => window.innerHeight);
+  const size = SIZE[props.device];
+  // A phone as tall as the window leaves room for; the laptop at its own proportions.
+  const h = props.device === "phone" ? Math.max(560, Math.min(size.h, viewport - 200)) : size.h;
+  const scale = width ? Math.min(1, width / size.w) : 0;
+
+  useLayoutEffect(() => {
+    const el = stage.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setWidth(e?.contentRect.width ?? 0));
+    ro.observe(el);
+    const onResize = () => setViewport(window.innerHeight);
+    window.addEventListener("resize", onResize);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
+
+  const init = () => {
+    const doc = frame.current?.contentDocument;
+    if (!doc || !doc.getElementById("root") || root.current) return;
+    for (const n of document.querySelectorAll('link[rel="stylesheet"], style')) doc.head.appendChild(n.cloneNode(true));
+    const own = doc.createElement("style");
+    own.id = "mikan-css";
+    doc.head.appendChild(own);
+    root.current = createRoot(doc.getElementById("root")!);
+    setReady(true);
+  };
+
+  useEffect(
+    () => () => {
+      const r = root.current;
+      root.current = null;
+      // Not while React renders this tree: the frame's root goes once it is done.
+      if (r) window.setTimeout(() => r.unmount());
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const doc = frame.current?.contentDocument;
+    const r = root.current;
+    if (!ready || !doc || !r) return;
+    paintLook(doc.documentElement, props.config.look, props.scheme, props.accent);
+    doc.documentElement.lang = getLocale();
+    const own = doc.getElementById("mikan-css");
+    if (own) own.textContent = cleanCSS(props.config.css);
+    r.render(<PreviewPage {...props} />);
+  });
+
+  return (
+    <div ref={stage} className="relative w-full overflow-hidden" style={{ height: scale ? h * scale + 2 : h }}>
+      <iframe
+        ref={frame}
+        title={t("settings.page.previewFrame")}
+        srcDoc={FRAME_HTML}
+        onLoad={init}
+        className="absolute top-0 origin-top-left border border-[var(--hairline)] bg-[var(--bg)] shadow-[var(--shadow-md)]"
+        style={{
+          width: size.w,
+          height: h,
+          left: scale ? Math.max(0, (width - size.w * scale) / 2) : 0,
+          transform: `scale(${scale || 1})`,
+          borderRadius: props.device === "phone" ? 36 : 12,
+          visibility: scale ? "visible" : "hidden",
+        }}
+      />
+    </div>
+  );
+}
+
+/** The page inside the frame: the same blocks the subscriber gets, with a sample's data. */
+function PreviewPage(p: PreviewProps) {
+  const [docId, setDocId] = useState<number | null>(null);
+  const docs: DocItem[] = p.docs;
+  // A preview goes nowhere: its links and buttons stay on the page.
+  const stay = (e: MouseEvent) => {
+    if ((e.target as Element).closest?.("a")) e.preventDefault();
+  };
+  const shell = (children: React.ReactNode) => (
+    <div onClickCapture={stay}>
+      <PageBackdrop look={p.config.look} image={p.background} />
+      <PageShell config={p.config} brand={p.brand} logo={p.logo} right={<span className="ml-auto text-xs font-semibold text-[var(--ink-500)]">{getLocale().toUpperCase()}</span>}>
+        {children}
+      </PageShell>
+    </div>
+  );
+  if (docId !== null) {
+    const doc = p.docs.find((d) => d.id === docId);
+    return shell(<DocScreen key={docId} item={doc} load={() => (doc ? Promise.resolve(doc) : Promise.reject(new Error("gone")))} onBack={() => setDocId(null)} tgMode={p.tg} />);
+  }
+  const promoTitle = titleOf(p.config, "promo");
+  return shell(
+    <PageBlocks
+      config={p.config}
+      info={p.info}
+      subURL={p.subURL}
+      tgMode={p.tg}
+      docs={docs}
+      platform={p.platform}
+      selling={p.tg}
+      promo={
+        <section className="glass sub-card p-4" inert>
+          <h2 className="text-[15px] font-semibold">{promoTitle || t("sub.promoTitle")}</h2>
+          <p className="mt-1 text-xs text-[var(--ink-500)]">{t("sub.promoHint")}</p>
+          <div className="mt-3 flex gap-2">
+            <input className="input min-w-0 flex-1" placeholder="WELCOME30" readOnly />
+            <Button variant="primary">{t("sub.promoApply")}</Button>
+          </div>
+        </section>
+      }
+      shop={
+        <div inert>
+          <Shop
+            data={p.shop}
+            offers={p.shop.offers}
+            subRoot=""
+            initData=""
+            token=""
+            title={titleOf(p.config, "shop") || t("sub.shop")}
+            openInvoice={() => undefined}
+            openLink={() => undefined}
+            onRefresh={() => undefined}
+          />
+        </div>
+      }
+      reload={() => Promise.resolve()}
+      onOpenDoc={setDocId}
+    />,
+  );
+}

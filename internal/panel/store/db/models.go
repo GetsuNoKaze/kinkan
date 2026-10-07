@@ -300,6 +300,26 @@ type SlotCounter struct {
 	Last int64
 }
 
+type SubAsset struct {
+	Name        string
+	ContentType string
+	Data        []byte
+	Hash        string
+	UpdatedAt   int64
+}
+
+type SubDoc struct {
+	ID        int64
+	Title     string
+	Emoji     string
+	Body      string
+	Platform  string
+	Position  int64
+	Published int64
+	CreatedAt int64
+	UpdatedAt int64
+}
+
 type SubFetch struct {
 	UserID    int64
 	Ip        string

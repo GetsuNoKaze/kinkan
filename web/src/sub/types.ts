@@ -23,6 +23,11 @@ export type Info = {
   unbind_after?: string;
   telegram?: string;
   pools?: { name: string; limit?: number; used: number; extra?: number }[];
+  /** The servers of the user's connections, by their names. */
+  locations?: string[];
+  /** The announcement the apps show, with the user's values in it. */
+  announce?: string;
+  announce_url?: string;
 };
 
 export type Device = { id: number; os: string; os_version: string; model: string; app: string; shared: boolean; created_at: string; last_seen: string };

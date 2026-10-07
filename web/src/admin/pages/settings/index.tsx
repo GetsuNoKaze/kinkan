@@ -1,5 +1,5 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { ArrowDownToLine, Globe, Link2, ListFilter, Route, ShieldCheck } from "lucide-react";
+import { ArrowDownToLine, Globe, LayoutTemplate, Link2, ListFilter, Route, ShieldCheck } from "lucide-react";
 import { useSettings } from "../../../api/hooks";
 import { LangSwitch } from "../../../components/lang";
 import { QueryBoundary } from "../../../components/query";
@@ -16,8 +16,9 @@ import { TorrentCard, TorrentHitsCard } from "./torrent";
 import { AccessCard, ApiCard, CertificateCard, PasswordCard, SessionsCard, TwoFactorCard } from "./security";
 import { AppsCard, DevicesCard, SubPortCard, SubscriptionCard } from "./subscription";
 import { HappCard } from "./happ";
+import { SubPageSettings } from "./sub-page";
 
-const ICONS = { general: Globe, subscription: Link2, routing: Route, rules: ListFilter, security: ShieldCheck, import: ArrowDownToLine } as const;
+const ICONS = { general: Globe, subscription: Link2, page: LayoutTemplate, routing: Route, rules: ListFilter, security: ShieldCheck, import: ArrowDownToLine } as const;
 
 /** Settings in six sections, one at a time; the section is in the URL, so a link opens it. */
 export function SettingsPage() {
@@ -69,6 +70,8 @@ export function SettingsPage() {
                   </>
                 }
               />
+            ) : tab === "page" ? (
+              <SubPageSettings />
             ) : tab === "routing" ? (
               <RoutingSection s={s} />
             ) : tab === "import" ? (

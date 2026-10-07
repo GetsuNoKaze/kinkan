@@ -12,7 +12,7 @@ function deviceName(d: Device): string {
 }
 
 /** The subscriber's own devices: each holds a place; one may be unbound a day. */
-export function Devices({ info, subURL, reload }: { info: Info; subURL: string; reload: () => Promise<void> }) {
+export function Devices({ info, subURL, reload, title }: { info: Info; subURL: string; reload: () => Promise<void>; title?: string }) {
   const [confirm, setConfirm] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -59,10 +59,10 @@ export function Devices({ info, subURL, reload }: { info: Info; subURL: string; 
   };
 
   return (
-    <section className="glass rounded-3xl p-4" aria-labelledby="devices-title">
+    <section className="glass sub-card p-4" aria-labelledby="devices-title">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 id="devices-title" tabIndex={-1} className="text-[15px] font-semibold">
-          {t("sub.devicesTitle")}
+          {title || t("sub.devicesTitle")}
         </h2>
         {info.device_limit > 0 ? <Pill tone={full ? "warn" : "ok"}>{t("sub.devicesCount", { n: list.length, limit: info.device_limit })}</Pill> : null}
       </div>
@@ -77,7 +77,7 @@ export function Devices({ info, subURL, reload }: { info: Info; subURL: string; 
             return (
               <li key={d.id} className="py-2">
                 <div className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-3">
-                  <span className="grid h-10 w-10 place-items-center rounded-xl border border-[var(--hairline)] bg-white text-[var(--ink-600)]" aria-hidden>
+                  <span className="grid h-10 w-10 place-items-center rounded-xl border border-[var(--hairline)] bg-[var(--surface-solid)] text-[var(--ink-600)]" aria-hidden>
                     {d.shared ? <Layers size={18} /> : desktopOS.test(d.os) ? <Laptop size={18} /> : <Smartphone size={18} />}
                   </span>
                   <div className="min-w-0">

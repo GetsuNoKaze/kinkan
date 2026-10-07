@@ -29,6 +29,8 @@ var codeSources = []struct {
 	// billing.errCode keeps a provider's refusal in payments.error, for the history.
 	{"internal/panel/billing", []*regexp.Regexp{structCode}},
 	{"internal/panel/addons", []*regexp.Regexp{structCode}},
+	// subpage's checks: bad(field, "code", value) and the image errors' texts.
+	{"internal/panel/subpage", []*regexp.Regexp{regexp.MustCompile(`"([a-z][a-z0-9_]*)",\s*[^,()"]*\)`), regexp.MustCompile(`errors\.New\("([a-z][a-z0-9_]*)"\)`)}},
 }
 
 var (
