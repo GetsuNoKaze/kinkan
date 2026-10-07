@@ -2227,7 +2227,7 @@
     "salesOff": "Selling is off: the bot and the Mini App sell nothing. Payment methods can be set up beforehand.",
     "kindPackage": "traffic package",
     "invoiceFailed": "The invoice did not open: {error}.",
-    "rublesInMarketplace": "Rubles (YooKassa, CryptoBot and more) are set up below, in Payment methods.",
+    "rublesInMarketplace": "Rubles (YooKassa, CryptoBot and more) are set up in the Payment methods card.",
     "moving": "YooKassa and CryptoBot moved to the catalog and their keys came along. The server is installing the payment method ({names}): it takes no payments until then."
   },
   "warp": {

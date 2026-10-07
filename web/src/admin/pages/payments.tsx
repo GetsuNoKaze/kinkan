@@ -85,12 +85,13 @@ export function PaymentsPage() {
           <QueryBoundary query={settings} pending={<Skeleton style={{ height: 320, borderRadius: 20 }} />} wrap={(state) => <section className="card glass">{state}</section>}>
             {(v) =>
               shown === "methods" ? (
-                <div className="flex max-w-[720px] flex-col gap-4">
-                  <StarsCard s={v} />
+                // The payment systems take the width, Stars sit beside them.
+                <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
                   <AddonsCard selling={v.enabled} />
+                  <StarsCard s={v} />
                 </div>
               ) : (
-                <div className="flex max-w-[720px] flex-col gap-4">
+                <div className="flex max-w-[960px] flex-col gap-4">
                   <RulesCard s={v} />
                 </div>
               )

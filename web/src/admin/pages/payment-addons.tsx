@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, ExternalLink, Plus, Trash2 } from "lucide-react";
+import { Copy, ExternalLink, Plus, Trash2, Wallet } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { api, errorText, unwrap, type Schemas } from "../../api/client";
 import { qk } from "../../api/hooks";
@@ -83,7 +83,7 @@ function Addons({ d, selling, onRetry, retrying }: { d: Addons; selling: boolean
         </div>
       ) : null}
       {d.installed.length === 0 ? (
-        <EmptyState title={t("addons.empty")} text={t("addons.emptyText")} />
+        <EmptyState icon={Wallet} title={t("addons.empty")} text={t("addons.emptyText")} />
       ) : (
         d.installed.map((a) => <AddonBlock key={a.id} a={a} busy={busy} selling={selling} />)
       )}

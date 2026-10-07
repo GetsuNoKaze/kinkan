@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { LoaderCircle, SearchX, TriangleAlert, UserRound } from "lucide-react";
+import { LoaderCircle, SearchX, TriangleAlert, UserRound, type LucideIcon } from "lucide-react";
 import { cloneElement, isValidElement, lazy, Suspense, useEffect, useId, useState, type ButtonHTMLAttributes, type CSSProperties, type ReactElement, type ReactNode } from "react";
 import type { UserState } from "../api/client";
 import { t } from "../i18n";
@@ -143,10 +143,10 @@ export function Spinner({ size = 16 }: { size?: number }) {
   return <LoaderCircle size={size} className="spin" role="img" aria-label={t("common.loading")} />;
 }
 
-export function EmptyState({ title, text, children, search }: { title: string; text: ReactNode; children?: ReactNode; search?: boolean }) {
+export function EmptyState({ title, text, children, search, icon: Icon = UserRound }: { title: string; text: ReactNode; children?: ReactNode; search?: boolean; icon?: LucideIcon }) {
   return (
     <div className="state-box">
-      <div className="state-mark">{search ? <SearchX size={22} /> : <UserRound size={22} />}</div>
+      <div className="state-mark">{search ? <SearchX size={22} /> : <Icon size={22} />}</div>
       <h2>{title}</h2>
       <p>{text}</p>
       {children ? <div className="mt-2 flex flex-wrap justify-center gap-2">{children}</div> : null}

@@ -28,14 +28,17 @@ export function Dashboard() {
         }
       />
       <Kpis />
-      {/* Cards keep their own height: a long protocol list does not stretch the chart. */}
+      {/* The chart and under it the subscriptions to attend to and the top users; the tall
+          server card has the column beside them, so nothing leaves a hole under the chart. */}
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)] xl:items-start">
-        <TrafficCard />
+        <div className="grid min-w-0 gap-4">
+          <TrafficCard />
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-4 min-[1440px]:grid-cols-2 min-[1440px]:items-start">
+            <AttentionCard />
+            <TopCard />
+          </div>
+        </div>
         <ServerCard />
-      </div>
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-        <AttentionCard />
-        <TopCard />
       </div>
       <NodeTrafficCard />
     </>
