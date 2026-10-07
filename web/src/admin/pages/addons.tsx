@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Bot, ChevronRight, ShieldBan, Wallet, type LucideIcon } from "lucide-react";
+import { Bot, ChevronRight, ListFilter, ShieldBan, Wallet, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { api, unwrap } from "../../api/client";
-import { qk, useTorrent } from "../../api/hooks";
+import { qk, useFilters, useTorrent } from "../../api/hooks";
 import { PageHeader, Pill, Skeleton } from "../../components/ui";
 import { t } from "../../i18n";
 import { addonName, useAddons } from "./payment-addons";
@@ -22,6 +22,7 @@ export function AddonsPage() {
       <div className="addon-grid">
         <TelegramTile />
         <TorrentTile />
+        <FiltersTile />
       </div>
       <h2 className="section-title mt-6">{t("addons.payments")}</h2>
       <PaymentTiles />
@@ -60,6 +61,13 @@ function TorrentTile() {
   return <Tile to="/addons/torrent" icon={ShieldBan} title={t("settings.torrent.title")} sub={t("addons.torrentSub")} state={state} i={2} />;
 }
 
+function FiltersTile() {
+  const q = useFilters();
+  const on = q.data ? q.data.egress.enabled || q.data.ingress.enabled : undefined;
+  const state = on === undefined ? null : on ? <Pill tone="ok">{t("addons.on")}</Pill> : <Pill tone="off">{t("addons.off")}</Pill>;
+  return <Tile to="/addons/filters" icon={ListFilter} title={t("filters.title")} sub={t("addons.filtersSub")} state={state} i={3} />;
+}
+
 // The payment methods of the marketplace: installed ones with their state, and the way to
 // install and set them up, which stays in Payments.
 function PaymentTiles() {
@@ -77,10 +85,10 @@ function PaymentTiles() {
           title={addonName(a.id, d)}
           sub={t("addons.paymentSub")}
           state={a.status === "failed" ? <Pill tone="bad">{t("addons.stateFailed")}</Pill> : a.enabled ? <Pill tone="ok">{t("addons.on")}</Pill> : <Pill tone="off">{t("addons.off")}</Pill>}
-          i={3 + i}
+          i={4 + i}
         />
       ))}
-      <Tile to="/payments" search={{ tab: "methods" }} icon={Wallet} title={t("addons.paymentAdd")} sub={t("addons.paymentAddSub", { n: d.catalog.length })} state={null} i={3 + d.installed.length} />
+      <Tile to="/payments" search={{ tab: "methods" }} icon={Wallet} title={t("addons.paymentAdd")} sub={t("addons.paymentAddSub", { n: d.catalog.length })} state={null} i={4 + d.installed.length} />
     </div>
   );
 }

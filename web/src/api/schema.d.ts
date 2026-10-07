@@ -277,6 +277,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/filters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Фильтры трафика */
+        get: operations["get-filters"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Настроить фильтры трафика
+         * @description Каждый переданный фильтр заменяется целиком. Ноды получают его со своим состоянием; ноды старше фильтров его не применяют.
+         */
+        patch: operations["update-filters"];
+        trace?: never;
+    };
     "/api/v1/folders": {
         parameters: {
             query?: never;
@@ -2185,6 +2206,18 @@ export interface components {
             last_seen: string;
             online: boolean;
         };
+        EgressFilter: {
+            /** @description Домены вместе с поддоменами: example.com */
+            domains: string[];
+            /** @description Ноды не пропускают трафик пользователей туда, что указано ниже */
+            enabled: boolean;
+            /** @description Закрыть почтовые порты 465, 587 и 2525 (25 закрыт всегда): с общего адреса VPN, с которого шлют почту, адрес быстро попадает в чёрные списки */
+            mail: boolean;
+            /** @description Сети и адреса: 203.0.113.0/24, 198.51.100.7, 2001:db8::/32 */
+            networks: string[];
+            /** @description Порты и диапазоны: 6881, 6881-6889 */
+            ports: string[];
+        };
         "Enable-promocodeRequest": {
             enabled: boolean;
         };
@@ -2259,6 +2292,12 @@ export interface components {
              * @description Месяцами: до дня оплаты или того же числа
              */
             months?: number;
+        };
+        FiltersView: {
+            egress: components["schemas"]["EgressFilter"];
+            ingress: components["schemas"]["IngressFilter"];
+            /** @description Что закрывает почтовый пресет */
+            mail_ports: string[];
         };
         FolderView: {
             /** @enum {string} */
@@ -2436,6 +2475,14 @@ export interface components {
         };
         InfrastructureConnectOutputBody: {
             url: string;
+        };
+        IngressFilter: {
+            /** @description true — подключаться можно только из сетей списка; false — из сетей списка нельзя */
+            allow: boolean;
+            /** @description Ноды проверяют, откуда подключаются */
+            enabled: boolean;
+            /** @description Сети и адреса. Другие ноды панели (каскад) проверку не проходят: их пускают всегда */
+            networks: string[];
         };
         JobState: {
             /** Format: int64 */
@@ -2917,6 +2964,12 @@ export interface components {
             hour?: number;
             /** @description Пароль, которым шифруется файл: от 20 символов. Файл остаётся в истории чата навсегда; без пароля его не открыть */
             password?: string;
+        };
+        PatchFiltersInputBody: {
+            /** @description Весь исходящий фильтр */
+            egress?: components["schemas"]["EgressFilter"];
+            /** @description Весь входящий фильтр */
+            ingress?: components["schemas"]["IngressFilter"];
         };
         PatchFolderInputBody: {
             /** @enum {string} */
@@ -4792,6 +4845,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TotpSetupOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-filters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FiltersView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-filters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchFiltersInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FiltersView"];
                 };
             };
             /** @description Error */

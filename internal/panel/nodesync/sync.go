@@ -234,6 +234,7 @@ func (s *Syncer) desired(ctx context.Context) (nodeapi.DesiredState, error) {
 		return st, err
 	}
 	st.Torrent = snap.torrent.Block()
+	st.Filters = snap.filters.State()
 	st.Epoch, st.Policies, _ = s.policiesFrom(snap)
 	return st, nil
 }
@@ -709,7 +710,8 @@ func stateKey(st nodeapi.DesiredState) string {
 		R *nodeapi.Relay
 		E []nodeapi.Exit
 		B *nodeapi.TorrentBlock
-	}{st.Inbounds, st.Slots, st.TLS, st.SelfStealPort, st.Warp, st.Relay, st.Exits, st.Torrent})
+		F *nodeapi.Filters
+	}{st.Inbounds, st.Slots, st.TLS, st.SelfStealPort, st.Warp, st.Relay, st.Exits, st.Torrent, st.Filters})
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
 }

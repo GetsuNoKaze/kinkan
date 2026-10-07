@@ -30,6 +30,8 @@ type Registry struct {
 
 	torrentCfg atomic.Pointer[nodeapi.TorrentBlock] // nil: the torrent blocker is off
 	torrent    torrents
+
+	ingress atomic.Pointer[ingress] // nil: anyone may connect
 }
 
 type slot struct {

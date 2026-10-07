@@ -33,6 +33,7 @@ func rules(st nodeapi.DesiredState, allowPrivate bool) []string {
 	}
 	// Outbound SMTP from a shared VPN IP gets the address blacklisted within hours.
 	r = append(r, "DST-PORT,25,REJECT")
+	r = append(r, egressRules(st.Filters)...)
 	r = append(r, exitRules(st)...)
 	r = append(r, warpRules(st)...)
 	return append(r, "MATCH,DIRECT")

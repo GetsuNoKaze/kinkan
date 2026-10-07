@@ -1312,6 +1312,51 @@
         ],
         "type": "object"
       },
+      "EgressFilter": {
+        "additionalProperties": false,
+        "properties": {
+          "domains": {
+            "description": "Домены вместе с поддоменами: example.com",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "type": "array"
+          },
+          "enabled": {
+            "description": "Ноды не пропускают трафик пользователей туда, что указано ниже",
+            "type": "boolean"
+          },
+          "mail": {
+            "description": "Закрыть почтовые порты 465, 587 и 2525 (25 закрыт всегда): с общего адреса VPN, с которого шлют почту, адрес быстро попадает в чёрные списки",
+            "type": "boolean"
+          },
+          "networks": {
+            "description": "Сети и адреса: 203.0.113.0/24, 198.51.100.7, 2001:db8::/32",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "type": "array"
+          },
+          "ports": {
+            "description": "Порты и диапазоны: 6881, 6881-6889",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "mail",
+          "ports",
+          "networks",
+          "domains"
+        ],
+        "type": "object"
+      },
       "Enable-promocodeRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1487,6 +1532,30 @@
             "type": "integer"
           }
         },
+        "type": "object"
+      },
+      "FiltersView": {
+        "additionalProperties": false,
+        "properties": {
+          "egress": {
+            "$ref": "#/components/schemas/EgressFilter"
+          },
+          "ingress": {
+            "$ref": "#/components/schemas/IngressFilter"
+          },
+          "mail_ports": {
+            "description": "Что закрывает почтовый пресет",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "egress",
+          "ingress",
+          "mail_ports"
+        ],
         "type": "object"
       },
       "FolderView": {
@@ -2004,6 +2073,33 @@
         },
         "required": [
           "url"
+        ],
+        "type": "object"
+      },
+      "IngressFilter": {
+        "additionalProperties": false,
+        "properties": {
+          "allow": {
+            "description": "true — подключаться можно только из сетей списка; false — из сетей списка нельзя",
+            "type": "boolean"
+          },
+          "enabled": {
+            "description": "Ноды проверяют, откуда подключаются",
+            "type": "boolean"
+          },
+          "networks": {
+            "description": "Сети и адреса. Другие ноды панели (каскад) проверку не проходят: их пускают всегда",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "allow",
+          "networks"
         ],
         "type": "object"
       },
@@ -3363,6 +3459,20 @@
             "description": "Пароль, которым шифруется файл: от 20 символов. Файл остаётся в истории чата навсегда; без пароля его не открыть",
             "maxLength": 256,
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PatchFiltersInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "egress": {
+            "$ref": "#/components/schemas/EgressFilter",
+            "description": "Весь исходящий фильтр"
+          },
+          "ingress": {
+            "$ref": "#/components/schemas/IngressFilter",
+            "description": "Весь входящий фильтр"
           }
         },
         "type": "object"
@@ -7698,6 +7808,77 @@
         "summary": "Начать настройку 2FA",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/api/v1/filters": {
+      "get": {
+        "operationId": "get-filters",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FiltersView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Фильтры трафика",
+        "tags": [
+          "filters"
+        ]
+      },
+      "patch": {
+        "description": "Каждый переданный фильтр заменяется целиком. Ноды получают его со своим состоянием; ноды старше фильтров его не применяют.",
+        "operationId": "update-filters",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchFiltersInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FiltersView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Настроить фильтры трафика",
+        "tags": [
+          "filters"
         ]
       }
     },
