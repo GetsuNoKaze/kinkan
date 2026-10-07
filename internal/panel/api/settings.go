@@ -1,6 +1,7 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"net"
@@ -53,6 +54,12 @@ type SettingsView struct {
 	RequireHWID   bool        `json:"device_require_hwid" doc:"Не выдавать подписку приложениям без ID устройства (иначе они вместе занимают одно место)"`
 	DefaultLang   string      `json:"default_lang" enum:"auto,ru,en" doc:"Язык админки и страницы подписки, пока человек не выбрал свой; auto — по языку браузера. На нём же названия по умолчанию: группа автовыбора и меню ненастроенного бота"`
 	Certificate   acme.Status `json:"certificate"`
+
+	// Happ: see subs.Happ.
+	HappRouting      string `json:"happ_routing" doc:"Профиль маршрутизации Happ: ссылка happ://routing/onadd/… (добавить и включить), happ://routing/add/… или happ://routing/off; уходит только в Happ заголовком routing"`
+	HappProviderID   string `json:"happ_provider_id" doc:"Provider ID с happ-proxy.com; без него Happ не принимает hide-settings"`
+	HappHideSettings bool   `json:"happ_hide_settings" doc:"Скрыть в Happ настройки серверов подписки (нужен Provider ID)"`
+	HappCrypt        string `json:"happ_crypt" enum:"off,api,local" doc:"Шифрованная ссылка для кнопки Happ: off — обычная happ://add/, api — через сервис Happ (адрес подписки уходит на crypto.happ.su), local — панель шифрует сама"`
 }
 
 type settingsOutput struct{ Body SettingsView }
@@ -67,6 +74,10 @@ type patchSettingsInput struct {
 		AppBranding   *bool        `json:"app_branding,omitempty"`
 		BrandAccent   *string      `json:"brand_accent,omitempty" maxLength:"7" doc:"#RRGGBB или пусто"`
 		BrandLogoURL  *string      `json:"brand_logo_url,omitempty" maxLength:"500" doc:"https://… или пусто"`
+		HappRouting   *string      `json:"happ_routing,omitempty" maxLength:"65536" doc:"happ://routing/…; пусто — не отдавать"`
+		HappProvider  *string      `json:"happ_provider_id,omitempty" maxLength:"64"`
+		HappHide      *bool        `json:"happ_hide_settings,omitempty"`
+		HappCrypt     *string      `json:"happ_crypt,omitempty" enum:"off,api,local"`
 		PublicHost    *string      `json:"public_host,omitempty" maxLength:"253"`
 		Domain        *string      `json:"domain,omitempty" maxLength:"253"`
 		QuietHourUTC  *int         `json:"quiet_hour_utc,omitempty" minimum:"0" maximum:"23"`
@@ -123,6 +134,9 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 	get(settings.KeyAnnounceURL, &v.AnnounceURL)
 	get(settings.KeyBrandAccent, &v.BrandAccent)
 	get(settings.KeyBrandLogo, &v.BrandLogoURL)
+	get(settings.KeyHappRouting, &v.HappRouting)
+	get(settings.KeyHappProvider, &v.HappProviderID)
+	get(settings.KeyHappCrypt, &v.HappCrypt)
 	get(settings.KeyPublicHost, &v.PublicHost)
 	get(settings.KeyDomain, &v.Domain)
 	get(settings.KeyGroupMain, &v.SubGroupMain)
@@ -180,6 +194,10 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 	if v.AppBranding, err = h.d.Settings.On(ctx, settings.AppBranding); err != nil {
 		return v, err
 	}
+	if v.HappHideSettings, err = h.d.Settings.On(ctx, settings.HappHide); err != nil {
+		return v, err
+	}
+	v.HappCrypt = cmp.Or(v.HappCrypt, "off")
 	if v.Brand == "" {
 		v.Brand = "VPN"
 	}
@@ -223,7 +241,9 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 		"sub_rules": b.SubRules != nil, "sub_routes": b.SubRoutes != nil, "sub_template": b.SubTemplate != nil, "sub_routing": b.SubRouting != nil, "support_url": b.SupportURL != nil,
 		// What every subscriber's app shows: text, links and the logo it downloads.
 		"sub_title": b.SubTitle != nil, "sub_announce": b.Announce != nil, "sub_announce_url": b.AnnounceURL != nil, "app_branding": b.AppBranding != nil,
-		"brand_accent": b.BrandAccent != nil, "brand_logo_url": b.BrandLogoURL != nil} {
+		"brand_accent": b.BrandAccent != nil, "brand_logo_url": b.BrandLogoURL != nil,
+		// What Happ is told to apply, to hide, and where the subscription address goes.
+		"happ_routing": b.HappRouting != nil, "happ_provider_id": b.HappProvider != nil, "happ_hide_settings": b.HappHide != nil, "happ_crypt": b.HappCrypt != nil} {
 		if touched {
 			if err := requireSession(ctx, field); err != nil {
 				return nil, err
@@ -257,6 +277,24 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 	}
 	if b.BrandLogoURL != nil && *b.BrandLogoURL != "" && !subs.ValidLink(strings.TrimSpace(*b.BrandLogoURL), false) {
 		details = append(details, &huma.ErrorDetail{Location: "body.brand_logo_url", Message: "url_invalid"})
+	}
+	if b.HappRouting != nil && strings.TrimSpace(*b.HappRouting) != "" && !subs.ValidHappRouting(strings.TrimSpace(*b.HappRouting)) {
+		details = append(details, &huma.ErrorDetail{Location: "body.happ_routing", Message: "happ_routing"})
+	}
+	if b.HappProvider != nil && strings.TrimSpace(*b.HappProvider) != "" && !subs.ValidHappProviderID(strings.TrimSpace(*b.HappProvider)) {
+		details = append(details, &huma.ErrorDetail{Location: "body.happ_provider_id", Message: "happ_provider_id"})
+	}
+	if b.HappHide != nil && *b.HappHide {
+		provider, _, err := settings.Get[string](ctx, h.d.Settings, settings.KeyHappProvider)
+		if err != nil {
+			return nil, err
+		}
+		if b.HappProvider != nil {
+			provider = strings.TrimSpace(*b.HappProvider)
+		}
+		if provider == "" {
+			details = append(details, &huma.ErrorDetail{Location: "body.happ_hide_settings", Message: "happ_needs_provider"})
+		}
 	}
 	if b.SubGroupMain != nil || b.SubGroupAuto != nil || b.SubRules != nil {
 		cur, err := h.groups(ctx)
@@ -396,7 +434,8 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 		}
 		for key, v := range map[string]*string{settings.KeyBrand: b.Brand, settings.KeySupportURL: b.SupportURL, settings.KeyPublicHost: b.PublicHost, settings.KeyDomain: b.Domain,
 			settings.KeySubTitle: b.SubTitle, settings.KeyAnnounce: b.Announce, settings.KeyAnnounceURL: b.AnnounceURL, settings.KeyBrandAccent: b.BrandAccent, settings.KeyBrandLogo: b.BrandLogoURL,
-			settings.KeyGroupMain: b.SubGroupMain, settings.KeyGroupAuto: b.SubGroupAuto, settings.KeyRouting: b.SubRouting, settings.KeyFingerprint: b.Fingerprint, settings.KeyDefaultLang: b.DefaultLang} {
+			settings.KeyGroupMain: b.SubGroupMain, settings.KeyGroupAuto: b.SubGroupAuto, settings.KeyRouting: b.SubRouting, settings.KeyFingerprint: b.Fingerprint, settings.KeyDefaultLang: b.DefaultLang,
+			settings.KeyHappRouting: b.HappRouting, settings.KeyHappProvider: b.HappProvider} {
 			if v == nil {
 				continue
 			}
@@ -409,8 +448,24 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 				return err
 			}
 		}
+		if b.HappCrypt != nil {
+			mode := *b.HappCrypt
+			if mode == "off" {
+				mode = ""
+			}
+			if err := settings.Set(ctx, set, settings.KeyHappCrypt, mode); err != nil {
+				return err
+			}
+		}
+		// Without a provider id Happ ignores hide-settings: the switch goes off with it, so
+		// the panel never shows a setting that does nothing.
+		if b.HappProvider != nil && strings.TrimSpace(*b.HappProvider) == "" {
+			if err := settings.Set(ctx, set, settings.KeyHappHide, false); err != nil {
+				return err
+			}
+		}
 		for key, v := range map[string]*bool{settings.KeyAutoPort: b.AutoPort, settings.KeyAutoSNI: b.AutoSNI,
-			settings.KeyDeviceBinding: b.DeviceBinding, settings.KeyRequireHWID: b.RequireHWID, settings.KeyAppBranding: b.AppBranding} {
+			settings.KeyDeviceBinding: b.DeviceBinding, settings.KeyRequireHWID: b.RequireHWID, settings.KeyAppBranding: b.AppBranding, settings.KeyHappHide: b.HappHide} {
 			if v != nil {
 				if err := settings.Set(ctx, set, key, *v); err != nil {
 					return err

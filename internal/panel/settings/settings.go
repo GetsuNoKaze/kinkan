@@ -65,6 +65,12 @@ const (
 	KeyAppBranding = "app_branding"
 	KeyBrandAccent = "brand_accent"   // #RRGGBB, empty: the app's own
 	KeyBrandLogo   = "brand_logo_url" // https, empty: the app's own
+	// Happ (subs.Happ): a routing profile link, the happ-proxy.com provider id and what
+	// needs it, and how the page's Happ button hides the address ("", "api", "local").
+	KeyHappRouting  = "happ_routing"
+	KeyHappProvider = "happ_provider_id"
+	KeyHappHide     = "happ_hide_settings"
+	KeyHappCrypt    = "happ_crypt"
 	// KeyLegacySubPath is the path of the subscription links of the panel users were
 	// imported from: "sub" for Marzban and PasarGuard, "api/sub" for Remnawave. The old
 	// tokens lead to the users (legacy_sub_tokens); empty: off.
@@ -94,6 +100,7 @@ var (
 	AutoUpdate    = Switch{KeyAutoUpdate, false}
 	NodesFollow   = Switch{KeyNodesFollow, true}
 	AppBranding   = Switch{KeyAppBranding, false}
+	HappHide      = Switch{KeyHappHide, false}
 )
 
 // ValidLang says whether s is a language of the panel.

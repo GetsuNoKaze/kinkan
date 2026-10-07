@@ -248,6 +248,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		return subHandler.Preview(ctx, req)
 	}
 	deps.CheckTemplate = func(ctx context.Context, src string) error { return subHandler.CheckTemplate(ctx, src) }
+	deps.HappLink = func(ctx context.Context, u db.User) (string, error) { return subHandler.HappLink(ctx, u) }
 	apiHandler, _, err := api.New(deps)
 	if err != nil {
 		return nil, err
@@ -314,8 +315,12 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		if cfg.App.Enabled, err = set.On(ctx, settings.AppBranding); err != nil {
 			return subs.Config{}, err
 		}
+		if cfg.Happ.HideSettings, err = set.On(ctx, settings.HappHide); err != nil {
+			return subs.Config{}, err
+		}
 		for key, dst := range map[string]*string{settings.KeySubTitle: &cfg.Title, settings.KeyAnnounce: &cfg.Announce, settings.KeyAnnounceURL: &cfg.AnnounceURL,
-			settings.KeyBrandAccent: &cfg.App.Accent, settings.KeyBrandLogo: &cfg.App.LogoURL} {
+			settings.KeyBrandAccent: &cfg.App.Accent, settings.KeyBrandLogo: &cfg.App.LogoURL,
+			settings.KeyHappRouting: &cfg.Happ.Routing, settings.KeyHappProvider: &cfg.Happ.ProviderID, settings.KeyHappCrypt: &cfg.Happ.Crypt} {
 			if *dst, err = set.String(ctx, key); err != nil {
 				return subs.Config{}, err
 			}

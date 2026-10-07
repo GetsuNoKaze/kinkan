@@ -38,6 +38,7 @@ type Config struct {
 	Announce    string
 	AnnounceURL string
 	App         AppBrand // the brand in apps that read operator headers
+	Happ        Happ     // Happ's provider headers and the crypt link of the page
 	// SubBase is https://host:port/<sub path> as the panel hands links out; "" without an
 	// address, and the request's own address is taken.
 	SubBase string
@@ -80,6 +81,7 @@ type Handler struct {
 	tg         Telegram         // nil: no bot
 	shop       *billing.Service // nil: nothing on sale
 	promos     *promo.Service
+	happ       *HappLinks // Happ crypt links, kept per subscription
 	log        *slog.Logger
 	logged     sync.Map // what has been logged lately → when, so a standing fault is one line an hour
 	promoLimit promoLimiter
@@ -117,7 +119,20 @@ func (h *Handler) SetShop(s *billing.Service) { h.shop = s }
 func (h *Handler) SetPromo(s *promo.Service)  { h.promos = s }
 
 func NewHandler(st *store.Store, cfg func(ctx context.Context) (Config, error), page http.Handler, now func() time.Time, devices Binder, trustProxy bool) *Handler {
-	return &Handler{st: st, cfg: cfg, page: page, now: now, devices: devices, trustProxy: trustProxy, log: slog.New(slog.DiscardHandler)}
+	return &Handler{st: st, cfg: cfg, page: page, now: now, devices: devices, trustProxy: trustProxy, log: slog.New(slog.DiscardHandler), happ: NewHappLinks()}
+}
+
+// SetHappLinks replaces the maker of Happ crypt links (tests: a fake service).
+func (h *Handler) SetHappLinks(l *HappLinks) { h.happ = l }
+
+// HappLink is the Happ crypt link of u's subscription, "" when the crypt link is off or
+// the panel has no address for subscriptions yet.
+func (h *Handler) HappLink(ctx context.Context, u db.User) (string, error) {
+	cfg, err := h.cfg(ctx)
+	if err != nil || cfg.Happ.Crypt == "" || cfg.SubBase == "" {
+		return "", err
+	}
+	return h.happ.Link(ctx, cfg.Happ.Crypt, cfg.SubBase+"/"+u.SubToken)
 }
 
 // clientIP is the device's address as the nodes see it too: clients reach the panel
@@ -204,6 +219,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	h.userInfoHeaders(w, u, grants.Main(u.ID), cfg, vars)
 	h.operatorHeaders(w, r, u, cfg)
+	if IsHapp(r.UserAgent()) {
+		happHeaders(w.Header(), cfg.Happ)
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method == http.MethodHead {
 		return // apps peek at the traffic headers; the keys go only with a real fetch
@@ -804,6 +822,9 @@ type Info struct {
 	UnbindAfter *time.Time   `json:"unbind_after,omitempty" doc:"The subscriber may unbind again from then"`
 	// Pools: the user's traffic pools with a limit or with traffic used.
 	Pools []PoolInfo `json:"pools,omitempty"`
+	// HappLink is the Happ button's crypt link: the app opens the subscription without
+	// showing its address. Absent: the plain happ://add/ link.
+	HappLink string `json:"happ_link,omitempty"`
 }
 
 // DeviceItem is a bound device as the subscription page lists it.
@@ -832,6 +853,13 @@ func (h *Handler) info(ctx context.Context, w http.ResponseWriter, u db.User, pr
 	}
 	if h.tg != nil {
 		out.Telegram = h.tg.LinkURL(ctx, u.ID)
+	}
+	if cfg.Happ.Crypt != "" && cfg.SubBase != "" {
+		if link, err := h.happ.Link(ctx, cfg.Happ.Crypt, cfg.SubBase+"/"+u.SubToken); err == nil {
+			out.HappLink = link
+		} else {
+			h.warn("happ_link", "subscription: no Happ crypt link", "err", err)
+		}
 	}
 	if cfg.Binding {
 		devs, err := h.st.Q.ListBoundDevices(ctx, u.ID)

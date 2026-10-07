@@ -7,6 +7,8 @@ export type Info = {
   name: string;
   brand: string;
   support_url?: string;
+  /** Happ's crypt link: the Happ button opens it, hiding the subscription address. */
+  happ_link?: string;
   state: "active" | "expiring" | "limited" | "expired" | "disabled";
   used_up: number;
   used_down: number;
