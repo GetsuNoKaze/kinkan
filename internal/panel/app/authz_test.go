@@ -91,6 +91,14 @@ func TestFullKeyCannotTakeOverThePanel(t *testing.T) {
 		"warp-register":      {http.MethodPost, "/nodes/1/warp/register", map[string]any{}},
 		"warp-import":        {http.MethodPost, "/nodes/1/warp/import", map[string]any{"config": "x"}},
 		"cascade":            {http.MethodPatch, "/nodes/1/cascade", map[string]any{"outbound": "direct"}},
+		// The subscription page every subscriber opens: its links, text, CSS and images.
+		"update-sub-page":       {http.MethodPut, "/sub-page", map[string]any{"config": map[string]any{}}},
+		"put-sub-page-image":    {http.MethodPut, "/sub-page/images/logo", map[string]any{"data": "iVBORw0KGgo="}},
+		"delete-sub-page-image": {http.MethodDelete, "/sub-page/images/logo", nil},
+		"create-sub-doc":        {http.MethodPost, "/sub-docs", map[string]any{"title": "Pay here", "emoji": "", "body": "", "platform": "", "published": true}},
+		"update-sub-doc":        {http.MethodPut, "/sub-docs/1", map[string]any{"title": "Pay here", "emoji": "", "body": "", "platform": "", "published": true}},
+		"delete-sub-doc":        {http.MethodDelete, "/sub-docs/1", nil},
+		"order-sub-docs":        {http.MethodPut, "/sub-docs/order", map[string]any{"ids": []int64{1}}},
 	} {
 		resp, body := k.asKey(k.full, c.method, c.path, c.body)
 		if resp.StatusCode != http.StatusForbidden || !strings.Contains(string(body), "session_only") {
