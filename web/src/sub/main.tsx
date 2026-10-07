@@ -41,7 +41,11 @@ function SubPage() {
   const [packages, setPackages] = useState<{ token: string; data: ShopData } | null>(null);
   const [promoCode, setPromoCode] = useState("");
   // The instruction open on its own screen; the browser's (or Telegram's) back closes it.
-  const [docId, setDocId] = useState<number | null>(null);
+  // A reload keeps the instruction that was open (its id is in the history entry).
+  const [docId, setDocId] = useState<number | null>(() => {
+    const id = (history.state as { doc?: unknown } | null)?.doc;
+    return typeof id === "number" ? id : null;
+  });
   const docScroll = useRef(0);
   const current = info && info.url === subURL ? info.data : null;
   const failed = !current && failedURL === subURL;
