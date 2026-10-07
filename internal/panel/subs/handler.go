@@ -1070,5 +1070,11 @@ func (h *Handler) sample(ctx context.Context) (Profile, Config, error) {
 		return Profile{}, cfg, err
 	}
 	prof.Rules, prof.Routes, prof.Lang = cfg.Rules, cfg.Routes, cfg.Lang
+	// A current mihomo: the preview shows every list, and a template started from it keeps
+	// the ones a younger core reads (an app that does not name its core still gets none).
+	prof.App = App{Family: FamilyMihomo, Core: previewCore}
 	return prof, cfg, nil
 }
+
+// previewCore is the mihomo the nodes run (go.mod), the newest an app may have.
+var previewCore = Version{1, 19, 31}

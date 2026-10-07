@@ -3,7 +3,7 @@ import { useState, type FormEvent } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../../api/client";
 import { useNodes } from "../../../api/hooks";
 import { Columns } from "../../../components/tabs";
-import { Button, Field, Pill } from "../../../components/ui";
+import { Button, ErrorState, Field, Pill, Skeleton } from "../../../components/ui";
 import { t, useLocale } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
 import { useSaveSettings } from "./shared";
@@ -152,6 +152,14 @@ export function RoutingSection({ s }: { s: Schemas["SettingsView"] }) {
             </Field>
 
             <Field label={t("settings.routesServices")} hint={t("settings.routesServicesHint")}>
+              {catalog.isError ? <ErrorState text={errorText(catalog.error)} onRetry={() => void catalog.refetch()} /> : null}
+              {catalog.isPending ? (
+                <div className="flex flex-col gap-2" aria-busy="true">
+                  {[0, 1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-9 w-full rounded-xl" />
+                  ))}
+                </div>
+              ) : null}
               <div className="flex flex-col divide-y divide-[var(--hairline)]">
                 {(catalog.data?.services ?? []).map((svc) => {
                   const id = `s-svc-${svc.id}`;

@@ -65,18 +65,18 @@ func TestRoutesInProfile(t *testing.T) {
 	cfg, raw := renderRouted(t, prof, RoutingRUDirect)
 	at := func(r string) int { return slices.Index(cfg.Rules, r) }
 	own, ads, yt, ai, bank, ru := at("DOMAIN-SUFFIX,sber.ru,DIRECT"), at("GEOSITE,category-ads-all,REJECT"), at("GEOSITE,youtube,VPN"),
-		at("GEOSITE,category-ai-!cn,🤖 ChatGPT, Claude, Gemini"), at("RULE-SET,mikan-ru-apps,DIRECT"), at("GEOSITE,category-ru,DIRECT")
+		at("GEOSITE,category-ai-!cn,🤖 ChatGPT · Claude · Gemini"), at("RULE-SET,mikan-ru-apps,DIRECT"), at("GEOSITE,category-ru,DIRECT")
 	if own < 0 || ads < 0 || yt < 0 || ai < 0 || bank < 0 || ru < 0 || !(own < ads && ads < yt && yt < ai && ai < bank && bank < ru) {
 		t.Fatalf("order:\n%s", strings.Join(cfg.Rules, "\n"))
 	}
-	if at("RULE-SET,mikan-torrent-apps,DIRECT") < 0 || cfg.Rules[len(cfg.Rules)-1] != "MATCH,VPN" {
+	if at("RULE-SET,mikan-torrent-apps,DIRECT") < 0 || cfg.Rules[len(cfg.Rules)-2] != "MATCH,VPN" || cfg.Rules[len(cfg.Rules)-1] != "MATCH,REJECT" {
 		t.Fatalf("torrents direct, the rest through the tunnel:\n%s", strings.Join(cfg.Rules, "\n"))
 	}
 	i := slices.IndexFunc(cfg.Groups, func(g struct {
 		Name    string   `json:"name"`
 		Proxies []string `json:"proxies"`
 	}) bool {
-		return g.Name == "🤖 ChatGPT, Claude, Gemini"
+		return g.Name == "🤖 ChatGPT · Claude · Gemini"
 	})
 	if i < 0 || len(cfg.Groups[i].Proxies) != 2 || !strings.HasPrefix(cfg.Groups[i].Proxies[0], "🇺🇸") || cfg.Groups[i].Proxies[1] != "VPN" {
 		t.Fatalf("the AI group: %+v", cfg.Groups)
@@ -105,6 +105,15 @@ func TestRoutingBlocked(t *testing.T) {
 	if cfg.Rules[len(cfg.Rules)-1] != "MATCH,DIRECT" || !slices.Contains(cfg.Rules, "RULE-SET,mikan-blocked,VPN") || !slices.Contains(cfg.Rules, "GEOSITE,telegram,VPN") {
 		t.Fatalf("rules:\n%s", strings.Join(cfg.Rules, "\n"))
 	}
+	// What falls through goes direct here: UDP the tunnel cannot carry stops at a twin.
+	for _, r := range []string{"RULE-SET,mikan-blocked", "GEOSITE,telegram"} {
+		if i := slices.Index(cfg.Rules, r+",VPN"); i < 0 || i+1 >= len(cfg.Rules) || cfg.Rules[i+1] != r+",REJECT" {
+			t.Fatalf("%s has no REJECT twin:\n%s", r, strings.Join(cfg.Rules, "\n"))
+		}
+	}
+	if slices.Contains(cfg.Rules, "GEOIP,LAN,REJECT,no-resolve") {
+		t.Fatal("a DIRECT rule got a twin")
+	}
 	if cfg.GeoxURL["geosite"] == "" {
 		t.Fatal("the lists name sites by GEOSITE: geodata is needed")
 	}
@@ -112,7 +121,7 @@ func TestRoutingBlocked(t *testing.T) {
 	// Stash takes no rule lists: the mode it can do, and no services.
 	prof.App = App{Family: FamilyStash}
 	cfg, _ = renderRouted(t, prof, RoutingBlocked)
-	if len(cfg.Providers) != 0 || cfg.Rules[len(cfg.Rules)-1] != "MATCH,VPN" || !slices.Contains(cfg.Rules, "GEOIP,ru,DIRECT") || slices.Contains(cfg.Rules, "GEOSITE,telegram,VPN") {
+	if len(cfg.Providers) != 0 || cfg.Rules[len(cfg.Rules)-2] != "MATCH,VPN" || !slices.Contains(cfg.Rules, "GEOIP,ru,DIRECT") || slices.Contains(cfg.Rules, "GEOSITE,telegram,VPN") {
 		t.Fatalf("stash:\n%s", strings.Join(cfg.Rules, "\n"))
 	}
 }

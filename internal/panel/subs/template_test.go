@@ -192,3 +192,39 @@ func TestCheckTemplate(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A template checked on saving can still miss a user: one without the inbound a group
+// names gets the built-in profile (an error the handler falls back on), never a profile
+// mihomo refuses.
+func TestTemplateIsCheckedForEachUser(t *testing.T) {
+	prof := twoNodes(t)
+	full, err := Mihomo(prof, Groups{}, RoutingAll)
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := readProfile(t, full).Proxies[len(readProfile(t, full).Proxies)-1]["name"].(string)
+	src := "proxy-groups:\n  - {name: G, type: select, proxies: [\"" + name + "\"]}\nrules:\n  - MATCH,G\n"
+	if _, err := Template(prof, src); err != nil {
+		t.Fatalf("the user who has it: %v", err)
+	}
+	prof.Inbounds = prof.Inbounds[:len(prof.Inbounds)-1] // the US node's inbound is not theirs
+	var te *TemplateError
+	if _, err := Template(prof, src); !errors.As(err, &te) || te.Code != "template_group_member" {
+		t.Fatalf("a user without it: %v", err)
+	}
+}
+
+// A filter only mihomo reads cannot go with mikan's choice of nodes: the panel could not
+// apply the choice and the group would take every server.
+func TestTemplateFilterGoCannotRead(t *testing.T) {
+	prof := twoNodes(t)
+	with := "proxy-groups:\n  - {name: G, type: select, mikan: {nodes: [2]}, filter: \"^(?=.*US)\"}\nrules:\n  - MATCH,G\n"
+	var te *TemplateError
+	if err := CheckTemplate(prof, with); !errors.As(err, &te) || te.Code != "template_filter" {
+		t.Fatalf("mikan with a lookahead filter: %v", err)
+	}
+	without := "proxy-groups:\n  - {name: G, type: select, include-all-proxies: true, filter: \"^(?=.*US)\"}\nrules:\n  - MATCH,G\n"
+	if err := CheckTemplate(prof, without); err != nil {
+		t.Fatalf("mihomo applies the filter itself: %v", err)
+	}
+}

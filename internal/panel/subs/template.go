@@ -71,11 +71,18 @@ func Template(p Profile, src string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	fillTemplate(cfg, p, ps)
+	// Checked again for this user: their inbounds and app may leave a group the template
+	// names a member of empty, and mihomo refuses a profile with a missing member.
+	if err := fillTemplate(cfg, p, ps); err != nil {
+		return nil, err
+	}
+	if err := checkFilled(cfg, p); err != nil {
+		return nil, err
+	}
 	return marshalYAML(cfg)
 }
 
-func fillTemplate(cfg map[string]any, p Profile, ps []proxy) {
+func fillTemplate(cfg map[string]any, p Profile, ps []proxy) error {
 	own, _ := cfg["proxies"].([]any)
 	taken := map[string]bool{}
 	for _, x := range own {
@@ -97,7 +104,9 @@ func fillTemplate(cfg map[string]any, p Profile, ps []proxy) {
 	groups, _ := cfg["proxy-groups"].([]any)
 	for _, g := range groups {
 		if m, ok := g.(map[string]any); ok {
-			fillGroup(m, p.Nodes, names, providers)
+			if err := fillGroup(m, p.Nodes, names, providers); err != nil {
+				return err
+			}
 		}
 	}
 	rules, _ := cfg["rules"].([]any)
@@ -114,14 +123,15 @@ func fillTemplate(cfg map[string]any, p Profile, ps []proxy) {
 		}
 	}
 	cfg["rules"] = out
+	return nil
 }
 
 // fillGroup puts the user's proxies the group asks for into it.
-func fillGroup(g map[string]any, nodes []Node, ps []proxy, providers bool) {
+func fillGroup(g map[string]any, nodes []Node, ps []proxy, providers bool) error {
 	all := g["include-all-proxies"] == true || g["include-all"] == true && !providers
 	ext, _ := g["mikan"].(map[string]any)
 	if !all && ext == nil {
-		return
+		return nil
 	}
 	pick := ps
 	if ext != nil {
@@ -146,9 +156,13 @@ func fillGroup(g map[string]any, nodes []Node, ps []proxy, providers bool) {
 	keep, ok1 := re("filter")
 	drop, ok2 := re("exclude-filter")
 	if !ok1 || !ok2 {
-		// A pattern Go cannot read (mihomo's regexp2 knows more): mihomo applies it itself.
-		delete(g, "mikan")
-		return
+		// A pattern Go cannot read (mihomo's regexp2 knows more): mihomo applies it itself,
+		// but then it cannot know which nodes "mikan" picked, and the group would take every
+		// server of the user.
+		if ext != nil {
+			return templateErr("template_filter", str(g["name"]))
+		}
+		return nil
 	}
 	dropTypes := map[string]bool{}
 	for _, t := range strings.Split(str(g["exclude-type"]), "|") {
@@ -177,6 +191,7 @@ func fillGroup(g map[string]any, nodes []Node, ps []proxy, providers bool) {
 	if !providers {
 		delete(g, "include-all")
 	}
+	return nil
 }
 
 func byNodeAndType(ps []proxy, nodes []Node, ext map[string]any) []proxy {
@@ -247,7 +262,15 @@ func CheckTemplate(p Profile, src string) error {
 	if err != nil {
 		return err
 	}
-	fillTemplate(cfg, p, ps)
+	if err := fillTemplate(cfg, p, ps); err != nil {
+		return err
+	}
+	return checkFilled(cfg, p)
+}
+
+// checkFilled checks a template with the user's proxies in it: on saving, against a user
+// given every inbound; on every profile, against the user it is for.
+func checkFilled(cfg map[string]any, p Profile) error {
 	known := map[string]bool{}
 	for _, x := range policies {
 		known[x] = true

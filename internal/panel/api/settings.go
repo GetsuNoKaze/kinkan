@@ -133,7 +133,10 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 	if err == nil {
 		v.SubRoutes, _, err = settings.Get[subs.Routes](ctx, h.d.Settings, settings.KeyRoutes)
 	}
-	get(settings.KeyTemplate, &v.SubTemplate)
+	// An own profile may hold the admin's own proxies, a controller secret or DNS tokens.
+	if !hidesSecrets(ctx) {
+		get(settings.KeyTemplate, &v.SubTemplate)
+	}
 	get(settings.KeyFingerprint, &v.Fingerprint)
 	if !proto.ValidFingerprint(v.Fingerprint) {
 		v.Fingerprint = proto.DefaultFingerprint
@@ -217,7 +220,7 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 	// Where clients are sent, and what they are told to trust: a leaked API key must not
 	// move subscriptions to another server or add rules to every client.
 	for field, touched := range map[string]bool{"public_host": b.PublicHost != nil, "domain": b.Domain != nil, "sub_port": b.SubPort != nil,
-		"sub_rules": b.SubRules != nil, "sub_routes": b.SubRoutes != nil, "sub_template": b.SubTemplate != nil, "support_url": b.SupportURL != nil,
+		"sub_rules": b.SubRules != nil, "sub_routes": b.SubRoutes != nil, "sub_template": b.SubTemplate != nil, "sub_routing": b.SubRouting != nil, "support_url": b.SupportURL != nil,
 		// What every subscriber's app shows: text, links and the logo it downloads.
 		"sub_title": b.SubTitle != nil, "sub_announce": b.Announce != nil, "sub_announce_url": b.AnnounceURL != nil, "app_branding": b.AppBranding != nil,
 		"brand_accent": b.BrandAccent != nil, "brand_logo_url": b.BrandLogoURL != nil} {

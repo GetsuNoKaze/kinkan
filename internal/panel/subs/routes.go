@@ -93,7 +93,13 @@ type Service struct {
 	Providers              []Provider
 }
 
-const privWL = "https://raw.githubusercontent.com/Nemu-x/privWL-clash/main/"
+// The lists are pinned to a commit: whoever can push to a list's repository would
+// otherwise reroute every client at once (a DIRECT entry takes any site past the tunnel).
+// A release moves the pins after a look at what changed.
+const (
+	privWL = "https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/"
+	legiz  = "https://raw.githubusercontent.com/legiz-ru/mihomo-rule-sets/a80b3c1d7a70ce83b1d1a45ff113a2fe5b312154/"
+)
 
 // Services in the order the admin panel lists them and the rules go.
 var Services = []Service{
@@ -105,7 +111,7 @@ var Services = []Service{
 	{ID: "discord", Icon: "🎧", Name: "Discord", NameEN: "Discord",
 		Rules: []Match{{Type: "GEOSITE", Value: "discord"}, {Type: "PROCESS-NAME-REGEX", Value: "(?i).*discord.*"}, {Type: "RULE-SET", Value: "mikan-discord-voice", NoResolve: true}},
 		Providers: []Provider{{Name: "mikan-discord-voice", Behavior: "ipcidr", Format: "mrs", Since: mrsSince,
-			URL: "https://raw.githubusercontent.com/legiz-ru/mihomo-rule-sets/main/other/discord-voice-ip-list.mrs"}}},
+			URL: legiz + "other/discord-voice-ip-list.mrs"}}},
 	{ID: "messengers", Icon: "💬", Name: "WhatsApp и Signal", NameEN: "WhatsApp and Signal", Rules: []Match{{Type: "GEOSITE", Value: "whatsapp"}, {Type: "GEOSITE", Value: "signal"}}},
 	{ID: "meta", Icon: "📷", Name: "Instagram и Facebook", NameEN: "Instagram and Facebook",
 		Rules: []Match{{Type: "GEOSITE", Value: "instagram"}, {Type: "GEOSITE", Value: "facebook"}, {Type: "GEOIP", Value: "facebook", NoResolve: true}}},
@@ -125,7 +131,7 @@ var Services = []Service{
 	{ID: "torrents", Icon: "🧲", Name: "Торренты", NameEN: "Torrents",
 		Rules: []Match{{Type: "RULE-SET", Value: "mikan-torrent-apps"}, {Type: "GEOSITE", Value: "category-public-tracker"}},
 		Providers: []Provider{{Name: "mikan-torrent-apps", Behavior: "classical", Format: "yaml",
-			URL: "https://raw.githubusercontent.com/legiz-ru/mihomo-rule-sets/main/other/torrent-clients.yaml"}}},
+			URL: legiz + "other/torrent-clients.yaml"}}},
 }
 
 // DirectSet is a list of apps and sites that go past the tunnel, for the apps that need a
@@ -314,6 +320,29 @@ func (p Profile) route(g Groups, ps []proxy, taken map[string]bool, r Routing) r
 		}
 		// The lists name sites by GEOSITE too.
 		out.geodata = true
+		out.rules = rejectTwins(out.rules)
+	}
+	return out
+}
+
+// rejectTwins follows every rule into the tunnel with the same match to REJECT. mihomo
+// skips a rule whose group cannot carry UDP (XHTTP) and here the profile ends with
+// MATCH,DIRECT: QUIC to a blocked site would go out from the real address. The twin
+// stops it there, and the app falls back to TCP through the tunnel.
+func rejectTwins(rules []string) []string {
+	out := make([]string, 0, 2*len(rules))
+	for _, r := range rules {
+		out = append(out, r)
+		// TYPE,VALUE,TARGET[,no-resolve]: anything else (a comma in the value) stays as it is.
+		parts := strings.Split(r, ",")
+		if len(parts) < 3 || len(parts) > 4 || len(parts) == 4 && parts[3] != "no-resolve" {
+			continue
+		}
+		if target := parts[2]; target == "DIRECT" || strings.HasPrefix(target, "REJECT") {
+			continue
+		}
+		parts[2] = "REJECT"
+		out = append(out, strings.Join(parts, ","))
 	}
 	return out
 }
@@ -341,6 +370,8 @@ func (p Profile) serviceTarget(s Service, t string, g Groups, ps []proxy, taken 
 	if p.Lang == "en" {
 		name = s.Icon + " " + s.NameEN
 	}
+	// A rule is split on commas: "ChatGPT, Claude, Gemini" as a target breaks the profile.
+	name = strings.NewReplacer(", ", " · ", ",", " ").Replace(name)
 	// A node this app has nothing of, or a name already taken: the main group.
 	if len(own) == 0 || taken[strings.ToLower(name)] {
 		return g.Main
