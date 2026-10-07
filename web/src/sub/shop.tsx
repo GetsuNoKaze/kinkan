@@ -143,7 +143,7 @@ export function Shop({
   }
 
   return (
-    <section className="glass rounded-3xl p-4" aria-label={title}>
+    <section className="glass sub-card p-4" aria-label={title}>
       <h2 className="mb-1 text-[15px] font-semibold">{title}</h2>
       <p className="mb-3 text-xs text-[var(--ink-500)]">{pick}{promoCode ? ` · ${t("sub.promoSelected", { code: promoCode })}` : ""}</p>
       {promoPreview ? <p className="mb-3 text-xs text-[var(--leaf-600)]">{t("sub.promoCheckoutDiscount", { discount: money(promoPreview.discount, promoPreview.currency), total: money(promoPreview.final_amount, promoPreview.currency) })}</p> : null}
