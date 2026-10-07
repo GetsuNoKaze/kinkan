@@ -478,7 +478,9 @@ html[data-theme="forest"] {
    section list stands beside the content. */
 @media (min-width: 1024px) {
   :root { --sticky-top: 96px; }
-  .topbar { position: sticky; top: 0; z-index: 20; margin: -16px -16px 0; padding: 16px 20px 12px; min-height: 80px; background: color-mix(in srgb, var(--bg) 86%, transparent); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); box-shadow: 0 1px 0 var(--hairline); }
+  /* Flat on the page at rest; once the page scrolls, a floating glass bar like the cards. */
+  .topbar { position: sticky; top: 8px; z-index: 20; margin: 0 -12px; padding: 8px 12px; min-height: 72px; border-radius: var(--r-xl); border: 1px solid transparent; transition: background-color 0.2s, box-shadow 0.2s, border-color 0.2s; }
+  .topbar[data-stuck] { background: color-mix(in srgb, var(--surface-solid) 82%, transparent); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); border-color: var(--hairline); box-shadow: var(--shadow-sm); }
   .topbar .page-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .section-layout { display: grid; grid-template-columns: 216px minmax(0, 1fr); gap: 24px; align-items: start; }
   .section-nav { position: sticky; top: var(--sticky-top); }
@@ -515,5 +517,5 @@ html[data-theme="forest"] {
 }
 @media (prefers-reduced-transparency: reduce) {
   .glass, .glass-strong { background: var(--surface-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
-  .topbar { background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .topbar[data-stuck] { background: var(--surface-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
