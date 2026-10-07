@@ -34,6 +34,7 @@
     "settings": "Настройки",
     "nodes": "Ноды",
     "telegram": "Telegram",
+    "addons": "Аддоны",
     "payments": "Платежи",
     "promocodes": "Промокоды"
   },
@@ -45,6 +46,7 @@
     "settings": "Настройки",
     "nodes": "Ноды",
     "telegram": "Бот",
+    "addons": "Аддоны",
     "api": "API",
     "payments": "Платежи",
     "promocodes": "Промокоды"
@@ -2420,6 +2422,20 @@
     "cliExample": "mikan cert set --cert /etc/letsencrypt/live/ДОМЕН/fullchain.pem \\\n  --key /etc/letsencrypt/live/ДОМЕН/privkey.pem"
   },
   "addons": {
+    "subtitle": "Встроенные инструменты и способы оплаты из маркетплейса",
+    "tools": "Инструменты",
+    "payments": "Платежи",
+    "telegram": "Telegram-бот",
+    "telegramSub": "Продажа подписок, Mini App, рассылки, уведомления админу и бэкапы",
+    "torrentSub": "Ноды распознают BitTorrent и банят нарушителей",
+    "paymentSub": "Способ оплаты: настраивается в «Платежах»",
+    "paymentAdd": "Добавить способ оплаты",
+    "paymentAddSub": "{n, plural, one {# способ в маркетплейсе} few {# способа в маркетплейсе} many {# способов в маркетплейсе} other {# способа в маркетплейсе}}",
+    "on": "включён",
+    "off": "выключен",
+    "stopped": "не запущен",
+    "stateFailed": "ошибка",
+    "back": "← Аддоны",
     "title": "Способы оплаты",
     "sub": "ЮKassa, CryptoBot и другие. Выберите в каталоге и введите ключи из кабинета платёжной системы.",
     "add": "Добавить",

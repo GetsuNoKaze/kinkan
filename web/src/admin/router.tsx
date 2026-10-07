@@ -79,11 +79,15 @@ export function createAppRouter(queryClient: QueryClient) {
     getParentRoute: () => app,
     path: "/settings",
     component: page(() => import("./pages/settings"), "SettingsPage"),
+    // The torrent blocker was a part of the routing until it became an addon.
+    beforeLoad: ({ search }) => {
+      if (search.tab === "routing" && search.part === "torrent") throw redirect({ to: "/addons/torrent" });
+    },
     validateSearch: (s: Record<string, unknown>): SettingsSearch => {
       // Sections that moved keep their old links working: the Clash rules are a field of the
       // simple routing now, the torrent blocker is in Security.
       if (s.tab === "rules" || (s.tab === "routing" && s.part === "rules")) return { tab: "routing", part: "simple" };
-      if (s.tab === "routing" && s.part === "torrent") return { tab: "security" };
+      if (s.tab === "routing" && s.part === "torrent") return { tab: "routing", part: "torrent" }; // to the addons, below
       const tab = SETTINGS_TABS.includes(s.tab as SettingsSearch["tab"]) ? (s.tab as SettingsSearch["tab"]) : "general";
       // The routing has no parts in the list beside it, but its view is in the URL.
       if (tab === "routing") return { tab, part: s.part === "simple" || s.part === "yaml" ? s.part : undefined };
@@ -91,13 +95,33 @@ export function createAppRouter(queryClient: QueryClient) {
       return { tab, part: parts && typeof s.part === "string" && parts.includes(s.part) ? s.part : undefined };
     },
   });
+  // The addons: the built-in tools (the Telegram bot, the torrent blocker) and the
+  // marketplace's payment methods.
+  const addons = createRoute({
+    getParentRoute: () => app,
+    path: "/addons",
+    component: page(() => import("./pages/addons"), "AddonsPage"),
+  });
   const telegram = createRoute({
     getParentRoute: () => app,
-    path: "/telegram",
+    path: "/addons/telegram",
     component: page(() => import("./pages/telegram"), "TelegramPage"),
     validateSearch: (s: Record<string, unknown>): TelegramSearch => ({
       tab: TELEGRAM_TABS.includes(s.tab as TelegramSearch["tab"]) ? (s.tab as TelegramSearch["tab"]) : "connect",
     }),
+  });
+  const torrent = createRoute({
+    getParentRoute: () => app,
+    path: "/addons/torrent",
+    component: page(() => import("./pages/addons"), "TorrentPage"),
+  });
+  // The bot was a section of the menu until it moved to the addons: old links still work.
+  const telegramOld = createRoute({
+    getParentRoute: () => app,
+    path: "/telegram",
+    beforeLoad: ({ search }) => {
+      throw redirect({ to: "/addons/telegram", search: search as TelegramSearch });
+    },
   });
   const promocodes = createRoute({
     getParentRoute: () => app,
@@ -117,7 +141,7 @@ export function createAppRouter(queryClient: QueryClient) {
   // The API section lived in the sidebar until 0.4.2: old links land on its new place.
   const apiDocsOld = createRoute({ getParentRoute: () => app, path: "/api-docs", beforeLoad: () => { throw redirect({ to: "/settings/api" }); } });
 
-  const routeTree = root.addChildren([login, app.addChildren([dashboard, users, tariffs, inbounds, nodes, promocodes, payments, telegram, apiDocs, apiDocsOld, settings])]);
+  const routeTree = root.addChildren([login, app.addChildren([dashboard, users, tariffs, inbounds, nodes, promocodes, payments, addons, telegram, torrent, telegramOld, apiDocs, apiDocsOld, settings])]);
   return createRouter({
     routeTree,
     basepath: basePath || "/",

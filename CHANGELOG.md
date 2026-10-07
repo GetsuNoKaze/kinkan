@@ -18,6 +18,7 @@ the signed manifest, and the panel shows the one in its language.
 - **sing-box apps** (SFA, SFI, SFM, SFT) get a whole sing-box config with the panel's routing and DNS. **Happ and INCY** can take a routing profile the panel builds from the Clash routing ("auto" in the Happ settings). Hiddify 4 gets AnyTLS.
 - The nodes run mihomo 1.19.32.
 - **A tidier panel**: Settings and Telegram in sections listed beside the content (a list on phones), cards packed two in a row on wide screens, the page header and the save bar stay in view, the most used things first (the link and QR on top of the client card, a node's rare actions in "⋯", a "Filters" menu for clients). Payments in tabs, with the sales switch in the header. Plainer texts: "Clients" and "Protocols" everywhere.
+- **Addons** in the menu, in place of Telegram: the Telegram bot and the torrent blocker as tools, with their state, beside the payment methods from the marketplace. The bot keeps working as it did; old links to its page lead to the new one.
 
 ### ru
 - **Маршрутизация для Clash-приложений** («Настройки → Маршрутизация»): сервисы (YouTube, Telegram, Discord, нейросети, игры и другие) через VPN, напрямую, в блок или через выбранный сервер; российские банки, госуслуги и маркетплейсы мимо туннеля; свои DNS; режим «только заблокированное», где через VPN идёт только то, что заблокировано. Или свой профиль Clash в YAML: серверы панель подставит сама. Профили теперь в YAML.
@@ -33,6 +34,7 @@ the signed manifest, and the panel shows the one in its language.
 - **Приложения sing-box** (SFA, SFI, SFM, SFT) получают целый конфиг sing-box с маршрутизацией и DNS панели. **Happ и INCY** могут брать профиль маршрутизации, который панель собирает из маршрутизации Clash («auto» в настройках Happ). Hiddify 4 получает AnyTLS.
 - Ноды работают на mihomo 1.19.32.
 - **Панель удобнее**: Настройки и Telegram разбиты на разделы со списком сбоку (на телефоне выпадающий список), на широком экране карточки стоят по две в ряд, шапка страницы и кнопка сохранения всегда на виду, самое нужное наверху (ссылка и QR первыми в карточке клиента, редкие действия ноды в «⋯», меню «Фильтры» у клиентов). Платежи во вкладках, тумблер продажи в шапке. Тексты проще: «Клиенты» и «Протоколы» везде.
+- **Аддоны** в меню вместо Telegram: Telegram-бот и блокировка торрентов как инструменты, с их состоянием, рядом со способами оплаты из маркетплейса. Бот работает как работал; старые ссылки на его страницу ведут на новую.
 
 ## 0.5.0.2
 ### en

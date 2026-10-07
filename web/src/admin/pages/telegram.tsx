@@ -7,6 +7,7 @@ import { api, ApiError, errorText, unwrap, type Schemas } from "../../api/client
 import { qk, useNodes, useSettings } from "../../api/hooks";
 import { useDraft } from "../../lib/draft";
 import { TELEGRAM_TABS } from "../search";
+import { BackToAddons } from "./addons";
 import { ago, num } from "../../lib/format";
 import { Confirm } from "../../components/overlay";
 import { QueryBoundary } from "../../components/query";
@@ -49,7 +50,7 @@ export function TelegramPage() {
   const tg = useTelegram();
   return (
     <>
-      <PageHeader title={t("nav.telegram")} sub={t("telegram.subtitle")} />
+      <PageHeader title={t("nav.telegram")} sub={t("telegram.subtitle")} actions={<BackToAddons />} />
       <QueryBoundary
         query={tg}
         pending={
@@ -67,8 +68,8 @@ export function TelegramPage() {
 }
 
 function TelegramBody({ v }: { v: View }) {
-  const { tab } = useSearch({ from: "/_app/telegram" });
-  const navigate = useNavigate({ from: "/telegram" });
+  const { tab } = useSearch({ from: "/_app/addons/telegram" });
+  const navigate = useNavigate({ from: "/addons/telegram" });
   const go = (next: (typeof TELEGRAM_TABS)[number]) => void navigate({ search: { tab: next }, replace: true });
   const patch = usePatchTelegram();
   const toast = useToast();
