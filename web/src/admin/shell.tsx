@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { ArrowUpCircle, Bot, LayoutDashboard, LogOut, MoreHorizontal, Network, Server, SlidersHorizontal, Tag, Ticket, Users, Wallet } from "lucide-react";
+import { ArrowUpCircle, Bot, LayoutDashboard, LogOut, MoreHorizontal, Network, PanelLeftClose, PanelLeftOpen, Server, SlidersHorizontal, Tag, Ticket, Users, Wallet } from "lucide-react";
+import { useState } from "react";
 import { api, unwrap } from "../api/client";
 import { meQuery, useNode, useOverview, useUpdates } from "../api/hooks";
 import { Logo } from "../components/atmosphere";
@@ -22,16 +23,42 @@ const NAV = [
   { to: "/settings", key: "settings", icon: SlidersHorizontal },
 ] as const;
 
+// The sidebar folded to its icons on a wide screen, as the admin left it; per browser.
+const FOLD_KEY = "mikan.sidebar";
+
+function readFolded(): boolean {
+  try {
+    return localStorage.getItem(FOLD_KEY) === "folded";
+  } catch {
+    return false;
+  }
+}
+
 export function Shell() {
   useLocale(); // the sidebar and the bar read their texts at render time
   const overview = useOverview();
+  const [folded, setFolded] = useState(readFolded);
+  const fold = () =>
+    setFolded((f) => {
+      try {
+        if (f) localStorage.removeItem(FOLD_KEY);
+        else localStorage.setItem(FOLD_KEY, "folded");
+      } catch {
+        // private mode: folded for this visit only
+      }
+      return !f;
+    });
+  const foldLabel = folded ? t("shell.unfold") : t("shell.fold");
   return (
     <>
-      <div className="app">
+      <div className="app" data-folded={folded || undefined}>
         <aside className="sidebar glass" aria-label={t("shell.sidebar")}>
           <div className="brand">
             <Logo />
             <span className="brand-name">mikan</span>
+            <button type="button" className="icon-btn fold-btn" onClick={fold} aria-label={foldLabel} title={foldLabel} aria-expanded={!folded}>
+              {folded ? <PanelLeftOpen size={18} aria-hidden /> : <PanelLeftClose size={18} aria-hidden />}
+            </button>
           </div>
           <nav className="nav" aria-label={t("shell.sections")}>
             {NAV.map((n) => (
@@ -102,7 +129,7 @@ function UpdateChip() {
   return (
     <Link to="/settings" search={{ tab: "system" }} hash="updates" className="update-chip" title={t("shell.updateHint")}>
       <ArrowUpCircle size={16} aria-hidden />
-      <span className="truncate">{t("shell.update", { v: u.data.latest })}</span>
+      <span className="update-label truncate">{t("shell.update", { v: u.data.latest })}</span>
     </Link>
   );
 }
