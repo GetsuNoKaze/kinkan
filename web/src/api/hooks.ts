@@ -34,6 +34,8 @@ export const qk = {
   torrent: ["torrent"] as const,
   torrentHits: (user: number) => ["torrent", "hits", user] as const,
   speedTests: (node: number) => ["speedtests", node] as const,
+  subPage: ["sub-page"] as const,
+  subDocs: ["sub-docs"] as const,
 };
 
 export const meQuery = {

@@ -105,6 +105,21 @@ export function lookAttrs(look: PageLook, scheme: "light" | "dark", accent?: str
   return { data, style: style as CSSProperties };
 }
 
+/** Puts a look on el (the page's <html>, the preview's), replacing the one it had. */
+export function paintLook(el: HTMLElement, look: PageLook, scheme: "light" | "dark", accent?: string) {
+  const { data, style } = lookAttrs(look, scheme, accent);
+  el.classList.add("sub-look");
+  for (const k of ["palette", "scheme", "font", "radius", "cards", "accent"]) {
+    if (data[k]) el.dataset[k] = data[k];
+    else delete el.dataset[k];
+  }
+  for (const k of ["--accent", "--on-accent"]) {
+    const v = (style as Record<string, string>)[k];
+    if (v) el.style.setProperty(k, v);
+    else el.style.removeProperty(k);
+  }
+}
+
 /** The backdrop's own CSS when the admin chose one; null keeps the theme's. */
 export function backdropStyle(look: PageLook, image?: string): CSSProperties | null {
   const b = look.background;
@@ -170,10 +185,7 @@ export function applyLook(page: PagePublic, asset: (path?: string) => string | u
   const look = page.config.look;
   const dark = window.matchMedia?.("(prefers-color-scheme: dark)");
   const paint = () => {
-    const { data, style } = lookAttrs(look, schemeOf(look.mode, !!dark?.matches), page.accent);
-    root.classList.add("sub-look");
-    for (const [k, v] of Object.entries(data)) root.dataset[k] = v;
-    for (const [k, v] of Object.entries(style)) root.style.setProperty(k, String(v));
+    paintLook(root, look, schemeOf(look.mode, !!dark?.matches), page.accent);
     const bar = look.background.kind === "solid" || look.background.kind === "gradient" ? look.background.from : getComputedStyle(root).getPropertyValue("--bg").trim();
     if (bar) document.querySelector('meta[name="theme-color"]')?.setAttribute("content", bar);
   };
