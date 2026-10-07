@@ -1436,6 +1436,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{id}/happ-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Шифрованная ссылка Happ на подписку пользователя */
+        get: operations["user-happ-link"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{id}/pools": {
         parameters: {
             query?: never;
@@ -2092,6 +2109,10 @@ export interface components {
             /** @enum {string} */
             source: "purchase" | "admin";
         };
+        HappLinkOutputBody: {
+            /** @description happ://crypt5/…: Happ открывает подписку, не показывая её адрес; пусто — шифрованная ссылка выключена */
+            link: string;
+        };
         HostStatus: {
             /** @description RFC 3339 */
             at: string;
@@ -2586,6 +2607,12 @@ export interface components {
             device_binding?: boolean;
             device_require_hwid?: boolean;
             domain?: string;
+            /** @enum {string} */
+            happ_crypt?: "off" | "api" | "local";
+            happ_hide_settings?: boolean;
+            happ_provider_id?: string;
+            /** @description happ://routing/…; пусто — не отдавать */
+            happ_routing?: string;
             public_host?: string;
             /** Format: int64 */
             quiet_hour_utc?: number;
@@ -3086,6 +3113,17 @@ export interface components {
             /** @description Не выдавать подписку приложениям без ID устройства (иначе они вместе занимают одно место) */
             device_require_hwid: boolean;
             domain: string;
+            /**
+             * @description Шифрованная ссылка для кнопки Happ: off — обычная happ://add/, api — через сервис Happ (адрес подписки уходит на crypto.happ.su), local — панель шифрует сама
+             * @enum {string}
+             */
+            happ_crypt: "off" | "api" | "local";
+            /** @description Скрыть в Happ настройки серверов подписки (нужен Provider ID) */
+            happ_hide_settings: boolean;
+            /** @description Provider ID с happ-proxy.com; без него Happ не принимает hide-settings */
+            happ_provider_id: string;
+            /** @description Профиль маршрутизации Happ: ссылка happ://routing/onadd/… (добавить и включить), happ://routing/add/… или happ://routing/off; уходит только в Happ заголовком routing */
+            happ_routing: string;
             /** Format: int64 */
             panel_port: number;
             public_host: string;
@@ -7211,6 +7249,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GrantView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "user-happ-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HappLinkOutputBody"];
                 };
             };
             /** @description Error */

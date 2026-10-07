@@ -15,6 +15,7 @@ import { RoutingSection } from "./routing";
 import { TorrentCard, TorrentHitsCard } from "./torrent";
 import { AccessCard, ApiCard, CertificateCard, PasswordCard, SessionsCard, TwoFactorCard } from "./security";
 import { AppsCard, DevicesCard, SubPortCard, SubscriptionCard } from "./subscription";
+import { HappCard } from "./happ";
 
 const ICONS = { general: Globe, subscription: Link2, routing: Route, rules: ListFilter, security: ShieldCheck, import: ArrowDownToLine } as const;
 
@@ -64,6 +65,7 @@ export function SettingsPage() {
                   <>
                     <SubPortCard s={s} />
                     <AppsCard s={s} />
+                    <HappCard s={s} />
                   </>
                 }
               />
