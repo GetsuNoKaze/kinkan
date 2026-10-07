@@ -327,11 +327,15 @@ func mihomoConfig(p Profile, g Groups, r Routing) (map[string]any, []proxy, erro
 		dns["nameserver-policy"] = map[string]any{"geosite:category-ru": []string{"77.88.8.8", "77.88.8.1"}}
 	}
 	p.Routes.DNS.apply(dns)
-	last := g.Main
+	// mihomo skips a rule whose group can't carry UDP (XHTTP picked by hand or by url-test)
+	// and sends what falls through to DIRECT: past the tunnel, from the real address. REJECT
+	// makes such apps fall back to TCP instead. In the "blocked" mode the rest goes direct
+	// by design; its tunnel rules get their own REJECT twins (blockedRules).
+	last := []string{"MATCH," + g.Main, "MATCH,REJECT"}
 	if r == RoutingBlocked {
-		last = "DIRECT"
+		last = []string{"MATCH,DIRECT"}
 	}
-	cfg["rules"] = append(rules, "MATCH,"+last)
+	cfg["rules"] = append(rules, last...)
 	return cfg, ps, nil
 }
 
