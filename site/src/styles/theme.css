@@ -137,7 +137,8 @@ body {
 
 /* ---------- header ---------- */
 
-.header {
+/* The frame's <header>, not the row inside it (also .header), which stops short of the menu button. */
+header.header {
 	border-bottom: 1px solid var(--mk-hairline);
 }
 
