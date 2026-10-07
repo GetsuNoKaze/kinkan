@@ -8,21 +8,26 @@ import { fieldErrors } from "../../../lib/fields";
 import { useSaveSettings } from "./shared";
 
 type Crypt = "off" | "api" | "local";
+type RoutingMode = "off" | "auto" | "link";
 
 /** What Happ gets beyond the profile: a routing profile, hidden server settings and a
  * crypt link that keeps the subscription address out of sight. */
 export function HappCard({ s }: { s: Schemas["SettingsView"] }) {
   const save = useSaveSettings();
   const { draft: form, setDraft: setForm } = useDraft({
-    happ_routing: s.happ_routing,
+    happ_routing: s.happ_routing === "auto" ? "" : s.happ_routing,
+    // "auto": the panel makes the routing profile of Settings → Routing.
+    mode: (s.happ_routing === "auto" ? "auto" : s.happ_routing ? "link" : "off") as RoutingMode,
     happ_provider_id: s.happ_provider_id,
     happ_crypt: (s.happ_crypt || "off") as Crypt,
   });
+  const routingMode = form.mode;
   const errors = fieldErrors(save.error);
   const provider = form.happ_provider_id.trim();
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    save.mutate({ happ_routing: form.happ_routing.trim(), happ_provider_id: provider, happ_crypt: form.happ_crypt });
+    const routing = form.mode === "auto" ? "auto" : form.mode === "off" ? "" : form.happ_routing.trim();
+    save.mutate({ happ_routing: routing, happ_provider_id: provider, happ_crypt: form.happ_crypt });
   };
   // The switch saves at once, like the other switches; it needs the saved provider id.
   const canHide = !!s.happ_provider_id;
@@ -49,7 +54,21 @@ export function HappCard({ s }: { s: Schemas["SettingsView"] }) {
           />
         </Field>
 
-        <Field label={t("settings.happRouting")} htmlFor="s-happ-routing" hint={t("settings.happRoutingHint")} error={errors.happ_routing}>
+        <Field label={t("settings.happRouting")} hint={t(`settings.happRoutingModeHint.${routingMode}`)} error={routingMode === "link" ? undefined : errors.happ_routing}>
+          <Segmented
+            label={t("settings.happRouting")}
+            value={routingMode}
+            onChange={(v) => setForm((f) => ({ ...f, mode: v }))}
+            options={[
+              { value: "off", label: t("settings.happRoutingOff") },
+              { value: "auto", label: t("settings.happRoutingAuto") },
+              { value: "link", label: t("settings.happRoutingLink") },
+            ]}
+          />
+        </Field>
+
+        {routingMode === "link" ? (
+        <Field label={t("settings.happRoutingLinkField")} htmlFor="s-happ-routing" hint={t("settings.happRoutingHint")} error={errors.happ_routing}>
           <textarea
             id="s-happ-routing"
             className="input mono min-h-[88px] text-xs"
@@ -61,6 +80,7 @@ export function HappCard({ s }: { s: Schemas["SettingsView"] }) {
             aria-invalid={!!errors.happ_routing}
           />
         </Field>
+        ) : null}
 
         <Field label={t("settings.happProvider")} htmlFor="s-happ-provider" hint={t("settings.happProviderHint")} error={errors.happ_provider_id}>
           <input
