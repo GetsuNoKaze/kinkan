@@ -136,6 +136,15 @@ func TestHappAutoRouting(t *testing.T) {
 	if p := profile(); p["GlobalProxy"] != "false" || !strings.Contains(strings.Join(anyStrings(p["ProxySites"]), " "), "geosite:ru-blocked") {
 		t.Fatalf("blocked mode: %v", p)
 	}
+	// INCY reads the same profile in its own scheme, and none of Happ's other headers.
+	patch(map[string]any{"happ_provider_id": "prov-1"})
+	resp, _ := k.do(http.MethodGet, "/"+subPath+"/"+u.SubToken, nil, map[string]string{"User-Agent": "INCY/2.0.8"})
+	if link := resp.Header.Get("routing"); !strings.HasPrefix(link, "incy://routing/onadd/") || resp.Header.Get("providerid") != "" {
+		t.Fatalf("INCY: %q %v", link, resp.Header)
+	}
+	if resp, _ := k.do(http.MethodGet, "/"+subPath+"/"+u.SubToken, nil, map[string]string{"User-Agent": "v2RayTun/5.1.0"}); resp.Header.Get("routing") != "" {
+		t.Fatal("v2RayTun takes no routing header")
+	}
 }
 
 func anyStrings(v any) []string {

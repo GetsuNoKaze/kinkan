@@ -239,7 +239,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	h.userInfoHeaders(w, u, grants.Main(u.ID), cfg, vars)
 	h.operatorHeaders(w, r, u, cfg)
-	if IsHapp(r.UserAgent()) {
+	switch ua := r.UserAgent(); {
+	case IsINCY(ua):
+		// INCY reads Happ's routing profile from the same header (docs.incy.cc/en/routing),
+		// and none of Happ's provider headers.
+		if routing := cfg.Happ.Routing; routing == HappRoutingAuto {
+			w.Header().Set("routing", incyLink(happAutoRouting(cfg)))
+		} else if routing != "" {
+			w.Header().Set("routing", incyLink(routing))
+		}
+	case IsHapp(ua):
 		happ := cfg.Happ
 		if happ.Routing == HappRoutingAuto {
 			happ.Routing = happAutoRouting(cfg)

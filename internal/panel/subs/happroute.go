@@ -195,3 +195,14 @@ var happLists = map[string][2][]string{
 	"mikan-gemini":      {{"geosite:google-gemini"}, nil},
 	"mikan-games":       {{"geosite:category-games"}, nil},
 }
+
+// IsINCY tells INCY by its User-Agent.
+func IsINCY(ua string) bool { return strings.Contains(strings.ToLower(ua), "incy") }
+
+// incyLink is a Happ routing link in INCY's own scheme: INCY takes any, its own is safest.
+func incyLink(link string) string {
+	if rest, ok := strings.CutPrefix(link, "happ://"); ok {
+		return "incy://" + rest
+	}
+	return link
+}
