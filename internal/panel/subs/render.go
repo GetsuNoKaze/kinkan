@@ -270,16 +270,29 @@ func mihomoConfigOf(p Profile, g Groups, r Routing, ps []proxy) map[string]any {
 	for i, x := range ps {
 		proxies[i], names[i] = x.yaml, x.name
 	}
-	countries := countryGroups(p.Nodes, ps, g, names)
+	var countries []map[string]any
+	if !p.Routes.Servers.NoCountries {
+		countries = countryGroups(p.Nodes, ps, g, names)
+	}
 	selector := []string{g.Auto}
 	for _, c := range countries {
 		selector = append(selector, c["name"].(string))
 	}
+	auto := urlTest(g.Auto, names)
+	if p.Routes.Servers.Auto == "fallback" {
+		auto["type"] = "fallback" // the first that works, in the order of the nodes
+		delete(auto, "tolerance")
+	}
 	groups := []map[string]any{
 		{"name": g.Main, "type": "select", "proxies": append(selector, names...)},
-		urlTest(g.Auto, names),
+		auto,
 	}
 	groups = append(groups, countries...)
+	if n := p.Routes.Servers.Interval; n > 0 {
+		for _, gr := range groups[1:] {
+			gr["interval"] = n
+		}
+	}
 	taken := map[string]bool{}
 	for _, n := range append(append([]string{}, names...), g.Main, g.Auto, AliasGroup) {
 		taken[strings.ToLower(n)] = true
@@ -302,6 +315,10 @@ func mihomoConfigOf(p Profile, g Groups, r Routing, ps []proxy) map[string]any {
 	}
 	// The panel and the nodes stay out of the tunnel whatever the admin's rules say.
 	rules := append(directRules(p.Direct), "GEOIP,LAN,DIRECT,no-resolve")
+	tune := p.Routes.Tune
+	if tune.BlockQUIC {
+		rules = append(rules, "AND,((NETWORK,UDP),(DST-PORT,443)),REJECT")
+	}
 	rules = append(rules, p.Rules...)
 	rules = append(rules, rt.rules...)
 	cfg := map[string]any{
@@ -332,6 +349,15 @@ func mihomoConfigOf(p Profile, g Groups, r Routing, ps []proxy) map[string]any {
 		dns["nameserver-policy"] = map[string]any{"geosite:category-ru": []string{"77.88.8.8", "77.88.8.1"}}
 	}
 	p.Routes.DNS.apply(dns)
+	if tune.RealIP {
+		dns["enhanced-mode"] = "redir-host"
+		delete(dns, "fake-ip-range")
+	}
+	if tune.Sniffer {
+		cfg["sniffer"] = map[string]any{"enable": true, "parse-pure-ip": true,
+			"sniff": map[string]any{"HTTP": map[string]any{"ports": []any{80, "8080-8880"}}, "TLS": map[string]any{"ports": []any{443, 8443}},
+				"QUIC": map[string]any{"ports": []any{443, 8443}}}}
+	}
 	// mihomo skips a rule whose group can't carry UDP (XHTTP picked by hand or by url-test)
 	// and sends what falls through to DIRECT: past the tunnel, from the real address. REJECT
 	// makes such apps fall back to TCP instead. In the "blocked" mode the rest goes direct

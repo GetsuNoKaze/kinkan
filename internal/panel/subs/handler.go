@@ -1130,6 +1130,9 @@ type PreviewRequest struct {
 	Routes   Routes
 	Template string // the own Clash profile; "": the built-in one with Routing and Routes
 	Starter  bool   // the built-in one as the start of an own (Starter)
+	// Rules and Groups in place of the saved ones, when set: the routing form has them too.
+	Rules  *string
+	Groups *Groups
 }
 
 // Preview is the Clash profile of a user given every inbound, as req sets it: what the
@@ -1140,7 +1143,14 @@ func (h *Handler) Preview(ctx context.Context, req PreviewRequest) ([]byte, erro
 		return nil, err
 	}
 	prof.Routes = req.Routes
-	g := cfg.Groups.WithDefaults(cfg.Lang)
+	g := cfg.Groups
+	if req.Groups != nil {
+		g = *req.Groups
+	}
+	g = g.WithDefaults(cfg.Lang)
+	if req.Rules != nil {
+		prof.Rules = ServedRules(*req.Rules, g)
+	}
 	switch {
 	case req.Starter:
 		return Starter(prof, g, req.Routing)

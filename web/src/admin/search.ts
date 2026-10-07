@@ -26,7 +26,6 @@ export const SETTINGS_TABS = ["general", "subscription", "page", "routing", "sec
 /** The parts of the sections that have them: the subscription page's editor and the routing. */
 export const SETTINGS_PARTS = {
   page: ["look", "brand", "blocks", "apps", "docs", "css"],
-  routing: ["simple", "yaml", "rules", "torrent"],
 } as const;
 export type SettingsSearch = { tab: (typeof SETTINGS_TABS)[number]; part?: string };
 

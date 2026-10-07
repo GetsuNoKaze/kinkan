@@ -4804,6 +4804,34 @@
         ],
         "type": "object"
       },
+      "RouteList": {
+        "additionalProperties": false,
+        "properties": {
+          "behavior": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url",
+          "behavior",
+          "format",
+          "target"
+        ],
+        "type": "object"
+      },
       "RouteService": {
         "additionalProperties": false,
         "properties": {
@@ -4869,11 +4897,23 @@
           "dns": {
             "$ref": "#/components/schemas/DNS"
           },
+          "lists": {
+            "items": {
+              "$ref": "#/components/schemas/RouteList"
+            },
+            "type": "array"
+          },
+          "servers": {
+            "$ref": "#/components/schemas/Servers"
+          },
           "services": {
             "additionalProperties": {
               "type": "string"
             },
             "type": "object"
+          },
+          "tune": {
+            "$ref": "#/components/schemas/Tune"
           }
         },
         "type": "object"
@@ -4907,6 +4947,16 @@
             "description": "Встроенный профиль с этими sub_routing и sub_routes как начало своего: без серверов, группы просят их сами",
             "type": "boolean"
           },
+          "sub_group_auto": {
+            "description": "Имя группы автовыбора вместо сохранённого",
+            "maxLength": 200,
+            "type": "string"
+          },
+          "sub_group_main": {
+            "description": "Имя главной группы вместо сохранённого",
+            "maxLength": 200,
+            "type": "string"
+          },
           "sub_routes": {
             "$ref": "#/components/schemas/Routes"
           },
@@ -4916,6 +4966,11 @@
               "all",
               "blocked"
             ],
+            "type": "string"
+          },
+          "sub_rules": {
+            "description": "Свои правила вместо сохранённых",
+            "maxLength": 65536,
             "type": "string"
           },
           "sub_template": {
@@ -4970,6 +5025,22 @@
           "scanned",
           "results"
         ],
+        "type": "object"
+      },
+      "Servers": {
+        "additionalProperties": false,
+        "properties": {
+          "auto": {
+            "type": "string"
+          },
+          "interval": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "no_countries": {
+            "type": "boolean"
+          }
+        },
         "type": "object"
       },
       "SessionView": {
@@ -6208,6 +6279,21 @@
           "up",
           "down"
         ],
+        "type": "object"
+      },
+      "Tune": {
+        "additionalProperties": false,
+        "properties": {
+          "block_quic": {
+            "type": "boolean"
+          },
+          "real_ip": {
+            "type": "boolean"
+          },
+          "sniffer": {
+            "type": "boolean"
+          }
+        },
         "type": "object"
       },
       "UpdateStatus": {
