@@ -3,14 +3,18 @@ import { useState, type FormEvent } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../../api/client";
 import { useNodes } from "../../../api/hooks";
 import { Disclosure, FormActions, WithPreview } from "../../../components/layout";
-import { Button, ErrorState, Field, Pill, Skeleton } from "../../../components/ui";
+import { Switch } from "../../../components/switch";
+import { Button, ErrorState, Field, Pill, Segmented, Skeleton } from "../../../components/ui";
 import { t, useLocale } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
+import { RulesEditor } from "./rules";
 import { useSaveSettings } from "./shared";
 import { TemplateCard } from "./template";
 
 type Routes = Schemas["Routes"];
 type DNS = NonNullable<Routes["dns"]>;
+type List = NonNullable<Routes["lists"]>[number];
+type View = "simple" | "yaml";
 
 const MODES = [
   { id: "ru_direct", title: "settings.routingRuDirect", sub: "settings.routingRuDirectSub" },
@@ -60,12 +64,12 @@ function parsePolicy(text: string): NonNullable<DNS["policy"]> {
 const policyText = (p: DNS["policy"]) => (p ?? []).map((x) => `${x.match}: ${x.servers.join(", ")}`).join("\n");
 
 /** The routing of Clash profiles: the mode, the services, the apps past the tunnel and DNS, with the profile it makes. */
-export function RoutingSection({ s, view }: { s: Schemas["SettingsView"]; view: "simple" | "yaml" }) {
+export function RoutingSection({ s, view, onView }: { s: Schemas["SettingsView"]; view: View; onView: (v: View) => void }) {
   const save = useSaveSettings();
   const nodes = useNodes();
   const locale = useLocale();
   const catalog = useQuery({ queryKey: ["routes-catalog"], queryFn: ({ signal }) => unwrap(api.GET("/api/v1/settings/routes/catalog", { signal })), staleTime: Infinity });
-  const { draft, setDraft, dirty, reset } = useDraft({ mode: s.sub_routing, routes: s.sub_routes });
+  const { draft, setDraft, dirty, reset } = useDraft({ mode: s.sub_routing, routes: s.sub_routes, rules: s.sub_rules });
   const routes = draft.routes;
   const setRoutes = (f: (r: Routes) => Routes) => setDraft((d) => ({ ...d, routes: f(d.routes) }));
   const [dnsText, setDnsText] = useState(() => ({
@@ -94,27 +98,72 @@ export function RoutingSection({ s, view }: { s: Schemas["SettingsView"]; view: 
       const has = (r.direct ?? []).includes(id);
       return { ...r, direct: has ? (r.direct ?? []).filter((x) => x !== id) : [...(r.direct ?? []), id] };
     });
+  const setList = (i: number, patch: Partial<List>) => setRoutes((r) => ({ ...r, lists: (r.lists ?? []).map((l, j) => (j === i ? { ...l, ...patch } : l)) }));
+  const addList = () =>
+    setRoutes((r) => ({ ...r, lists: [...(r.lists ?? []), { name: `list-${(r.lists?.length ?? 0) + 1}`, url: "", behavior: "classical", format: "yaml", target: "vpn" }] }));
+  const dropList = (i: number) => setRoutes((r) => ({ ...r, lists: (r.lists ?? []).filter((_, j) => j !== i) }));
+  const servers = routes.servers ?? {};
+  const setServers = (patch: Partial<NonNullable<Routes["servers"]>>) => setRoutes((r) => ({ ...r, servers: { ...(r.servers ?? {}), ...patch } }));
+  const tune = routes.tune ?? {};
+  const setTune = (patch: Partial<NonNullable<Routes["tune"]>>) => setRoutes((r) => ({ ...r, tune: { ...(r.tune ?? {}), ...patch } }));
   const apiErr = save.error instanceof ApiError ? save.error : null;
-  const error = apiErr?.fields.sub_routes;
+  const errors = apiErr?.fields ?? {};
+  const error = errors.sub_routes;
+  const badLine = errors.sub_rules && typeof apiErr?.values.sub_rules === "number" ? apiErr.values.sub_rules : 0;
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    save.mutate({ sub_routing: draft.mode, sub_routes: draft.routes });
+    save.mutate({ sub_routing: draft.mode, sub_routes: draft.routes, sub_rules: draft.rules });
   };
   const nodeName = (n: { name: string; local: boolean }) => t("settings.routesOnServer", { name: n.name || (n.local ? t("settings.routesThisServer") : "—") });
-  const routed = Object.keys(routes.services ?? {}).length + (routes.direct ?? []).length;
+  const routed = Object.keys(routes.services ?? {}).length + (routes.direct ?? []).length + (routes.lists ?? []).length;
+  const targetSelect = (id: string, value: string, onChange: (v: string) => void, follow = true) => (
+    <select id={id} className="input max-w-[220px]" value={value} onChange={(e) => onChange(e.target.value)}>
+      {TARGETS.filter((x) => follow || x.id).map((x) => (
+        <option key={x.id} value={x.id}>
+          {t(x.label)}
+        </option>
+      ))}
+      {(nodes.data ?? []).length ? (
+        <optgroup label={t("settings.routesServer")}>
+          {(nodes.data ?? []).map((n) => (
+            <option key={n.id} value={`node:${n.id}`}>
+              {nodeName(n)}
+            </option>
+          ))}
+        </optgroup>
+      ) : null}
+    </select>
+  );
+  // Simple settings or an own YAML: one choice of how the routing is set, above either.
+  const views = (
+    <div className="flex flex-wrap items-center gap-3">
+      <Segmented
+        label={t("settings.routesView")}
+        value={view}
+        onChange={onView}
+        options={[
+          { value: "simple", label: t("settings.routesViewSimple") },
+          { value: "yaml", label: t("settings.routesViewYaml") },
+        ]}
+      />
+      {s.sub_template.trim() ? <Pill tone="warn">{t("settings.routesYamlOn")}</Pill> : null}
+    </div>
+  );
   // The own profile's text lives here, so switching between the simple mode and it keeps it.
   const [yaml, setYaml] = useState(s.sub_template);
   const starter = () => unwrap(api.POST("/api/v1/settings/routes/preview", { body: { sub_routing: draft.mode, sub_routes: draft.routes, starter: true } })).then((r) => r.profile);
   if (view === "yaml") {
     return (
       <WithPreview title={t("settings.routesPreview")} preview={(bare) => <PreviewCard mode={draft.mode} routes={draft.routes} template={yaml} bare={bare} />}>
+        {views}
         <TemplateCard s={s} text={yaml} setText={setYaml} starter={starter} />
       </WithPreview>
     );
   }
   return (
-    <WithPreview title={t("settings.routesPreview")} preview={(bare) => <PreviewCard mode={draft.mode} routes={draft.routes} bare={bare} />}>
-    {s.sub_template.trim() ? <div className="banner info">{t("settings.routesYamlLive")}</div> : null}
+    <WithPreview title={t("settings.routesPreview")} preview={(bare) => <PreviewCard mode={draft.mode} routes={draft.routes} rules={draft.rules} bare={bare} />}>
+      {views}
+      {s.sub_template.trim() ? <div className="banner info">{t("settings.routesYamlLive")}</div> : null}
         <section className="card glass reveal" style={{ "--i": 1 } as React.CSSProperties}>
           <form onSubmit={submit} noValidate>
             <div className="card-head">
@@ -154,25 +203,42 @@ export function RoutingSection({ s, view }: { s: Schemas["SettingsView"]; view: 
                         <span aria-hidden>{svc.icon}</span>
                         <span className="truncate">{locale === "en" ? svc.name_en : svc.name}</span>
                       </label>
-                      <select id={id} className="input max-w-[220px]" value={routes.services?.[svc.id] ?? ""} onChange={(e) => setService(svc.id, e.target.value)}>
-                        {TARGETS.map((x) => (
-                          <option key={x.id} value={x.id}>
-                            {t(x.label)}
-                          </option>
-                        ))}
-                        {(nodes.data ?? []).length ? (
-                          <optgroup label={t("settings.routesServer")}>
-                            {(nodes.data ?? []).map((n) => (
-                              <option key={n.id} value={`node:${n.id}`}>
-                                {nodeName(n)}
-                              </option>
-                            ))}
-                          </optgroup>
-                        ) : null}
-                      </select>
+                      {targetSelect(id, routes.services?.[svc.id] ?? "", (v) => setService(svc.id, v))}
                     </div>
                   );
                 })}
+              </div>
+            </Field>
+
+            <Field label={t("settings.routesLists")} hint={t("settings.routesListsHint")}>
+              <div className="flex flex-col gap-3">
+                {(routes.lists ?? []).map((l, i) => (
+                  <div key={i} className="panel-soft grid gap-2 p-3 sm:grid-cols-[140px_minmax(0,1fr)]">
+                    <input className="input mono" value={l.name} onChange={(e) => setList(i, { name: e.target.value.toLowerCase() })} maxLength={32} aria-label={t("settings.routesListName")} placeholder="whitelist" />
+                    <input className="input mono" value={l.url} onChange={(e) => setList(i, { url: e.target.value.trim() })} aria-label={t("settings.routesListUrl")} placeholder="https://raw.githubusercontent.com/…/list.yaml" />
+                    <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+                      <select className="input max-w-[170px]" value={l.behavior} onChange={(e) => setList(i, { behavior: e.target.value })} aria-label={t("settings.routesListBehavior")}>
+                        <option value="classical">{t("settings.routesListClassical")}</option>
+                        <option value="domain">{t("settings.routesListDomain")}</option>
+                        <option value="ipcidr">{t("settings.routesListIP")}</option>
+                      </select>
+                      <select className="input max-w-[110px]" value={l.format} onChange={(e) => setList(i, { format: e.target.value })} aria-label={t("settings.routesListFormat")}>
+                        <option value="yaml">YAML</option>
+                        <option value="text">TXT</option>
+                        <option value="mrs">MRS</option>
+                      </select>
+                      {targetSelect(`s-list-${i}`, l.target, (v) => setList(i, { target: v }), false)}
+                      <Button variant="ghost" onClick={() => dropList(i)}>
+                        {t("settings.routesListRemove")}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                <div>
+                  <Button variant="ghost" onClick={addList}>
+                    + {t("settings.routesListAdd")}
+                  </Button>
+                </div>
               </div>
             </Field>
 
@@ -186,6 +252,40 @@ export function RoutingSection({ s, view }: { s: Schemas["SettingsView"]; view: 
                 ))}
               </div>
             </Field>
+
+            <Field label={t("settings.rules")}>
+              <RulesEditor value={draft.rules} onChange={(f) => setDraft((d) => ({ ...d, rules: f(d.rules) }))} error={errors.sub_rules} badLine={badLine} targets={s.rule_targets} />
+            </Field>
+
+            <Disclosure title={t("settings.routesServers")} sub={t("settings.routesServersSub")} open={!!errors.sub_routes && apiErr?.fields.sub_routes === t("errors.api.routes_servers")}>
+              <Field label={t("settings.routesAutoKind")} hint={t(servers.auto === "fallback" ? "settings.routesAutoFallbackHint" : "settings.routesAutoFastestHint")}>
+                <Segmented
+                  label={t("settings.routesAutoKind")}
+                  value={servers.auto === "fallback" ? "fallback" : "fastest"}
+                  onChange={(v) => setServers({ auto: v === "fallback" ? "fallback" : undefined })}
+                  options={[
+                    { value: "fastest", label: t("settings.routesAutoFastest") },
+                    { value: "fallback", label: t("settings.routesAutoFallback") },
+                  ]}
+                />
+              </Field>
+              <Field label={t("settings.routesInterval")} htmlFor="s-interval" hint={t("settings.routesIntervalHint")}>
+                <select id="s-interval" className="input max-w-[280px]" value={servers.interval ?? 0} onChange={(e) => setServers({ interval: Number(e.target.value) || undefined })}>
+                  {[0, 60, 120, 600, 1800].map((n) => (
+                    <option key={n} value={n}>
+                      {n ? t("settings.routesIntervalSec", { n }) : t("settings.routesIntervalDefault")}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Toggle label={t("settings.routesCountries")} sub={t("settings.routesCountriesSub")} checked={!servers.no_countries} onChange={(v) => setServers({ no_countries: v ? undefined : true })} />
+            </Disclosure>
+
+            <Disclosure title={t("settings.routesTune")} sub={t("common.forExperts")}>
+              <Toggle label={t("settings.routesQuic")} sub={t("settings.routesQuicSub")} checked={!!tune.block_quic} onChange={(v) => setTune({ block_quic: v || undefined })} />
+              <Toggle label={t("settings.routesSniffer")} sub={t("settings.routesSnifferSub")} checked={!!tune.sniffer} onChange={(v) => setTune({ sniffer: v || undefined })} />
+              <Toggle label={t("settings.routesRealIP")} sub={t("settings.routesRealIPSub")} checked={!!tune.real_ip} onChange={(v) => setTune({ real_ip: v || undefined })} />
+            </Disclosure>
 
             <Disclosure title={t("settings.routesDns")} sub={t("common.forExperts")}>
               <p className="text-xs text-[var(--ink-500)]">{t("settings.routesDnsHint")}</p>
@@ -220,10 +320,28 @@ export function RoutingSection({ s, view }: { s: Schemas["SettingsView"]; view: 
   );
 }
 
-// The profile a user with every connection gets, before anything is saved.
-function PreviewCard({ mode, routes, template, bare }: { mode: Schemas["SettingsView"]["sub_routing"]; routes: Routes; template?: string; bare?: boolean }) {
+function Toggle({ label, sub, checked, onChange }: { label: string; sub: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex items-start justify-between gap-4 py-3">
+      <div className="min-w-0">
+        <div className="text-[13px] font-medium">{label}</div>
+        <div className="mt-1 text-xs text-[var(--ink-500)]">{sub}</div>
+      </div>
+      <Switch checked={checked} label={label} onChange={onChange} />
+    </div>
+  );
+}
+
+// The profile a user with every connection gets, before anything is saved: the unsaved
+// rules too.
+function PreviewCard({ mode, routes, rules, template, bare }: { mode: Schemas["SettingsView"]["sub_routing"]; routes: Routes; rules?: string; template?: string; bare?: boolean }) {
   const preview = useMutation({
-    mutationFn: () => unwrap(api.POST("/api/v1/settings/routes/preview", { body: { sub_routing: mode, sub_routes: routes, ...(template?.trim() ? { sub_template: template } : {}) } })),
+    mutationFn: () =>
+      unwrap(
+        api.POST("/api/v1/settings/routes/preview", {
+          body: { sub_routing: mode, sub_routes: routes, ...(rules !== undefined ? { sub_rules: rules } : {}), ...(template?.trim() ? { sub_template: template } : {}) },
+        }),
+      ),
   });
   return (
     <section className={bare ? undefined : "card glass reveal"} style={{ "--i": 2 } as React.CSSProperties}>

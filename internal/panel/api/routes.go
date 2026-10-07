@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -39,6 +40,9 @@ type routesPreviewInput struct {
 		SubRoutes   subs.Routes `json:"sub_routes"`
 		SubTemplate string      `json:"sub_template,omitempty" maxLength:"524288" doc:"Свой профиль Clash: показать его вместо встроенного"`
 		Starter     bool        `json:"starter,omitempty" doc:"Встроенный профиль с этими sub_routing и sub_routes как начало своего: без серверов, группы просят их сами"`
+		SubRules    *string     `json:"sub_rules,omitempty" maxLength:"65536" doc:"Свои правила вместо сохранённых"`
+		GroupMain   *string     `json:"sub_group_main,omitempty" maxLength:"200" doc:"Имя главной группы вместо сохранённого"`
+		GroupAuto   *string     `json:"sub_group_auto,omitempty" maxLength:"200" doc:"Имя группы автовыбора вместо сохранённого"`
 	}
 }
 
@@ -77,7 +81,23 @@ func (h *handlers) routesPreview(ctx context.Context, in *routesPreviewInput) (*
 	if err := in.Body.SubRoutes.Check(exists); err != nil {
 		return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.sub_routes", Message: err.Error()})
 	}
-	raw, err := h.d.RoutesPreview(ctx, subs.PreviewRequest{Routing: subs.ParseRouting(in.Body.SubRouting), Routes: in.Body.SubRoutes, Template: in.Body.SubTemplate, Starter: in.Body.Starter})
+	req := subs.PreviewRequest{Routing: subs.ParseRouting(in.Body.SubRouting), Routes: in.Body.SubRoutes, Template: in.Body.SubTemplate, Starter: in.Body.Starter, Rules: in.Body.SubRules}
+	if in.Body.GroupMain != nil || in.Body.GroupAuto != nil {
+		g := subs.Groups{}
+		if in.Body.GroupMain != nil {
+			g.Main = strings.TrimSpace(*in.Body.GroupMain)
+		}
+		if in.Body.GroupAuto != nil {
+			g.Auto = strings.TrimSpace(*in.Body.GroupAuto)
+		}
+		for field, name := range map[string]string{"sub_group_main": g.Main, "sub_group_auto": g.Auto} {
+			if name != "" && subs.ValidName(name) != nil {
+				return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body." + field, Message: subs.ValidName(name).Error()})
+			}
+		}
+		req.Groups = &g
+	}
+	raw, err := h.d.RoutesPreview(ctx, req)
 	if errors.Is(err, subs.ErrNoProxies) {
 		return nil, huma.Error409Conflict("no_proxies")
 	}

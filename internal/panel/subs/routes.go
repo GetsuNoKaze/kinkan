@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/netip"
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -18,7 +19,45 @@ type Routes struct {
 	Services map[string]string `json:"services,omitempty"`
 	// Direct: ids of DirectSets whose apps and sites go past the tunnel.
 	Direct []string `json:"direct,omitempty"`
-	DNS    DNS      `json:"dns,omitzero"`
+	// Lists are rule lists of the admin's own, by link, each sent one way like a service.
+	Lists   []RouteList `json:"lists,omitempty"`
+	DNS     DNS         `json:"dns,omitzero"`
+	Servers Servers     `json:"servers,omitzero"`
+	Tune    Tune        `json:"tune,omitzero"`
+}
+
+// RouteList is a rule list the apps download (a mihomo rule-provider): a site of the admin's
+// choice (privWL-clash, a list of their own), sent to Target.
+type RouteList struct {
+	Name     string `json:"name"`     // a-z, 0-9 and "-": the provider's name in the profile
+	URL      string `json:"url"`      // https
+	Behavior string `json:"behavior"` // domain, ipcidr or classical
+	Format   string `json:"format"`   // yaml, text or mrs
+	Target   string `json:"target"`   // as a service's
+}
+
+// MaxLists bounds the admin's own lists: each is a download for every app.
+const MaxLists = 30
+
+// Servers is how the apps pick a server. The zero value is the profile as it was: a group
+// per country, the fastest picked every five minutes.
+type Servers struct {
+	NoCountries bool   `json:"no_countries,omitempty"` // no group per node
+	Auto        string `json:"auto,omitempty"`         // "" the fastest (url-test), "fallback" the first that works
+	Interval    int    `json:"interval,omitempty"`     // seconds between checks; 0: 300
+}
+
+// Tune holds the finer settings of the profile.
+type Tune struct {
+	// BlockQUIC sends UDP to port 443 nowhere: browsers and YouTube fall back to TCP, which
+	// gets through the tunnel better where QUIC is throttled.
+	BlockQUIC bool `json:"block_quic,omitempty"`
+	// Sniffer reads the site's name from the connection: rules by domain work for apps
+	// that connect by IP.
+	Sniffer bool `json:"sniffer,omitempty"`
+	// RealIP resolves names for real instead of fake-ip: for apps that break on fake
+	// addresses, at the cost of a DNS round trip before each connection.
+	RealIP bool `json:"real_ip,omitempty"`
 }
 
 // Targets of a service. "node:<id>" is one server: a group of its own with the node's
@@ -163,6 +202,37 @@ var blockedLists = []Provider{
 // mrsSince is the first mihomo with binary rule lists (.mrs).
 var mrsSince = Version{1, 18, 7}
 
+// listProvider is the profile's name of an own list: apart from the panel's ("mikan-").
+func listProvider(name string) string { return "own-" + name }
+
+var listName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
+
+// checkLists refuses a list that would break the profiles: a name taken or unfit for a
+// provider, a link that is not https, a behavior or format mihomo does not know.
+func checkLists(lists []RouteList, target func(string) bool) error {
+	if len(lists) > MaxLists {
+		return errors.New("routes_lists_many")
+	}
+	seen := map[string]bool{}
+	for _, l := range lists {
+		u, err := url.Parse(l.URL)
+		switch {
+		case !listName.MatchString(l.Name) || seen[l.Name]:
+			return errors.New("routes_list_name")
+		case err != nil || u.Scheme != "https" || u.Host == "" || len(l.URL) > 500:
+			return errors.New("routes_list_url")
+		case !slices.Contains([]string{"domain", "ipcidr", "classical"}, l.Behavior):
+			return errors.New("routes_list_behavior")
+		case !slices.Contains([]string{"yaml", "text", "mrs"}, l.Format) || l.Format == "mrs" && l.Behavior == "classical":
+			return errors.New("routes_list_format")
+		case !target(l.Target):
+			return errors.New("routes_target")
+		}
+		seen[l.Name] = true
+	}
+	return nil
+}
+
 func serviceByID(id string) (Service, bool) {
 	i := slices.IndexFunc(Services, func(s Service) bool { return s.ID == id })
 	if i < 0 {
@@ -183,18 +253,27 @@ func directSetByID(id string) (DirectSet, bool) {
 // that does not exist, a DNS server mihomo would not read. The error is a code for the
 // admin panel.
 func (r Routes) Check(nodeExists func(int64) bool) error {
+	target := func(t string) bool {
+		switch t {
+		case TargetVPN, TargetDirect, TargetBlock:
+			return true
+		}
+		n, ok := nodeOf(t)
+		return ok && nodeExists(n)
+	}
 	for id, t := range r.Services {
 		if _, ok := serviceByID(id); !ok {
 			return errors.New("routes_service")
 		}
-		switch t {
-		case TargetVPN, TargetDirect, TargetBlock:
-		default:
-			n, ok := nodeOf(t)
-			if !ok || !nodeExists(n) {
-				return errors.New("routes_target")
-			}
+		if !target(t) {
+			return errors.New("routes_target")
 		}
+	}
+	if err := checkLists(r.Lists, target); err != nil {
+		return err
+	}
+	if s := r.Servers; s.Auto != "" && s.Auto != "fallback" || s.Interval != 0 && (s.Interval < 30 || s.Interval > 86400) {
+		return errors.New("routes_servers")
 	}
 	for _, id := range r.Direct {
 		if _, ok := directSetByID(id); !ok {
@@ -303,6 +382,21 @@ func (p Profile) route(g Groups, ps []proxy, taken map[string]bool, r Routing) r
 			out.geodata = out.geodata || m.Type == "GEOSITE" || m.Type == "GEOIP"
 			out.rules = append(out.rules, m.rule(target))
 		}
+	}
+	for _, l := range p.Routes.Lists {
+		pr := Provider{Name: listProvider(l.Name), Behavior: l.Behavior, Format: l.Format, URL: l.URL}
+		if l.Format == "mrs" {
+			pr.Since = mrsSince
+		}
+		if !use(pr) {
+			continue
+		}
+		target := p.serviceTarget(Service{Icon: "📋", Name: l.Name, NameEN: l.Name}, l.Target, g, ps, taken, &out)
+		rule := "RULE-SET," + pr.Name + "," + target
+		if l.Behavior == "ipcidr" {
+			rule += ",no-resolve"
+		}
+		out.rules = append(out.rules, rule)
 	}
 	for _, id := range p.Routes.Direct {
 		set, _ := directSetByID(id)

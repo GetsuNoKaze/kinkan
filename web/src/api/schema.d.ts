@@ -3446,6 +3446,13 @@ export interface components {
             name: string;
             name_en: string;
         };
+        RouteList: {
+            behavior: string;
+            format: string;
+            name: string;
+            target: string;
+            url: string;
+        };
         RouteService: {
             icon: string;
             id: string;
@@ -3467,9 +3474,12 @@ export interface components {
         Routes: {
             direct?: string[];
             dns?: components["schemas"]["DNS"];
+            lists?: components["schemas"]["RouteList"][];
+            servers?: components["schemas"]["Servers"];
             services?: {
                 [key: string]: string;
             };
+            tune?: components["schemas"]["Tune"];
         };
         RoutesCatalogOutputBody: {
             direct: components["schemas"]["RouteDirectSet"][];
@@ -3478,9 +3488,15 @@ export interface components {
         RoutesPreviewInputBody: {
             /** @description Встроенный профиль с этими sub_routing и sub_routes как начало своего: без серверов, группы просят их сами */
             starter?: boolean;
+            /** @description Имя группы автовыбора вместо сохранённого */
+            sub_group_auto?: string;
+            /** @description Имя главной группы вместо сохранённого */
+            sub_group_main?: string;
             sub_routes: components["schemas"]["Routes"];
             /** @enum {string} */
             sub_routing: "ru_direct" | "all" | "blocked";
+            /** @description Свои правила вместо сохранённых */
+            sub_rules?: string;
             /** @description Свой профиль Clash: показать его вместо встроенного */
             sub_template?: string;
         };
@@ -3496,6 +3512,12 @@ export interface components {
             scanned: number;
             /** @description Свой домен с сертификатом панели */
             self_steal?: components["schemas"]["Result"];
+        };
+        Servers: {
+            auto?: string;
+            /** Format: int64 */
+            interval?: number;
+            no_countries?: boolean;
         };
         SessionView: {
             /** Format: date-time */
@@ -3978,6 +4000,11 @@ export interface components {
             t: string;
             /** Format: int64 */
             up: number;
+        };
+        Tune: {
+            block_quic?: boolean;
+            real_ip?: boolean;
+            sniffer?: boolean;
         };
         UpdateStatus: {
             /** @description RFC 3339 */
