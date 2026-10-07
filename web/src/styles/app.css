@@ -233,7 +233,14 @@ html[data-theme="forest"] {
   .section-nav .sub button { min-height: 32px; padding: 6px 12px; font-size: 13px; }
   .section-nav-badge { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--ink-500); }
   .section-body { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
-  .section-body.narrow { max-width: 720px; }
+  .section-body.narrow { max-width: 960px; }
+  /* On wide screens a section's cards go two in a row, in reading order, so a section fits
+     a screen or so. A lone card, a notice and the save bar take the whole row. */
+  @media (min-width: 1440px) {
+    .section-body.narrow { max-width: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+    .section-body.narrow > :only-child, .section-body.narrow > .savebar, .section-body.narrow > .banner, .section-body.narrow > [role="status"] { grid-column: 1 / -1; }
+    .section-body.narrow > .savebar { justify-self: center; }
+  }
   /* An editor with its live preview beside it once both fit; the preview follows the scroll. */
   .with-preview { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
   .with-preview > aside { position: sticky; top: var(--sticky-top, 16px); }

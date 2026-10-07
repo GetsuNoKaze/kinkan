@@ -484,6 +484,8 @@
     "memory": "Memory",
     "netDown": "Network ↓",
     "safetyNote": "Clients cannot reach the server's local networks; outgoing mail (port 25) is blocked.",
+    "moreInbounds": "{n} more",
+    "lessInbounds": "Show less",
     "nodeTraffic": "Traffic by node",
     "nodeTrafficSub": "{total} in all",
     "nodeTrafficEmpty": "No node carried anything in this period.",

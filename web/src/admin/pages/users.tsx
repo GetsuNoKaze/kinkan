@@ -19,7 +19,7 @@ import { UserDrawer } from "./user-drawer";
 import { FolderBadge, FolderMark, FolderMenuItems, FoldersDrawer, type Folder } from "./user-folders";
 
 /** A row of chips: one line to scroll sideways on a phone, wrapping on a wide screen. */
-const CHIP_ROW = "-mx-3 flex items-center gap-2 overflow-x-auto px-3 pb-1 lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0 lg:pb-0";
+const CHIP_ROW = "-mx-3 flex items-center gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0 lg:pb-0";
 
 /** One choice of the filters menu: a tick when chosen, how many users it holds. */
 function FilterItem({ value, label, count, mark }: { value: string; label: string; count?: number; mark?: React.ReactNode }) {
