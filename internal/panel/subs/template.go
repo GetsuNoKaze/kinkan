@@ -60,6 +60,15 @@ func yamlLine(err error) string {
 
 // Template renders the admin's template for p.
 func Template(p Profile, src string) ([]byte, error) {
+	cfg, err := templateConfig(p, src)
+	if err != nil {
+		return nil, err
+	}
+	return marshalYAML(cfg)
+}
+
+// templateConfig is the profile Template renders.
+func templateConfig(p Profile, src string) (map[string]any, error) {
 	ps, err := build(p)
 	if err != nil {
 		return nil, err
@@ -79,7 +88,7 @@ func Template(p Profile, src string) ([]byte, error) {
 	if err := checkFilled(cfg, p); err != nil {
 		return nil, err
 	}
-	return marshalYAML(cfg)
+	return cfg, nil
 }
 
 func fillTemplate(cfg map[string]any, p Profile, ps []proxy) error {

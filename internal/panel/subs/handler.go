@@ -239,8 +239,21 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	h.userInfoHeaders(w, u, grants.Main(u.ID), cfg, vars)
 	h.operatorHeaders(w, r, u, cfg)
-	if IsHapp(r.UserAgent()) {
-		happHeaders(w.Header(), cfg.Happ)
+	switch ua := r.UserAgent(); {
+	case IsINCY(ua):
+		// INCY reads Happ's routing profile from the same header (docs.incy.cc/en/routing),
+		// and none of Happ's provider headers.
+		if routing := cfg.Happ.Routing; routing == HappRoutingAuto {
+			w.Header().Set("routing", incyLink(happAutoRouting(cfg)))
+		} else if routing != "" {
+			w.Header().Set("routing", incyLink(routing))
+		}
+	case IsHapp(ua):
+		happ := cfg.Happ
+		if happ.Routing == HappRoutingAuto {
+			happ.Routing = happAutoRouting(cfg)
+		}
+		happHeaders(w.Header(), happ)
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method == http.MethodHead {
@@ -295,6 +308,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
 		// Clash apps name the profile after the file: the same name as Profile-Title.
 		w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(fileName(profileTitle(cfg, vars)))+".yaml")
+		_, _ = w.Write(body)
+	case "singbox":
+		prof.Rules, prof.Routes, prof.Lang = cfg.Rules, cfg.Routes, cfg.Lang
+		body, err := SingBox(r.Context(), prof, cfg.Groups, cfg.Routing, cfg.Template)
+		if errors.Is(err, ErrNoProxies) {
+			h.stub(w, u, cfg, format, err)
+			return
+		}
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(fileName(profileTitle(cfg, vars)))+".json")
 		_, _ = w.Write(body)
 	default:
 		links, err := URIs(prof)
@@ -1002,6 +1029,17 @@ func (h *Handler) stub(w http.ResponseWriter, u db.User, cfg Config, format stri
 		_, _ = w.Write(body)
 		return
 	}
+	if format == "singbox" {
+		main := cfg.Groups.WithDefaults(cfg.Lang).Main
+		body, _ := json.MarshalIndent(map[string]any{
+			"outbounds": []map[string]any{{"type": "selector", "tag": main, "outbounds": []string{name}},
+				{"type": "socks", "tag": name, "server": "127.0.0.1", "server_port": 1}},
+			"route": map[string]any{"final": main},
+		}, "", "  ")
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_, _ = w.Write(body)
+		return
+	}
 	link := "vless://00000000-0000-0000-0000-000000000000@127.0.0.1:1?encryption=none&type=tcp#" + url.PathEscape(name)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = w.Write([]byte(base64.StdEncoding.EncodeToString([]byte(link))))
@@ -1019,10 +1057,16 @@ func Format(userAgent, accept, query string) string {
 		return "clash"
 	case "uri", "v2ray", "base64":
 		return "uri"
+	case "singbox", "sing-box":
+		return "singbox"
 	case "html":
 		return "html"
 	}
-	switch DetectApp(userAgent).Family {
+	app := DetectApp(userAgent)
+	if app.Whole && app.Core.AtLeast(singboxSince) {
+		return "singbox"
+	}
+	switch app.Family {
 	case FamilyMihomo, FamilyStash:
 		return "clash"
 	case FamilyXray, FamilySingBox:
@@ -1133,4 +1177,4 @@ func (h *Handler) sample(ctx context.Context) (Profile, Config, error) {
 }
 
 // previewCore is the mihomo the nodes run (go.mod), the newest an app may have.
-var previewCore = Version{1, 19, 31}
+var previewCore = Version{1, 19, 32}
