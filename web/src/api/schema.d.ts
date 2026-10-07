@@ -1045,6 +1045,96 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sub-docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Инструкции страницы подписки */
+        get: operations["list-sub-docs"];
+        put?: never;
+        /** Новая инструкция */
+        post: operations["create-sub-doc"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sub-docs/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Порядок инструкций */
+        put: operations["order-sub-docs"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sub-docs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Изменить инструкцию */
+        put: operations["update-sub-doc"];
+        post?: never;
+        /** Удалить инструкцию */
+        delete: operations["delete-sub-doc"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sub-page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Страница подписки: вид, блоки, приложения */
+        get: operations["get-sub-page"];
+        /** Сохранить страницу подписки */
+        put: operations["update-sub-page"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sub-page/images/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Загруженная картинка страницы подписки */
+        get: operations["get-sub-page-image"];
+        /** Загрузить логотип или фон страницы подписки */
+        put: operations["put-sub-page-image"];
+        post?: never;
+        /** Убрать логотип или фон страницы подписки */
+        delete: operations["delete-sub-page-image"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tariffs": {
         parameters: {
             query?: never;
@@ -2351,6 +2441,10 @@ export interface components {
             /** @description Все ноды панели, каждая один раз, в том порядке, в каком их серверы идут в подписках */
             ids: number[];
         };
+        OrderSubDocsInputBody: {
+            /** @description Все инструкции в новом порядке */
+            ids: number[];
+        };
         OverviewOutputBody: {
             /** Format: int64 */
             expiring_7d: number;
@@ -2437,6 +2531,129 @@ export interface components {
             price_stars: number | null;
             /** Format: int64 */
             sort: number;
+        };
+        Page: {
+            apps: components["schemas"]["PageApps"];
+            /** @description Блоки страницы в их порядке; встроенные — по одному, своих (text, links) — до 12 */
+            blocks: components["schemas"]["PageBlock"][];
+            brand: components["schemas"]["PageBrand"];
+            /** @description Свой CSS страницы подписки (не админки), до 20 КБ; @import и < убираются */
+            css: string;
+            look: components["schemas"]["PageLook"];
+            og: components["schemas"]["PageOG"];
+        };
+        PageAppList: {
+            hidden: string[];
+            order: string[];
+        };
+        PageApps: {
+            android: components["schemas"]["PageAppList"];
+            ios: components["schemas"]["PageAppList"];
+            linux: components["schemas"]["PageAppList"];
+            macos: components["schemas"]["PageAppList"];
+            /**
+             * @description Вкладка, открытая сначала; auto — по устройству посетителя
+             * @enum {string}
+             */
+            platform: "auto" | "ios" | "android" | "windows" | "macos" | "linux";
+            /** @description Кнопка QR-кода в блоке ссылки */
+            qr: boolean;
+            windows: components["schemas"]["PageAppList"];
+        };
+        PageAsset: {
+            content_type: string;
+            hash: string;
+            name: string;
+            /** Format: int64 */
+            size: number;
+            /** Format: int64 */
+            updated_at: number;
+        };
+        PageBackground: {
+            /**
+             * Format: int64
+             * @description Направление градиента в градусах
+             */
+            angle: number;
+            /**
+             * Format: int64
+             * @description Затемнение картинки, %
+             */
+            dim: number;
+            /** @description #RRGGBB */
+            from: string;
+            /**
+             * @description theme — фон темы, solid — цвет from, gradient — от from к to, image — загруженная картинка
+             * @enum {string}
+             */
+            kind: "theme" | "solid" | "gradient" | "image";
+            /** @description #RRGGBB */
+            to: string;
+        };
+        PageBlock: {
+            id: string;
+            /** @description Блок links: кнопки-ссылки */
+            links?: components["schemas"]["PageLink"][];
+            on: boolean;
+            /** @description Блок text: Markdown */
+            text?: string;
+            /** @description Свой заголовок (у кнопок — текст кнопки); пусто — обычный */
+            title: string;
+            /** @enum {string} */
+            type: "announce" | "status" | "promo" | "shop" | "traffic" | "devices" | "apps" | "guide" | "instructions" | "link" | "locations" | "telegram" | "support" | "text" | "links";
+        };
+        PageBrand: {
+            emoji: string;
+            /**
+             * @description letter — первая буква бренда, image — загруженный логотип, emoji, none — без значка
+             * @enum {string}
+             */
+            logo: "letter" | "image" | "emoji" | "none";
+            /** @description Строка под названием; пусто — нет */
+            subtitle: string;
+        };
+        PageLink: {
+            emoji?: string;
+            label: string;
+            /** @description https://, http:// или tg:// */
+            url: string;
+        };
+        PageLook: {
+            /**
+             * @description theme — цвет палитры, brand — цвет бренда (brand_accent)
+             * @enum {string}
+             */
+            accent: "theme" | "brand";
+            background: components["schemas"]["PageBackground"];
+            /**
+             * @description glass — полупрозрачные карточки, solid — непрозрачные
+             * @enum {string}
+             */
+            cards: "glass" | "solid";
+            /**
+             * @description default — Unbounded и Onest, onest — только Onest, system — шрифт устройства, rounded — скруглённый системный
+             * @enum {string}
+             */
+            font: "default" | "onest" | "system" | "rounded";
+            /**
+             * @description light, dark (как Midnight) или system — как у посетителя
+             * @enum {string}
+             */
+            mode: "light" | "dark" | "system";
+            /**
+             * @description Палитра темы, как темы панели
+             * @enum {string}
+             */
+            palette: "mikan" | "ocean" | "sakura" | "forest";
+            /** @enum {string} */
+            radius: "small" | "medium" | "large";
+        };
+        PageOG: {
+            description: string;
+            /** @description Логотип картинкой превью */
+            image: boolean;
+            /** @description Заголовок превью; пусто — бренд */
+            title: string;
         };
         PasswordInputBody: {
             current: string;
@@ -2906,6 +3123,16 @@ export interface components {
             /** Format: int64 */
             successful_activations: number;
         };
+        PutSubImageInputBody: {
+            /** @description Картинка в base64: PNG, JPEG или WebP; логотип до 512 КБ, фон до 2 МБ. SVG не принимается */
+            data: string;
+        };
+        PutSubPageInputBody: {
+            brand?: string;
+            /** @description #RRGGBB или пусто */
+            brand_accent?: string;
+            config: components["schemas"]["Page"];
+        };
         RecoveryOutputBody: {
             /** @description Показываются один раз */
             recovery_codes: string[];
@@ -3086,6 +3313,43 @@ export interface components {
             not_after: string;
             /** @description Свой сертификат публично доверенный для адреса панели */
             trusted?: boolean;
+        };
+        SubDocBody: {
+            /** @description Markdown: заголовки #, списки, **жирный**, *курсив*, код в обратных кавычках, [ссылки](https://…), картинки ![](https://…) */
+            body: string;
+            emoji: string;
+            /** @enum {string} */
+            platform: "ios" | "android" | "windows" | "macos" | "linux" | "";
+            published: boolean;
+            title: string;
+        };
+        SubDocView: {
+            /** @description Markdown */
+            body: string;
+            emoji: string;
+            /** Format: int64 */
+            id: number;
+            /** @description ios, android, windows, macos, linux; пусто — для всех */
+            platform: string;
+            /** @description Видна на странице подписки и в Mini App */
+            published: boolean;
+            title: string;
+            /** Format: int64 */
+            updated_at: number;
+        };
+        SubDocsOutputBody: {
+            items: components["schemas"]["SubDocView"][];
+        };
+        SubPageView: {
+            background?: components["schemas"]["PageAsset"];
+            /** @description Название бренда (settings.brand) */
+            brand: string;
+            /** @description Цвет бренда (settings.brand_accent); его же получают приложения с брендингом */
+            brand_accent: string;
+            config: components["schemas"]["Page"];
+            /** @description Страница по умолчанию — к ней ведёт «Сбросить» */
+            defaults: components["schemas"]["Page"];
+            logo?: components["schemas"]["PageAsset"];
         };
         System: {
             /** Format: double */
@@ -6090,6 +6354,327 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TrafficOutputBody"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-sub-docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubDocsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-sub-doc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubDocBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubDocView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "order-sub-docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderSubDocsInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubDocsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-sub-doc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubDocBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubDocView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-sub-doc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-sub-page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubPageView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-sub-page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutSubPageInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubPageView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-sub-page-image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: "logo" | "background";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description PNG, JPEG или WebP */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    "Content-Type"?: string;
+                    "X-Content-Type-Options"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
+                    "image/webp": unknown;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "put-sub-page-image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: "logo" | "background";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutSubImageInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageAsset"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-sub-page-image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: "logo" | "background";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {
