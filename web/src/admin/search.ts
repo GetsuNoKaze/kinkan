@@ -22,7 +22,7 @@ export type UsersSearch = {
   hidden?: Exclude<(typeof USER_HIDDEN)[number], "hide">;
 };
 
-export const SETTINGS_TABS = ["general", "subscription", "rules", "security", "import"] as const;
+export const SETTINGS_TABS = ["general", "subscription", "routing", "rules", "security", "import"] as const;
 export type SettingsSearch = { tab: (typeof SETTINGS_TABS)[number] };
 
 export const TARIFF_TABS = ["tariffs", "pools", "packages"] as const;

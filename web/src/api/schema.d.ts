@@ -1081,6 +1081,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/routes/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Сервисы и списки для маршрутизации */
+        get: operations["routes-catalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/routes/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Профиль Clash с этой маршрутизацией, без сохранения */
+        post: operations["routes-preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/stats/nodes": {
         parameters: {
             query?: never;
@@ -1486,6 +1520,23 @@ export interface paths {
         put?: never;
         /** Начислить трафик */
         post: operations["grant-traffic"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/happ-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Шифрованная ссылка Happ на подписку пользователя */
+        get: operations["user-happ-link"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2026,6 +2077,16 @@ export interface components {
             /** Format: int64 */
             tariff_id: number;
         };
+        DNS: {
+            default_nameserver?: string[];
+            nameserver?: string[];
+            policy?: components["schemas"]["DNSPolicy"][];
+            proxy_server_nameserver?: string[];
+        };
+        DNSPolicy: {
+            match: string;
+            servers: string[];
+        };
         DeviceView: {
             /** Format: date-time */
             first_seen: string;
@@ -2168,6 +2229,10 @@ export interface components {
             remaining: number;
             /** @enum {string} */
             source: "purchase" | "admin";
+        };
+        HappLinkOutputBody: {
+            /** @description happ://crypt5/…: Happ открывает подписку, не показывая её адрес; пусто — шифрованная ссылка выключена */
+            link: string;
         };
         HostStatus: {
             /** @description RFC 3339 */
@@ -2724,6 +2789,12 @@ export interface components {
             device_binding?: boolean;
             device_require_hwid?: boolean;
             domain?: string;
+            /** @enum {string} */
+            happ_crypt?: "off" | "api" | "local";
+            happ_hide_settings?: boolean;
+            happ_provider_id?: string;
+            /** @description happ://routing/…; пусто — не отдавать */
+            happ_routing?: string;
             public_host?: string;
             /** Format: int64 */
             quiet_hour_utc?: number;
@@ -2737,10 +2808,13 @@ export interface components {
              * @description Отдельный порт подписок на сервере панели; 0 — убрать. Ссылки переезжают на него, старые продолжают работать
              */
             sub_port?: number;
+            sub_routes?: components["schemas"]["Routes"];
             /** @enum {string} */
-            sub_routing?: "ru_direct" | "all";
+            sub_routing?: "ru_direct" | "all" | "blocked";
             /** @description Свои правила Clash, до 500 строк; ошибка указывает номер строки */
             sub_rules?: string;
+            /** @description Свой профиль Clash; пусто — вернуть встроенный */
+            sub_template?: string;
             /** @description Переменные — см. SettingsView.sub_title */
             sub_title?: string;
             /** @description https://… или tg://… */
@@ -3136,6 +3210,18 @@ export interface components {
             tls13: boolean;
             x25519: boolean;
         };
+        RouteDirectSet: {
+            id: string;
+            name: string;
+            name_en: string;
+        };
+        RouteService: {
+            icon: string;
+            id: string;
+            /** @description По-русски */
+            name: string;
+            name_en: string;
+        };
         RouteStruct: {
             /** @enum {string} */
             mode: "direct" | "node" | "proxy";
@@ -3146,6 +3232,30 @@ export interface components {
             node_id?: number;
             /** @description socks5://user:pass@host:port, http://… или https://…; не передан — прежний (mode=proxy) */
             proxy?: string;
+        };
+        Routes: {
+            direct?: string[];
+            dns?: components["schemas"]["DNS"];
+            services?: {
+                [key: string]: string;
+            };
+        };
+        RoutesCatalogOutputBody: {
+            direct: components["schemas"]["RouteDirectSet"][];
+            services: components["schemas"]["RouteService"][];
+        };
+        RoutesPreviewInputBody: {
+            /** @description Встроенный профиль с этими sub_routing и sub_routes как начало своего: без серверов, группы просят их сами */
+            starter?: boolean;
+            sub_routes: components["schemas"]["Routes"];
+            /** @enum {string} */
+            sub_routing: "ru_direct" | "all" | "blocked";
+            /** @description Свой профиль Clash: показать его вместо встроенного */
+            sub_template?: string;
+        };
+        RoutesPreviewOutputBody: {
+            /** @description Профиль Clash (YAML) пользователя со всеми подключениями; ключи — заглушки */
+            profile: string;
         };
         ScanTargetsOutputBody: {
             /** @description Адрес сервера, вокруг которого искали */
@@ -3192,6 +3302,17 @@ export interface components {
             /** @description Не выдавать подписку приложениям без ID устройства (иначе они вместе занимают одно место) */
             device_require_hwid: boolean;
             domain: string;
+            /**
+             * @description Шифрованная ссылка для кнопки Happ: off — обычная happ://add/, api — через сервис Happ (адрес подписки уходит на crypto.happ.su), local — панель шифрует сама
+             * @enum {string}
+             */
+            happ_crypt: "off" | "api" | "local";
+            /** @description Скрыть в Happ настройки серверов подписки (нужен Provider ID) */
+            happ_hide_settings: boolean;
+            /** @description Provider ID с happ-proxy.com; без него Happ не принимает hide-settings */
+            happ_provider_id: string;
+            /** @description Профиль маршрутизации Happ: ссылка happ://routing/onadd/… (добавить и включить), happ://routing/add/… или happ://routing/off; уходит только в Happ заголовком routing */
+            happ_routing: string;
             /** Format: int64 */
             panel_port: number;
             public_host: string;
@@ -3218,13 +3339,17 @@ export interface components {
             sub_port: number;
             /** @description sub_port_busy — сохранённый порт занят на сервере, подписки пока идут через порт панели */
             sub_port_error?: string;
+            /** @description Куда идут сервисы (services: id → vpn, direct, block или node:<id>), какие приложения и сайты идут мимо VPN (direct) и свои DNS (dns). Каталог — GET /api/v1/settings/routes/catalog */
+            sub_routes: components["schemas"]["Routes"];
             /**
-             * @description Маршруты в Clash-приложениях: ru_direct — российские сайты и IP напрямую по геобазам mihomo, all — всё через VPN
+             * @description Маршруты в Clash-приложениях: ru_direct — российские сайты и IP напрямую по геобазам mihomo, all — всё через VPN, blocked — через VPN только заблокированное (списки privWL-clash), остальное напрямую
              * @enum {string}
              */
-            sub_routing: "ru_direct" | "all";
+            sub_routing: "ru_direct" | "all" | "blocked";
             /** @description Свои правила Clash: по строке TYPE,VALUE,TARGET[,no-resolve]; # — комментарий */
             sub_rules: string;
+            /** @description Свой профиль Clash (YAML) вместо встроенного для приложений на mihomo; пусто — встроенный. Серверы панель подставляет сама: в proxies и в группы с include-all-proxies или mikan: {nodes, types} */
+            sub_template: string;
             /** @description Название подписки в приложениях (заголовок profile-title); пусто — бренд. Переменные: {brand} — бренд, {name} — имя пользователя, {date} — дата окончания (ДД.ММ.ГГГГ, МСК), {days} — дней осталось, {used} — израсходовано, {left} — осталось трафика, {total} — всего; без срока или лимита — ∞ */
             sub_title: string;
             support_url: string;
@@ -6433,6 +6558,68 @@ export interface operations {
             };
         };
     };
+    "routes-catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoutesCatalogOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "routes-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoutesPreviewInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoutesPreviewOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "stats-nodes": {
         parameters: {
             query?: {
@@ -7490,6 +7677,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GrantView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "user-happ-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HappLinkOutputBody"];
                 };
             };
             /** @description Error */
