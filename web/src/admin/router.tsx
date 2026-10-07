@@ -4,7 +4,7 @@ import { ApiError, basePath, setCsrf } from "../api/client";
 import { meQuery } from "../api/hooks";
 import { useLocale } from "../i18n";
 import { NotFoundPage, PageLoading, RouteError } from "./route-states";
-import { SETTINGS_TABS, TARIFF_TABS, TELEGRAM_TABS, USER_STATES, type SettingsSearch, type TariffsSearch, type TelegramSearch, type UsersSearch } from "./search";
+import { SETTINGS_TABS, TARIFF_TABS, TELEGRAM_TABS, USER_SOURCES, USER_STATES, type SettingsSearch, type TariffsSearch, type TelegramSearch, type UsersSearch } from "./search";
 import { Shell } from "./shell";
 
 /**
@@ -59,6 +59,10 @@ export function createAppRouter(queryClient: QueryClient) {
       q: typeof s.q === "string" ? s.q : "",
       user: typeof s.user === "number" ? s.user : Number(s.user) || undefined,
       create: s.create === true || s.create === "true" ? true : undefined,
+      // A folder is "none" or an id; anything else in a hand-made link is dropped.
+      folder: s.folder === "none" ? "none" : Number.isSafeInteger(Number(s.folder)) && Number(s.folder) >= 1 ? Number(s.folder) : undefined,
+      source: USER_SOURCES.includes(s.source as (typeof USER_SOURCES)[number]) && s.source !== "all" ? (s.source as UsersSearch["source"]) : undefined,
+      hidden: s.hidden === "show" || s.hidden === "only" ? s.hidden : undefined,
     }),
   });
   const tariffs = createRoute({

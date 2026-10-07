@@ -277,6 +277,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Папки пользователей */
+        get: operations["list-folders"];
+        put?: never;
+        /** Создать папку */
+        post: operations["create-folder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/folders/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Порядок папок */
+        put: operations["order-folders"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/folders/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Удалить папку: её пользователи остаются, но вне папок */
+        delete: operations["delete-folder"];
+        options?: never;
+        head?: never;
+        /** Изменить папку */
+        patch: operations["update-folder"];
+        trace?: never;
+    };
     "/api/v1/import": {
         parameters: {
             query?: never;
@@ -635,6 +688,23 @@ export interface paths {
          * @description Новые сверху; хранятся последние 100.
          */
         get: operations["list-node-speedtests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/nodes/{id}/traffic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** График трафика ноды */
+        get: operations["node-traffic"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1005,6 +1075,26 @@ export interface paths {
         put?: never;
         /** Выдать новую секретную ссылку на панель */
         post: operations["reset-admin-path"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stats/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Трафик по нодам
+         * @description Сколько унесла каждая нода за период. Учёт идёт с версии, где он появился: прошлое по нодам не восстанавливается.
+         */
+        get: operations["stats-nodes"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1747,13 +1837,21 @@ export interface components {
             queued: number;
         };
         BulkInputBody: {
-            /** @enum {string} */
-            action: "extend" | "reset" | "disable" | "enable" | "delete";
+            /**
+             * @description hide и unhide прячут пользователей из списка и возвращают, move кладёт в папку: ни то ни другое не меняет доступ
+             * @enum {string}
+             */
+            action: "extend" | "reset" | "disable" | "enable" | "delete" | "hide" | "unhide" | "move";
             /**
              * Format: int64
              * @description Для extend; не задано — на один период: до следующего дня оплаты или на 30 дней
              */
             days?: number;
+            /**
+             * Format: int64
+             * @description Для move: папка; 0 или не задано — убрать из папок
+             */
+            folder_id?: number;
             ids: number[];
         };
         BulkOutputBody: {
@@ -1885,6 +1983,15 @@ export interface components {
             /** @enum {string} */
             scope: "read" | "full";
         };
+        CreateFolderInputBody: {
+            /**
+             * @description Не задан — gray
+             * @enum {string}
+             */
+            color?: "gray" | "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple" | "pink";
+            emoji?: string;
+            name: string;
+        };
         CreateInboundInputBody: {
             /** @description Шаблон листенера (YAML) для preset=custom */
             config?: string;
@@ -2001,6 +2108,20 @@ export interface components {
              * @description Месяцами: до дня оплаты или того же числа
              */
             months?: number;
+        };
+        FolderView: {
+            /** @enum {string} */
+            color: "gray" | "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple" | "pink";
+            /** @description Значок перед названием; может быть пустым */
+            emoji: string;
+            /** Format: int64 */
+            id: number;
+            name: string;
+            /**
+             * Format: int64
+             * @description Сколько пользователей в папке, скрытые тоже
+             */
+            users: number;
         };
         GrantInputBody: {
             /**
@@ -2221,13 +2342,32 @@ export interface components {
             names: string[];
         };
         ListUsersOutputBody: {
+            /** @description Пользователи по состояниям среди подходящих под папку, источник и скрытых; состояние и поиск не учитываются */
             counts: components["schemas"]["UserCounts"];
+            /** @description Пользователи по папкам (ключ — id папки, none — вне папок) среди подходящих под источник и скрытых */
+            folder_counts: {
+                [key: string]: number;
+            };
+            /**
+             * Format: int64
+             * @description Сколько из них скрыто
+             */
+            hidden_total: number;
             items: components["schemas"]["UserView"][];
+            /** @description Пользователи по источникам (admin, bot, trial, import) среди подходящих под папку и скрытых */
+            source_counts: {
+                [key: string]: number;
+            };
             /**
              * Format: int64
              * @description Сколько подходит под фильтр
              */
             total: number;
+            /**
+             * Format: int64
+             * @description Все пользователи панели, как бы ни был задан фильтр
+             */
+            users_total: number;
         };
         ListenerStatus: {
             code?: string;
@@ -2315,6 +2455,11 @@ export interface components {
             public_name: string;
             /** @enum {string} */
             status: "ok" | "error" | "unknown";
+            /**
+             * Format: int64
+             * @description Сколько унесла нода за последние сутки (вверх и вниз вместе), байты; у только что добавленной ноды 0
+             */
+            traffic_24h: number;
             /** @description Как идёт или прошло обновление ноды */
             update?: components["schemas"]["UpdateStatus"];
             version?: string;
@@ -2325,6 +2470,32 @@ export interface components {
             /** @description Ключ подключения ноды: показывается один раз */
             key: string;
             node: components["schemas"]["NodeInfo"];
+        };
+        NodeShare: {
+            /**
+             * Format: int64
+             * @description up + down
+             */
+            bytes: number;
+            /** Format: int64 */
+            down: number;
+            /** Format: int64 */
+            id: number;
+            /** @description Своя нода панели */
+            local: boolean;
+            /** @description Имя ноды; у своей ноды панели может быть пустым */
+            name: string;
+            /** Format: int64 */
+            up: number;
+        };
+        NodeSharesOutputBody: {
+            /** @description Все ноды, больше всех сверху */
+            items: components["schemas"]["NodeShare"][];
+            /**
+             * Format: int64
+             * @description Сколько унесли все ноды вместе
+             */
+            total: number;
         };
         NodeView: {
             /** Format: date-time */
@@ -2346,6 +2517,10 @@ export interface components {
             expired: boolean;
             traffic_100: boolean;
             traffic_90: boolean;
+        };
+        OrderFoldersInputBody: {
+            /** @description Все папки, каждая один раз, в том порядке, в каком их показывает список */
+            ids: number[];
         };
         OrderNodesInputBody: {
             /** @description Все ноды панели, каждая один раз, в том порядке, в каком их серверы идут в подписках */
@@ -2458,6 +2633,13 @@ export interface components {
             hour?: number;
             /** @description Пароль, которым шифруется файл: от 20 символов. Файл остаётся в истории чата навсегда; без пароля его не открыть */
             password?: string;
+        };
+        PatchFolderInputBody: {
+            /** @enum {string} */
+            color?: "gray" | "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple" | "pink";
+            /** @description Пустая строка убирает значок */
+            emoji?: string;
+            name?: string;
         };
         PatchInboundInputBody: {
             /** @description Нельзя включить, пока у подключения свой адрес (listen) */
@@ -2599,6 +2781,13 @@ export interface components {
             disabled?: boolean;
             /** Format: date-time */
             expires_at?: string;
+            /**
+             * Format: int64
+             * @description Положить в папку; 0 — убрать из папки
+             */
+            folder_id?: number;
+            /** @description Скрыть пользователя из списка или вернуть в него; доступ он не теряет */
+            hidden?: boolean;
             inbounds?: number[];
             name?: string;
             never_expires?: boolean;
@@ -3504,6 +3693,13 @@ export interface components {
             device_limit: number | null;
             /** Format: date-time */
             expires_at: string | null;
+            /**
+             * Format: int64
+             * @description Папка пользователя; null — вне папок
+             */
+            folder_id: number | null;
+            /** @description Скрыт из списка пользователей. Только прячет строку: подписка, оплата и ноды работают как у всех, счётчики обзора не меняются */
+            hidden: boolean;
             /** Format: int64 */
             id: number;
             /** @description Разрешённые подключения; пусто — все */
@@ -3523,6 +3719,11 @@ export interface components {
             reset_strategy: "none" | "month_start" | "period";
             /** Format: date-time */
             resets_at: string | null;
+            /**
+             * @description Откуда пользователь: admin — создан в панели или по ключу API, bot — куплен в боте, trial — пробный период бота, import — перенесён из другой панели. Заполняется при создании, не меняется
+             * @enum {string}
+             */
+            source: "admin" | "bot" | "trial" | "import";
             /** @enum {string} */
             state: "active" | "expiring" | "limited" | "expired" | "disabled";
             sub_url: string;
@@ -4136,6 +4337,163 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TotpSetupOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderView"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-folder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateFolderInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "order-folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderFoldersInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-folder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-folder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchFolderInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderView"];
                 };
             };
             /** @description Error */
@@ -5017,6 +5375,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpeedTestView"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "node-traffic": {
+        parameters: {
+            query?: {
+                range?: "24h" | "7d" | "30d";
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrafficOutputBody"];
                 };
             };
             /** @description Error */
@@ -6042,6 +6433,37 @@ export interface operations {
             };
         };
     };
+    "stats-nodes": {
+        parameters: {
+            query?: {
+                range?: "24h" | "7d" | "30d";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeSharesOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "stats-overview": {
         parameters: {
             query?: never;
@@ -6692,6 +7114,12 @@ export interface operations {
             query?: {
                 state?: "all" | "active" | "expiring" | "limited" | "expired" | "disabled";
                 q?: string;
+                /** @description all — любая; none — вне папок; число — id папки */
+                folder?: string;
+                /** @description Откуда пользователь, см. source у пользователя */
+                source?: "all" | "admin" | "bot" | "trial" | "import";
+                /** @description hide — без скрытых; show — вместе со скрытыми; only — только скрытые */
+                hidden?: "hide" | "show" | "only";
                 limit?: number;
                 offset?: number;
             };

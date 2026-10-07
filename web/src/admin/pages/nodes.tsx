@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, ArrowUpCircle, Cloud, Copy, Gauge, KeyRound, LoaderCircle, Pencil, Plus, ShieldCheck, Trash2, Waypoints } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, ArrowUpCircle, Cloud, Copy, Gauge, KeyRound, LoaderCircle, Pencil, Plus, ShieldCheck, Trash2, Waypoints } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../api/client";
 import { qk, useNodes } from "../../api/hooks";
@@ -12,16 +12,14 @@ import { Switch } from "../../components/switch";
 import { t, tMaybe } from "../../i18n";
 import { useCopy } from "../../lib/copy";
 import { bytes, num } from "../../lib/format";
+import { nodeLabel } from "../../lib/node-label";
 import { CascadeDrawer } from "./node-cascade";
 import { SpeedDrawer } from "./node-speed";
+import { NodeTrafficDrawer } from "./node-traffic";
 import { WarpDrawer } from "./node-warp";
 
 type Node = Schemas["NodeInfo"];
 type Joined = { name: string; key: string; command: string };
-
-export function nodeLabel(n: Pick<Node, "name" | "local">): string {
-  return n.name || (n.local ? t("nodes.localName") : "—");
-}
 
 /** What a server before 0.5.0.2 runs once by hand: from then on the panel updates it. */
 const OLD_NODE_COMMAND = "mikan update";
@@ -42,6 +40,7 @@ export function NodesPage() {
   const [joined, setJoined] = useState<Joined | null>(null);
   const [warpOf, setWarpOf] = useState<Node | null>(null);
   const [speedOf, setSpeedOf] = useState<Node | null>(null);
+  const [trafficOf, setTrafficOf] = useState<Node | null>(null);
   const [cascadeOf, setCascadeOf] = useState<Node | null>(null);
   const [certOf, setCertOf] = useState<Node | null>(null);
   const [updateOf, setUpdateOf] = useState<Node | "all" | null>(null);
@@ -163,7 +162,7 @@ export function NodesPage() {
                 <p className="text-[13px] text-[var(--ink-500)] lg:col-span-2">{t("nodes.orderHint")}</p>
               ) : null}
               {list.map((n, idx) => (
-                <NodeCard key={n.id} n={n} idx={idx} total={list.length} sorting={order.isPending} moving={order.isPending && order.variables.moved === n.id} onMove={(by) => move(list, idx, by)} updating={update.isPending && update.variables === n.id} busy={update.isPending} onUpdate={() => setUpdateOf(n)} onEdit={() => setEditing(n)} onWarp={() => setWarpOf(n)} onSpeed={() => setSpeedOf(n)} onCascade={() => setCascadeOf(n)} onCert={() => setCertOf(n)} onRekey={() => setRekeying(n)} onRemove={() => setRemoving(n)} />
+                <NodeCard key={n.id} n={n} idx={idx} total={list.length} sorting={order.isPending} moving={order.isPending && order.variables.moved === n.id} onMove={(by) => move(list, idx, by)} updating={update.isPending && update.variables === n.id} busy={update.isPending} onUpdate={() => setUpdateOf(n)} onEdit={() => setEditing(n)} onWarp={() => setWarpOf(n)} onSpeed={() => setSpeedOf(n)} onTraffic={() => setTrafficOf(n)} onCascade={() => setCascadeOf(n)} onCert={() => setCertOf(n)} onRekey={() => setRekeying(n)} onRemove={() => setRemoving(n)} />
               ))}
             </div>
           )
@@ -181,6 +180,7 @@ export function NodesPage() {
       <KeyDrawer joined={joined} onClose={() => setJoined(null)} />
       <WarpDrawer node={warpOf ? { id: warpOf.id, name: nodeLabel(warpOf) } : null} onClose={() => setWarpOf(null)} />
       <SpeedDrawer node={speedOf ? { id: speedOf.id, name: nodeLabel(speedOf) } : null} onClose={() => setSpeedOf(null)} />
+      <NodeTrafficDrawer node={trafficOf ? { id: trafficOf.id, name: nodeLabel(trafficOf) } : null} onClose={() => setTrafficOf(null)} />
       <CascadeDrawer node={cascadeOf ? { id: cascadeOf.id, name: nodeLabel(cascadeOf) } : null} onClose={() => setCascadeOf(null)} />
       <CertDrawer
         open={!!certOf}
@@ -239,6 +239,7 @@ function NodeCard({
   onEdit,
   onWarp,
   onSpeed,
+  onTraffic,
   onCascade,
   onCert,
   onRekey,
@@ -261,6 +262,7 @@ function NodeCard({
   onEdit: () => void;
   onWarp: () => void;
   onSpeed: () => void;
+  onTraffic: () => void;
   onCascade: () => void;
   onCert: () => void;
   onRekey: () => void;
@@ -335,6 +337,10 @@ function NodeCard({
             )}
           </dd>
         </div>
+        <div className="col-span-2">
+          <dt className="text-xs text-[var(--ink-500)]">{t("nodes.traffic24h")}</dt>
+          <dd className="num">{bytes(n.traffic_24h)}</dd>
+        </div>
         {!n.local ? (
           <div className="col-span-2">
             <dt className="text-xs text-[var(--ink-500)]">{t("nodes.api")}</dt>
@@ -374,6 +380,9 @@ function NodeCard({
         </Button>
         <Button size="sm" onClick={onSpeed}>
           <Gauge size={16} aria-hidden /> {t("speed.button")}
+        </Button>
+        <Button size="sm" onClick={onTraffic}>
+          <Activity size={16} aria-hidden /> {t("nodeTraffic.button")}
         </Button>
         <Button size="sm" onClick={onCascade}>
           <Waypoints size={16} aria-hidden /> {t("cascade.title")}

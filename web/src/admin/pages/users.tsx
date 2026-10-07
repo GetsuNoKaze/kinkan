@@ -1,10 +1,11 @@
+import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import clsx from "clsx";
-import { CalendarPlus, ChevronRight, Plus, Power, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { CalendarPlus, Check, ChevronRight, Eye, EyeOff, FolderCog, FolderInput, Plus, Power, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorText, type Tariff, type User } from "../../api/client";
-import { userActions, useSettings, useTariffs, useUserMutation, useUsers } from "../../api/hooks";
+import { userActions, useFolders, useOverview, useSettings, useTariffs, useUserMutation, useUsers } from "../../api/hooks";
 import { Confirm } from "../../components/overlay";
 import { QueryBoundary } from "../../components/query";
 import { useToast } from "../../components/toast";
@@ -12,9 +13,49 @@ import { Avatar, Bar, Button, EmptyState, PageHeader, Skeleton, StatePill } from
 import { t, useLocale } from "../../i18n";
 import { bytes, dateShort, expiryText, num } from "../../lib/format";
 import { useMediaQuery } from "../../lib/media";
-import { USER_STATES } from "../search";
+import { USER_HIDDEN, USER_SOURCES, USER_STATES, type UsersSearch } from "../search";
 import { CreateUserDrawer } from "./user-create";
 import { UserDrawer } from "./user-drawer";
+import { FolderBadge, FolderMark, FolderMenuItems, FoldersDrawer, type Folder } from "./user-folders";
+
+/** A row of chips: one line to scroll sideways on a phone, wrapping on a wide screen. */
+const CHIP_ROW = "-mx-3 flex items-center gap-2 overflow-x-auto px-3 pb-1 lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0 lg:pb-0";
+
+/** A word to the left of a row of chips, saying what the row filters by. */
+function RowLabel({ children }: { children: string }) {
+  return <span className="shrink-0 text-xs font-medium text-[var(--ink-500)]">{children}</span>;
+}
+
+/** What an empty list says: the filter that emptied it, the most specific first. */
+function emptyText(s: UsersSearch, total: number, hidden: number): { title: string; text: string } {
+  if (s.q) return { title: t("users.notFoundTitle"), text: t("users.notFoundQuery", { q: s.q }) };
+  if (s.hidden === "only") return { title: t("users.hiddenEmptyTitle"), text: t("users.hiddenEmptyText") };
+  if (typeof s.folder === "number") return { title: t("users.folderEmptyTitle"), text: t("users.folderEmptyText") };
+  if (s.folder === "none") return { title: t("users.noFolderEmptyTitle"), text: t("users.noFolderEmptyText") };
+  if (s.source) return { title: t("users.sourceEmptyTitle"), text: t("users.sourceEmptyText") };
+  if (s.hidden === undefined && hidden === total) return { title: t("users.allHiddenTitle"), text: t("users.allHiddenText") };
+  return { title: t("users.notFoundTitle"), text: t("users.notFoundGroup") };
+}
+
+/** Where a user comes from, folder and hidden mark: the small print under the name. */
+function Labels({ u, folder }: { u: User; folder?: Folder }) {
+  return (
+    <>
+      {u.source !== "admin" ? (
+        <span className="tag" title={t(`users.sourceHints.${u.source}`)}>
+          {t(`users.sources.${u.source}`)}
+        </span>
+      ) : null}
+      {folder ? <FolderBadge folder={folder} /> : null}
+      {u.hidden ? (
+        <span className="tag gap-1" title={t("users.hiddenBadge")}>
+          <EyeOff size={12} aria-hidden />
+          {t("users.hiddenShort")}
+        </span>
+      ) : null}
+    </>
+  );
+}
 
 export function UsersPage() {
   const search = useSearch({ from: "/_app/users" });
@@ -23,10 +64,22 @@ export function UsersPage() {
   // The last search text this page itself put into the URL: a different one in the URL
   // came from outside (Back, a link, the reset button) and replaces what is typed.
   const written = useRef(search.q);
-  const users = useUsers({ state: search.state, q: search.q });
+  const users = useUsers({ state: search.state, q: search.q, folder: search.folder, source: search.source, hidden: search.hidden });
   const tariffs = useTariffs();
+  const folders = useFolders();
+  const overview = useOverview();
+  const [managing, setManaging] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
   const narrow = useMediaQuery("(max-width: 767px)");
+
+  // A folder that is gone (deleted here, or elsewhere) is no filter any more: a link to it
+  // would show an empty list that nothing explains.
+  useEffect(() => {
+    const list = folders.data;
+    if (typeof search.folder === "number" && list && !list.some((f) => f.id === search.folder)) {
+      void navigate({ search: (s) => ({ ...s, folder: undefined }), replace: true });
+    }
+  }, [folders.data, search.folder, navigate]);
 
   useEffect(() => {
     if (search.q === written.current) return;
@@ -44,6 +97,8 @@ export function UsersPage() {
   }, [q, navigate]);
 
   const tariffById = useMemo(() => new Map((tariffs.data ?? []).map((tr) => [tr.id, tr])), [tariffs.data]);
+  const folderList = useMemo(() => folders.data ?? [], [folders.data]);
+  const folderById = useMemo(() => new Map(folderList.map((f) => [f.id, f])), [folderList]);
   const counts = users.data?.counts;
   const items = useMemo(() => users.data?.items ?? [], [users.data]);
   // What a bulk action touches is what the admin sees ticked: a row that left the list (a
@@ -62,69 +117,142 @@ export function UsersPage() {
     [],
   );
   const clear = useCallback(() => setSelected(new Set()), []);
+  // A filter changes what the list holds: what was ticked may be gone from it.
+  const setFilter = (patch: Partial<UsersSearch>) => {
+    clear();
+    void navigate({ search: (s) => ({ ...s, ...patch }) });
+  };
+  const resetFilters = () => {
+    written.current = "";
+    setQ("");
+    clear();
+    void navigate({ search: { state: "all", q: "" } });
+  };
+  const hiddenTotal = users.data?.hidden_total ?? 0;
+  const sourceCounts = users.data?.source_counts;
+  const folderCounts = users.data?.folder_counts;
+  const sum = (m?: Record<string, number>) => Object.values(m ?? {}).reduce((a, b) => a + b, 0);
+  // Folders and sources are rows of their own only once there is something to tell apart:
+  // a panel that never made a folder or took a user from elsewhere sees neither.
+  const showFolders = folderList.length > 0 || search.folder !== undefined;
+  const showSources = (sourceCounts && sum(sourceCounts) - sourceCounts.admin! > 0) || search.source !== undefined;
+  const showHidden = hiddenTotal > 0 || search.hidden !== undefined;
 
   return (
     <>
       <PageHeader
         title={t("nav.users")}
-        sub={counts ? t("users.subtitle", { n: counts.all, active: num(counts.active) }) : "…"}
+        sub={overview.data ? `${t("users.subtitle", { n: overview.data.users_total, active: num(overview.data.users_active) })}${hiddenTotal > 0 ? ` · ${t("users.hiddenCount", { n: hiddenTotal })}` : ""}` : "…"}
         actions={
-          <Button variant="primary" onClick={() => void navigate({ search: (s) => ({ ...s, create: true, user: undefined }) })}>
-            <Plus size={18} aria-hidden />
-            <span className="max-[760px]:hidden">{t("dashboard.newUser")}</span>
-          </Button>
+          <>
+            <Button onClick={() => setManaging(true)} aria-label={t("users.manageFolders")}>
+              <FolderCog size={18} aria-hidden />
+              <span className="max-[760px]:hidden">{t("users.manageFolders")}</span>
+            </Button>
+            <Button variant="primary" onClick={() => void navigate({ search: (s) => ({ ...s, create: true, user: undefined }) })}>
+              <Plus size={18} aria-hidden />
+              <span className="max-[760px]:hidden">{t("dashboard.newUser")}</span>
+            </Button>
+          </>
         }
       />
-      <div className="reveal flex flex-col items-stretch justify-between gap-3 lg:flex-row lg:items-center">
-        <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0 lg:pb-0" role="group" aria-label={t("users.filter")}>
-          {USER_STATES.map((f) => (
-            <button
-              key={f}
-              type="button"
-              className="chip shrink-0"
-              aria-pressed={search.state === f}
-              onClick={() => {
-                clear();
-                void navigate({ search: (s) => ({ ...s, state: f }) });
-              }}
-            >
-              {t(`users.filters.${f}`)}
-              {counts ? <span className="chip-count num">{num(counts[f])}</span> : null}
-            </button>
-          ))}
+      <div className="reveal flex flex-col gap-3">
+        <div className="flex flex-col items-stretch justify-between gap-3 lg:flex-row lg:items-center">
+          <div className={CHIP_ROW} role="group" aria-label={t("users.filter")}>
+            {USER_STATES.map((f) => (
+              <button key={f} type="button" className="chip shrink-0" aria-pressed={search.state === f} onClick={() => setFilter({ state: f })}>
+                {t(`users.filters.${f}`)}
+                {counts ? <span className="chip-count num">{num(counts[f])}</span> : null}
+              </button>
+            ))}
+          </div>
+          <label className="search-field">
+            <Search size={16} aria-hidden />
+            <input type="search" placeholder={t("users.searchPlaceholder")} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t("users.searchLabel")} />
+          </label>
         </div>
-        <label className="search-field">
-          <Search size={16} aria-hidden />
-          <input type="search" placeholder={t("users.searchPlaceholder")} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t("users.searchLabel")} />
-        </label>
+        {showFolders ? (
+          <div className={CHIP_ROW} role="group" aria-label={t("users.folderFilter")}>
+            <RowLabel>{t("users.foldersLabel")}</RowLabel>
+            <button type="button" className="chip shrink-0" aria-pressed={search.folder === undefined} onClick={() => setFilter({ folder: undefined })}>
+              {t("users.foldersAll")}
+              {folderCounts ? <span className="chip-count num">{num(sum(folderCounts))}</span> : null}
+            </button>
+            <button type="button" className="chip shrink-0" aria-pressed={search.folder === "none"} onClick={() => setFilter({ folder: "none" })}>
+              {t("users.foldersNone")}
+              {folderCounts ? <span className="chip-count num">{num(folderCounts.none ?? 0)}</span> : null}
+            </button>
+            {folderList.map((f) => (
+              <button key={f.id} type="button" className="chip shrink-0" aria-pressed={search.folder === f.id} title={f.name} onClick={() => setFilter({ folder: f.id })}>
+                <FolderMark folder={f} />
+                <span className="max-w-[160px] truncate">{f.name}</span>
+                {folderCounts ? <span className="chip-count num">{num(folderCounts[f.id] ?? 0)}</span> : null}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {showSources || showHidden ? (
+          <div className="flex flex-col items-stretch justify-between gap-3 lg:flex-row lg:items-center">
+            {showSources ? (
+              <div className={CHIP_ROW} role="group" aria-label={t("users.sourceFilter")}>
+                <RowLabel>{t("users.sourceLabel")}</RowLabel>
+                {USER_SOURCES.map((s) => (
+                  <button key={s} type="button" className="chip shrink-0" aria-pressed={(search.source ?? "all") === s} title={s === "all" ? undefined : t(`users.sourceHints.${s}`)} onClick={() => setFilter({ source: s === "all" ? undefined : s })}>
+                    {t(`users.sources.${s}`)}
+                    {sourceCounts ? <span className="chip-count num">{num(s === "all" ? sum(sourceCounts) : (sourceCounts[s] ?? 0))}</span> : null}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <span />
+            )}
+            {showHidden ? (
+              <Menu.Root>
+                <Menu.Trigger asChild>
+                  <button type="button" className="chip shrink-0 self-start" aria-pressed={search.hidden !== undefined}>
+                    <EyeOff size={16} aria-hidden />
+                    {t("users.hiddenChip", { n: hiddenTotal })}
+                  </button>
+                </Menu.Trigger>
+                <Menu.Portal>
+                  <Menu.Content className="menu glass-strong" align="end" sideOffset={6}>
+                    <Menu.RadioGroup value={search.hidden ?? "hide"} onValueChange={(v) => setFilter({ hidden: v === "hide" ? undefined : (v as UsersSearch["hidden"]) })} aria-label={t("users.hiddenMenu")}>
+                      {USER_HIDDEN.map((m) => (
+                        <Menu.RadioItem key={m} value={m} className="menu-item">
+                          <span className="flex-1">{t(`users.hiddenModes.${m}`)}</span>
+                          <Menu.ItemIndicator>
+                            <Check size={16} aria-hidden />
+                          </Menu.ItemIndicator>
+                        </Menu.RadioItem>
+                      ))}
+                    </Menu.RadioGroup>
+                  </Menu.Content>
+                </Menu.Portal>
+              </Menu.Root>
+            ) : null}
+          </div>
+        ) : null}
       </div>
       <section className="card glass reveal overflow-hidden !p-2 md:!pb-0" style={{ "--i": 1 } as React.CSSProperties} aria-label={t("users.listLabel")} aria-busy={users.isPlaceholderData}>
         <QueryBoundary query={users} pending={<TableSkeleton />} title={t("users.loadFailed")}>
           {(data) =>
-            data.counts.all === 0 ? (
+            data.users_total === 0 ? (
               <EmptyState title={t("users.emptyTitle")} text={t("users.emptyText")}>
                 <Button variant="primary" onClick={() => void navigate({ search: (s) => ({ ...s, create: true }) })}>
                   <Plus size={18} aria-hidden /> {t("dashboard.newUser")}
                 </Button>
               </EmptyState>
             ) : data.items.length === 0 ? (
-              <EmptyState search title={t("users.notFoundTitle")} text={search.q ? t("users.notFoundQuery", { q: search.q }) : t("users.notFoundGroup")}>
-                <Button
-                  onClick={() => {
-                    written.current = "";
-                    setQ("");
-                    void navigate({ search: { state: "all", q: "" } });
-                  }}
-                >
-                  {t("users.resetFilter")}
-                </Button>
+              <EmptyState search title={emptyText(search, data.users_total, data.hidden_total).title} text={emptyText(search, data.users_total, data.hidden_total).text}>
+                {search.hidden === undefined && data.hidden_total > 0 ? <Button onClick={() => setFilter({ hidden: "show" })}>{t("users.showHidden", { n: data.hidden_total })}</Button> : null}
+                <Button onClick={resetFilters}>{t("users.resetFilter")}</Button>
               </EmptyState>
             ) : (
               <>
                 {narrow ? (
                   <div className="flex flex-col gap-2">
                     {data.items.map((u) => (
-                      <UserCard key={u.id} u={u} tariff={u.tariff_id ? tariffById.get(u.tariff_id) : undefined} />
+                      <UserCard key={u.id} u={u} tariff={u.tariff_id ? tariffById.get(u.tariff_id) : undefined} folder={u.folder_id ? folderById.get(u.folder_id) : undefined} />
                     ))}
                   </div>
                 ) : (
@@ -147,7 +275,7 @@ export function UsersPage() {
                     </thead>
                     <tbody>
                       {data.items.map((u) => (
-                        <UserRow key={u.id} u={u} tariff={u.tariff_id ? tariffById.get(u.tariff_id) : undefined} selected={selected.has(u.id)} onToggle={toggle} onOpen={openUser} />
+                        <UserRow key={u.id} u={u} tariff={u.tariff_id ? tariffById.get(u.tariff_id) : undefined} folder={u.folder_id ? folderById.get(u.folder_id) : undefined} selected={selected.has(u.id)} onToggle={toggle} onOpen={openUser} />
                       ))}
                     </tbody>
                   </table>
@@ -162,7 +290,8 @@ export function UsersPage() {
         </QueryBoundary>
       </section>
 
-      <BulkBar chosen={chosen} clear={clear} />
+      <BulkBar chosen={chosen} clear={clear} folders={folderList} />
+      <FoldersDrawer open={managing} onOpenChange={setManaging} />
       <CreateUserDrawer
         open={!!search.create}
         onOpenChange={(v) => void navigate({ search: (s) => ({ ...s, create: v ? true : undefined }) })}
@@ -215,7 +344,7 @@ function Expiry({ u }: { u: User }) {
 // Rows are memoized: a poll hands back the same objects for users that did not change, and
 // a tick in one checkbox then redraws that one row. Text is read at render time, so a row
 // subscribes to the language itself.
-const UserRow = memo(function UserRow({ u, tariff, selected, onToggle, onOpen }: { u: User; tariff?: Tariff; selected: boolean; onToggle: (id: number) => void; onOpen: (id: number) => void }) {
+const UserRow = memo(function UserRow({ u, tariff, folder, selected, onToggle, onOpen }: { u: User; tariff?: Tariff; folder?: Folder; selected: boolean; onToggle: (id: number) => void; onOpen: (id: number) => void }) {
   useLocale();
   // With binding a place is a bound device, else an address online (see the drawer).
   const binding = !!useSettings().data?.device_binding;
@@ -244,6 +373,7 @@ const UserRow = memo(function UserRow({ u, tariff, selected, onToggle, onOpen }:
                   {tag}
                 </span>
               ))}
+              <Labels u={u} folder={folder} />
             </div>
           </div>
         </div>
@@ -276,7 +406,7 @@ const UserRow = memo(function UserRow({ u, tariff, selected, onToggle, onOpen }:
   );
 });
 
-const UserCard = memo(function UserCard({ u, tariff }: { u: User; tariff?: Tariff }) {
+const UserCard = memo(function UserCard({ u, tariff, folder }: { u: User; tariff?: Tariff; folder?: Folder }) {
   useLocale();
   const e = expiryText(u.expires_at);
   return (
@@ -290,6 +420,11 @@ const UserCard = memo(function UserCard({ u, tariff }: { u: User; tariff?: Tarif
         <div className="truncate text-xs text-[var(--ink-500)]">
           {tariff?.name ?? t("users.noTariff")} · {e.text}
         </div>
+        {u.source !== "admin" || folder || u.hidden ? (
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+            <Labels u={u} folder={folder} />
+          </div>
+        ) : null}
       </div>
       <StatePill state={u.state} />
       <div className="col-span-3">
@@ -323,21 +458,25 @@ function TableSkeleton() {
   );
 }
 
-type BulkAction = "extend" | "reset" | "disable" | "enable" | "delete";
+type BulkAction = "extend" | "reset" | "disable" | "enable" | "delete" | "hide" | "unhide" | "move";
 
 /** How many names the delete confirmation lists before it says "…". */
 const NAMES_SHOWN = 5;
 
-function BulkBar({ chosen, clear }: { chosen: User[]; clear: () => void }) {
+function BulkBar({ chosen, clear, folders }: { chosen: User[]; clear: () => void; folders: Folder[] }) {
   const toast = useToast();
   const bulk = useUserMutation(userActions.bulk);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const n = chosen.length;
   const busy = bulk.isPending;
   const running = (action: BulkAction) => busy && bulk.variables?.action === action;
-  const run = (action: BulkAction) =>
+  // Hiding is one button that does what the chosen need: bring them back when all of them
+  // are hidden, hide them otherwise.
+  const unhide = n > 0 && chosen.every((u) => u.hidden);
+  const hideAction: BulkAction = unhide ? "unhide" : "hide";
+  const run = (action: BulkAction, extra?: { folder_id?: number }) =>
     bulk.mutate(
-      { ids: chosen.map((u) => u.id), action },
+      { ids: chosen.map((u) => u.id), action, ...extra },
       {
         onSuccess: (r) => {
           toast.ok(t(`users.bulkDone.${action}`, { n: r.affected }));
@@ -376,6 +515,25 @@ function BulkBar({ chosen, clear }: { chosen: User[]; clear: () => void }) {
             <Button size="sm" loading={running("reset")} disabled={busy} onClick={() => run("reset")} aria-label={t("users.resetTraffic")}>
               <RotateCcw size={16} aria-hidden />
               <span className="max-sm:hidden">{t("users.resetTraffic")}</span>
+            </Button>
+            {folders.length > 0 ? (
+              <Menu.Root>
+                <Menu.Trigger asChild>
+                  <Button size="sm" loading={running("move")} disabled={busy} aria-label={t("users.moveMenu")}>
+                    <FolderInput size={16} aria-hidden />
+                    <span className="max-sm:hidden">{t("users.toFolder")}</span>
+                  </Button>
+                </Menu.Trigger>
+                <Menu.Portal>
+                  <Menu.Content className="menu glass-strong" side="top" align="center" sideOffset={8}>
+                    <FolderMenuItems folders={folders} onPick={(id) => run("move", id === null ? undefined : { folder_id: id })} />
+                  </Menu.Content>
+                </Menu.Portal>
+              </Menu.Root>
+            ) : null}
+            <Button size="sm" loading={running(hideAction)} disabled={busy} onClick={() => run(hideAction)} aria-label={unhide ? t("users.unhide") : t("users.hide")} title={unhide ? t("users.unhideHint") : t("users.hideHint")}>
+              {unhide ? <Eye size={16} aria-hidden /> : <EyeOff size={16} aria-hidden />}
+              <span className="max-sm:hidden">{unhide ? t("users.unhide") : t("users.hide")}</span>
             </Button>
             <Button size="sm" variant="danger" loading={running("disable")} disabled={busy} onClick={() => run("disable")} aria-label={t("users.disable")}>
               <Power size={16} aria-hidden />
