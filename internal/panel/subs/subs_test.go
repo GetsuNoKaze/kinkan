@@ -15,16 +15,20 @@ import (
 
 func TestFormat(t *testing.T) {
 	cases := map[string]string{
-		"clash-verge/v2.2.3":         "clash",
-		"FlClash/v0.8.80 clash-meta": "clash",
-		"mihomo/1.19.31":             "clash",
-		"Stash/3.1.1 Clash/1.9.0":    "clash",
-		"Happ/3.4.1":                 "uri",
-		"v2rayNG/1.10.2":             "uri",
-		"v2RayTun/Android":           "uri",
-		"Streisand/1.6":              "uri",
-		"HiddifyNext/2.5.7":          "uri",
-		"curl/8.9":                   "uri",
+		"clash-verge/v2.2.3":                          "clash",
+		"FlClash/v0.8.80 clash-meta":                  "clash",
+		"mihomo/1.19.31":                              "clash",
+		"Stash/3.1.1 Clash/1.9.0":                     "clash",
+		"Happ/3.4.1":                                  "uri",
+		"SFA (sing-box 1.14.2; language en_US)":       "singbox",
+		"SFM (sing-box 1.12.20; language ru_RU)":      "singbox",
+		"SFI (sing-box 1.11.4; language en_US)":       "uri", // a config of 1.12 would not load
+		"Karing/1.2.26 platform/tvos sing-box 1.14.0": "uri", // routes by its own settings
+		"v2rayNG/1.10.2":                              "uri",
+		"v2RayTun/Android":                            "uri",
+		"Streisand/1.6":                               "uri",
+		"HiddifyNext/2.5.7":                           "uri",
+		"curl/8.9":                                    "uri",
 	}
 	for ua, want := range cases {
 		if got := Format(ua, "*/*", ""); got != want {
@@ -34,7 +38,7 @@ func TestFormat(t *testing.T) {
 	if Format("Mozilla/5.0 (iPhone)", "text/html,application/xhtml+xml", "") != "html" {
 		t.Error("browser must get the page")
 	}
-	if Format("Happ/3", "", "clash") != "clash" {
+	if Format("Happ/3", "", "clash") != "clash" || Format("HiddifyNext/4.1.1", "", "singbox") != "singbox" {
 		t.Error("?format= must override the User-Agent")
 	}
 }

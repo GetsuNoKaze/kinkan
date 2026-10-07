@@ -26,12 +26,15 @@ func TestDetectApp(t *testing.T) {
 		"v2rayNG/1.10.20":                      {Family: FamilyXray},
 		"INCY/2.1.0":                           {Family: FamilyXray},
 		"HiddifyNext/2.5.7 (android) like ClashMeta v2ray sing-box": {Family: FamilySingBox, Legacy: true},
-		"karing/1.1.4.920":                       {Family: FamilySingBox},
-		"SFA/1.12.4":                             {Family: FamilySingBox},
-		"Stash/2.8.0 Clash/1.11.0":               {Family: FamilyStash},
-		"Shadowrocket/2592 CFNetwork/1568.100.1": {Family: FamilyOther},
-		"Streisand/1.6.44":                       {Family: FamilyOther},
-		"":                                       {Family: FamilyOther},
+		"karing/1.1.4.920":                            {Family: FamilySingBox},
+		"SFA (sing-box 1.14.2; language en_US)":       {Family: FamilySingBox, Core: Version{1, 14, 2}, Whole: true},
+		"SFI (sing-box 1.11.4; language ru_RU)":       {Family: FamilySingBox, Core: Version{1, 11, 4}, Whole: true},
+		"Karing/1.2.26 platform/tvos sing-box 1.14.0": {Family: FamilySingBox, Core: Version{1, 14, 0}},
+		"husi/0.9.1 (sing-box 1.15.0-alpha.10)":       {Family: FamilySingBox, Core: Version{1, 15, 0}},
+		"Stash/2.8.0 Clash/1.11.0":                    {Family: FamilyStash},
+		"Shadowrocket/2592 CFNetwork/1568.100.1":      {Family: FamilyOther},
+		"Streisand/1.6.44":                            {Family: FamilyOther},
+		"":                                            {Family: FamilyOther},
 	} {
 		if got := DetectApp(ua); got != want {
 			t.Errorf("%q: %+v, want %+v", ua, got, want)
