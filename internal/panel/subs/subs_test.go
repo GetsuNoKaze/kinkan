@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"go.yaml.in/yaml/v3"
+
 	"mikan/internal/panel/presets"
 	"mikan/internal/panel/store/db"
 	"mikan/internal/proto"
@@ -122,7 +124,7 @@ func TestMihomoProfile(t *testing.T) {
 		} `json:"proxy-groups"`
 		Rules []string `json:"rules"`
 	}
-	if err := json.Unmarshal(raw, &cfg); err != nil {
+	if err := unmarshalProfile(raw, &cfg); err != nil {
 		t.Fatal(err)
 	}
 	if len(cfg.Proxies) != 4 || cfg.Groups[0].Name != "VPN" || cfg.Groups[1].Name != "Авто" {
@@ -168,7 +170,7 @@ func TestCustomNames(t *testing.T) {
 		} `json:"proxy-groups"`
 		Rules []string `json:"rules"`
 	}
-	if err := json.Unmarshal(raw, &cfg); err != nil {
+	if err := unmarshalProfile(raw, &cfg); err != nil {
 		t.Fatal(err)
 	}
 	if cfg.Proxies[0]["name"] != "🇳🇱 Нидерланды" || cfg.Proxies[1]["name"] != "🇳🇱 Нидерланды 2" {
@@ -210,7 +212,7 @@ func TestRouting(t *testing.T) {
 			t.Fatal(err)
 		}
 		var cfg profileJSON
-		if err := json.Unmarshal(raw, &cfg); err != nil {
+		if err := unmarshalProfile(raw, &cfg); err != nil {
 			t.Fatal(err)
 		}
 		return cfg
@@ -254,7 +256,7 @@ func TestRouting(t *testing.T) {
 		t.Errorf("all mode keeps plain DNS: %+v %v", all.DNS, all.GeoxURL)
 	}
 
-	for in, want := range map[string]Routing{"": RoutingRUDirect, "all": RoutingAll, "ru_direct": RoutingRUDirect, "blocked": RoutingRUDirect} {
+	for in, want := range map[string]Routing{"": RoutingRUDirect, "all": RoutingAll, "ru_direct": RoutingRUDirect, "blocked": RoutingBlocked, "nope": RoutingRUDirect} {
 		if got := ParseRouting(in); got != want {
 			t.Errorf("ParseRouting(%q) = %q, want %q", in, got, want)
 		}
@@ -303,7 +305,7 @@ func TestMultiNodeProfile(t *testing.T) {
 			Proxies []string `json:"proxies"`
 		} `json:"proxy-groups"`
 	}
-	if err := json.Unmarshal(raw, &cfg); err != nil {
+	if err := unmarshalProfile(raw, &cfg); err != nil {
 		t.Fatal(err)
 	}
 	server := map[string]any{}
@@ -347,7 +349,7 @@ func TestMultiNodeProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.Groups = nil
-	if err := json.Unmarshal(raw, &cfg); err != nil {
+	if err := unmarshalProfile(raw, &cfg); err != nil {
 		t.Fatal(err)
 	}
 	vpn := 0
@@ -404,7 +406,7 @@ func TestDefaultFingerprint(t *testing.T) {
 	var cfg struct {
 		Proxies []map[string]any `json:"proxies"`
 	}
-	if err := json.Unmarshal(raw, &cfg); err != nil {
+	if err := unmarshalProfile(raw, &cfg); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range cfg.Proxies {
@@ -473,7 +475,7 @@ func TestNodeOrderFollowsTheProfile(t *testing.T) {
 				Proxies []string `json:"proxies"`
 			} `json:"proxy-groups"`
 		}
-		if err := json.Unmarshal(raw, &cfg); err != nil {
+		if err := unmarshalProfile(raw, &cfg); err != nil {
 			t.Fatal(err)
 		}
 		var servers []string
@@ -501,4 +503,17 @@ func TestNodeOrderFollowsTheProfile(t *testing.T) {
 			}
 		}
 	}
+}
+
+// unmarshalProfile reads a YAML profile into a struct with json tags.
+func unmarshalProfile(raw []byte, v any) error {
+	var m any
+	if err := yaml.Unmarshal(raw, &m); err != nil {
+		return err
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, v)
 }

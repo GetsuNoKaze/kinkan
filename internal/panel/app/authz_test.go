@@ -105,6 +105,9 @@ func TestFullKeyCannotTakeOverThePanel(t *testing.T) {
 		// What every subscriber's app shows.
 		"sub_announce": {"sub_announce": "Pay here"}, "sub_announce_url": {"sub_announce_url": "https://evil.example"},
 		"app_branding": {"app_branding": true}, "brand_accent": {"brand_accent": "#000000"}, "brand_logo_url": {"brand_logo_url": "https://evil.example/l.png"},
+		// Where every client's traffic goes.
+		"sub_routing": {"sub_routing": "blocked"}, "sub_routes": {"sub_routes": map[string]any{"services": map[string]any{"youtube": "direct"}}},
+		"sub_template": {"sub_template": "rules: [MATCH,DIRECT]\n"},
 	} {
 		resp, out := k.asKey(k.full, http.MethodPatch, "/settings", body)
 		if resp.StatusCode != http.StatusForbidden || !strings.Contains(string(out), "session_only") || !strings.Contains(string(out), field) {
@@ -177,6 +180,18 @@ func TestReadKeyDoesNotGetSecrets(t *testing.T) {
 				t.Errorf("%s as %s: %d, the %s is missing: %s", name, who.name, resp.StatusCode, c.secretField, body)
 			}
 		}
+	}
+
+	// An own Clash profile may hold the admin's own proxies and secrets.
+	const tpl = "secret: controller-secret-1234\nrules: [MATCH,DIRECT]\n"
+	if err := settings.Set(ctx, settings.New(k.st.Q), settings.KeyTemplate, tpl); err != nil {
+		t.Fatal(err)
+	}
+	if _, body := k.asKey(k.read, http.MethodGet, "/settings", nil); strings.Contains(string(body), "controller-secret-1234") {
+		t.Errorf("a read key sees the own profile: %s", body)
+	}
+	if _, body := k.asKey(k.full, http.MethodGet, "/settings", nil); !strings.Contains(string(body), "controller-secret-1234") {
+		t.Errorf("a full key misses the own profile: %s", body)
 	}
 }
 
