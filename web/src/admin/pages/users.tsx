@@ -1,7 +1,7 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import clsx from "clsx";
-import { CalendarPlus, Check, ChevronRight, Eye, EyeOff, FolderCog, FolderInput, Plus, Power, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { CalendarPlus, Check, ChevronRight, Eye, EyeOff, FolderCog, FolderInput, Plus, Power, RotateCcw, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorText, type Tariff, type User } from "../../api/client";
@@ -21,9 +21,32 @@ import { FolderBadge, FolderMark, FolderMenuItems, FoldersDrawer, type Folder } 
 /** A row of chips: one line to scroll sideways on a phone, wrapping on a wide screen. */
 const CHIP_ROW = "-mx-3 flex items-center gap-2 overflow-x-auto px-3 pb-1 lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0 lg:pb-0";
 
-/** A word to the left of a row of chips, saying what the row filters by. */
-function RowLabel({ children }: { children: string }) {
-  return <span className="shrink-0 text-xs font-medium text-[var(--ink-500)]">{children}</span>;
+/** One choice of the filters menu: a tick when chosen, how many users it holds. */
+function FilterItem({ value, label, count, mark }: { value: string; label: string; count?: number; mark?: React.ReactNode }) {
+  return (
+    <Menu.RadioItem value={value} className="menu-item">
+      <span className="grid w-4 shrink-0 place-items-center">
+        <Menu.ItemIndicator>
+          <Check size={16} aria-hidden />
+        </Menu.ItemIndicator>
+      </span>
+      {mark}
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {count !== undefined ? <span className="num text-xs text-[var(--ink-500)]">{num(count)}</span> : null}
+    </Menu.RadioItem>
+  );
+}
+
+/** A filter from the menu that is on, with the cross that takes it off. */
+function ActiveFilter({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <span className="chip h-8 shrink-0 gap-1 pr-1 text-[var(--ink-900)]">
+      <span className="max-w-[240px] truncate">{label}</span>
+      <button type="button" className="icon-btn h-6 w-6" aria-label={t("users.clearFilter", { name: label })} onClick={onClear}>
+        <X size={16} aria-hidden />
+      </button>
+    </span>
+  );
 }
 
 /** What an empty list says: the filter that emptied it, the most specific first. */
@@ -138,6 +161,8 @@ export function UsersPage() {
   const showFolders = folderList.length > 0 || search.folder !== undefined;
   const showSources = (sourceCounts && sum(sourceCounts) - sourceCounts.admin! > 0) || search.source !== undefined;
   const showHidden = hiddenTotal > 0 || search.hidden !== undefined;
+  // The filters of the menu that are on, beside the state chips and the search.
+  const extra = (search.folder !== undefined ? 1 : 0) + (search.source ? 1 : 0) + (search.hidden ? 1 : 0);
 
   return (
     <>
@@ -167,70 +192,75 @@ export function UsersPage() {
               </button>
             ))}
           </div>
-          <label className="search-field">
-            <Search size={16} aria-hidden />
-            <input type="search" placeholder={t("users.searchPlaceholder")} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t("users.searchLabel")} />
-          </label>
-        </div>
-        {showFolders ? (
-          <div className={CHIP_ROW} role="group" aria-label={t("users.folderFilter")}>
-            <RowLabel>{t("users.foldersLabel")}</RowLabel>
-            <button type="button" className="chip shrink-0" aria-pressed={search.folder === undefined} onClick={() => setFilter({ folder: undefined })}>
-              {t("users.foldersAll")}
-              {folderCounts ? <span className="chip-count num">{num(sum(folderCounts))}</span> : null}
-            </button>
-            <button type="button" className="chip shrink-0" aria-pressed={search.folder === "none"} onClick={() => setFilter({ folder: "none" })}>
-              {t("users.foldersNone")}
-              {folderCounts ? <span className="chip-count num">{num(folderCounts.none ?? 0)}</span> : null}
-            </button>
-            {folderList.map((f) => (
-              <button key={f.id} type="button" className="chip shrink-0" aria-pressed={search.folder === f.id} title={f.name} onClick={() => setFilter({ folder: f.id })}>
-                <FolderMark folder={f} />
-                <span className="max-w-[160px] truncate">{f.name}</span>
-                {folderCounts ? <span className="chip-count num">{num(folderCounts[f.id] ?? 0)}</span> : null}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {showSources || showHidden ? (
-          <div className="flex flex-col items-stretch justify-between gap-3 lg:flex-row lg:items-center">
-            {showSources ? (
-              <div className={CHIP_ROW} role="group" aria-label={t("users.sourceFilter")}>
-                <RowLabel>{t("users.sourceLabel")}</RowLabel>
-                {USER_SOURCES.map((s) => (
-                  <button key={s} type="button" className="chip shrink-0" aria-pressed={(search.source ?? "all") === s} title={s === "all" ? undefined : t(`users.sourceHints.${s}`)} onClick={() => setFilter({ source: s === "all" ? undefined : s })}>
-                    {t(`users.sources.${s}`)}
-                    {sourceCounts ? <span className="chip-count num">{num(s === "all" ? sum(sourceCounts) : (sourceCounts[s] ?? 0))}</span> : null}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <span />
-            )}
-            {showHidden ? (
+          <div className="flex items-center gap-2">
+            <label className="search-field">
+              <Search size={16} aria-hidden />
+              <input type="search" placeholder={t("users.searchPlaceholder")} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t("users.searchLabel")} />
+            </label>
+            {showFolders || showSources || showHidden ? (
               <Menu.Root>
                 <Menu.Trigger asChild>
-                  <button type="button" className="chip shrink-0 self-start" aria-pressed={search.hidden !== undefined}>
-                    <EyeOff size={16} aria-hidden />
-                    {t("users.hiddenChip", { n: hiddenTotal })}
+                  <button type="button" className="chip h-10 shrink-0" aria-pressed={extra > 0}>
+                    <SlidersHorizontal size={16} aria-hidden />
+                    <span className="max-[480px]:sr-only">{t("users.moreFilters")}</span>
+                    {extra ? <span className="chip-count num">{extra}</span> : null}
                   </button>
                 </Menu.Trigger>
                 <Menu.Portal>
-                  <Menu.Content className="menu glass-strong" align="end" sideOffset={6}>
-                    <Menu.RadioGroup value={search.hidden ?? "hide"} onValueChange={(v) => setFilter({ hidden: v === "hide" ? undefined : (v as UsersSearch["hidden"]) })} aria-label={t("users.hiddenMenu")}>
-                      {USER_HIDDEN.map((m) => (
-                        <Menu.RadioItem key={m} value={m} className="menu-item">
-                          <span className="flex-1">{t(`users.hiddenModes.${m}`)}</span>
-                          <Menu.ItemIndicator>
-                            <Check size={16} aria-hidden />
-                          </Menu.ItemIndicator>
-                        </Menu.RadioItem>
-                      ))}
-                    </Menu.RadioGroup>
+                  <Menu.Content className="menu glass-strong max-h-[min(480px,70vh)] w-[280px] overflow-y-auto" align="end" sideOffset={8}>
+                    {showFolders ? (
+                      <>
+                        <Menu.Label className="menu-label">{t("users.foldersLabel")}</Menu.Label>
+                        <Menu.RadioGroup value={search.folder === undefined ? "all" : String(search.folder)} onValueChange={(v) => setFilter({ folder: v === "all" ? undefined : v === "none" ? "none" : Number(v) })} aria-label={t("users.folderFilter")}>
+                          <FilterItem value="all" label={t("users.foldersAll")} count={folderCounts ? sum(folderCounts) : undefined} />
+                          <FilterItem value="none" label={t("users.foldersNone")} count={folderCounts ? (folderCounts.none ?? 0) : undefined} />
+                          {folderList.map((f) => (
+                            <FilterItem key={f.id} value={String(f.id)} label={f.name} mark={<FolderMark folder={f} />} count={folderCounts ? (folderCounts[f.id] ?? 0) : undefined} />
+                          ))}
+                        </Menu.RadioGroup>
+                      </>
+                    ) : null}
+                    {showSources ? (
+                      <>
+                        {showFolders ? <Menu.Separator className="menu-sep" /> : null}
+                        <Menu.Label className="menu-label">{t("users.sourceLabel")}</Menu.Label>
+                        <Menu.RadioGroup value={search.source ?? "all"} onValueChange={(v) => setFilter({ source: v === "all" ? undefined : (v as UsersSearch["source"]) })} aria-label={t("users.sourceFilter")}>
+                          {USER_SOURCES.map((s) => (
+                            <FilterItem key={s} value={s} label={t(`users.sources.${s}`)} count={sourceCounts ? (s === "all" ? sum(sourceCounts) : (sourceCounts[s] ?? 0)) : undefined} />
+                          ))}
+                        </Menu.RadioGroup>
+                      </>
+                    ) : null}
+                    {showHidden ? (
+                      <>
+                        {showFolders || showSources ? <Menu.Separator className="menu-sep" /> : null}
+                        <Menu.Label className="menu-label">{t("users.hiddenChip", { n: hiddenTotal })}</Menu.Label>
+                        <Menu.RadioGroup value={search.hidden ?? "hide"} onValueChange={(v) => setFilter({ hidden: v === "hide" ? undefined : (v as UsersSearch["hidden"]) })} aria-label={t("users.hiddenMenu")}>
+                          {USER_HIDDEN.map((m) => (
+                            <FilterItem key={m} value={m} label={t(`users.hiddenModes.${m}`)} />
+                          ))}
+                        </Menu.RadioGroup>
+                      </>
+                    ) : null}
                   </Menu.Content>
                 </Menu.Portal>
               </Menu.Root>
             ) : null}
+          </div>
+        </div>
+        {extra ? (
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t("users.activeFilters")}>
+            {search.folder !== undefined ? (
+              <ActiveFilter
+                label={`${t("users.foldersLabel")}: ${search.folder === "none" ? t("users.foldersNone") : (folderById.get(search.folder)?.name ?? "")}`}
+                onClear={() => setFilter({ folder: undefined })}
+              />
+            ) : null}
+            {search.source ? <ActiveFilter label={`${t("users.sourceLabel")}: ${t(`users.sources.${search.source}`)}`} onClear={() => setFilter({ source: undefined })} /> : null}
+            {search.hidden ? <ActiveFilter label={t(`users.hiddenModes.${search.hidden}`)} onClear={() => setFilter({ hidden: undefined })} /> : null}
+            <button type="button" className="link-btn px-2 text-[13px]" onClick={resetFilters}>
+              {t("users.resetFilter")}
+            </button>
           </div>
         ) : null}
       </div>

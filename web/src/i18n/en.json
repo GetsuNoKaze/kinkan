@@ -520,6 +520,9 @@
     "keyboardHint": "Click a row to open its card · tick the boxes to select several",
     "subtitle": "{n, plural, one {# person} other {# people}} · {active} with an active subscription",
     "filter": "Filter",
+    "moreFilters": "Filters",
+    "activeFilters": "Active filters",
+    "clearFilter": "Remove the filter “{name}”",
     "filters": {
       "all": "All",
       "active": "Active",
@@ -688,6 +691,8 @@
     "enabledToast": "{name} can connect again",
     "disabledToast": "{name} is disabled — connections closed",
     "more": "More actions",
+    "advanced": "More settings",
+    "advancedSub": "Traffic pools and packages, protocols, torrents, Telegram and folder",
     "reissue": "Reissue the link",
     "delete": "Delete user",
     "reissueTitle": "Reissue the link?",

@@ -28,12 +28,13 @@ export function Dashboard() {
         }
       />
       <Kpis />
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]">
-        <TrafficCard />
-        <ServerCard />
-      </div>
+      {/* What needs a hand comes right after the numbers: the subscriptions running out. */}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <AttentionCard />
+        <ServerCard />
+      </div>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]">
+        <TrafficCard />
         <TopCard />
       </div>
       <NodeTrafficCard />
