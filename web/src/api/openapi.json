@@ -680,12 +680,16 @@
         "additionalProperties": false,
         "properties": {
           "action": {
+            "description": "hide и unhide прячут пользователей из списка и возвращают, move кладёт в папку: ни то ни другое не меняет доступ",
             "enum": [
               "extend",
               "reset",
               "disable",
               "enable",
-              "delete"
+              "delete",
+              "hide",
+              "unhide",
+              "move"
             ],
             "type": "string"
           },
@@ -693,6 +697,12 @@
             "description": "Для extend; не задано — на один период: до следующего дня оплаты или на 30 дней",
             "format": "int64",
             "maximum": 3650,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "folder_id": {
+            "description": "Для move: папка; 0 или не задано — убрать из папок",
+            "format": "int64",
             "minimum": 0,
             "type": "integer"
           },
@@ -1078,6 +1088,39 @@
         ],
         "type": "object"
       },
+      "CreateFolderInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "description": "Не задан — gray",
+            "enum": [
+              "gray",
+              "red",
+              "orange",
+              "yellow",
+              "green",
+              "teal",
+              "blue",
+              "purple",
+              "pink"
+            ],
+            "type": "string"
+          },
+          "emoji": {
+            "maxLength": 16,
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
       "CreateInboundInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -1444,6 +1487,49 @@
             "type": "integer"
           }
         },
+        "type": "object"
+      },
+      "FolderView": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "enum": [
+              "gray",
+              "red",
+              "orange",
+              "yellow",
+              "green",
+              "teal",
+              "blue",
+              "purple",
+              "pink"
+            ],
+            "type": "string"
+          },
+          "emoji": {
+            "description": "Значок перед названием; может быть пустым",
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "users": {
+            "description": "Сколько пользователей в папке, скрытые тоже",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "color",
+          "emoji",
+          "users"
+        ],
         "type": "object"
       },
       "GrantInputBody": {
@@ -2073,7 +2159,21 @@
         "additionalProperties": false,
         "properties": {
           "counts": {
-            "$ref": "#/components/schemas/UserCounts"
+            "$ref": "#/components/schemas/UserCounts",
+            "description": "Пользователи по состояниям среди подходящих под папку, источник и скрытых; состояние и поиск не учитываются"
+          },
+          "folder_counts": {
+            "additionalProperties": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "description": "Пользователи по папкам (ключ — id папки, none — вне папок) среди подходящих под источник и скрытых",
+            "type": "object"
+          },
+          "hidden_total": {
+            "description": "Сколько из них скрыто",
+            "format": "int64",
+            "type": "integer"
           },
           "items": {
             "items": {
@@ -2081,8 +2181,21 @@
             },
             "type": "array"
           },
+          "source_counts": {
+            "additionalProperties": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "description": "Пользователи по источникам (admin, bot, trial, import) среди подходящих под папку и скрытых",
+            "type": "object"
+          },
           "total": {
             "description": "Сколько подходит под фильтр",
+            "format": "int64",
+            "type": "integer"
+          },
+          "users_total": {
+            "description": "Все пользователи панели, как бы ни был задан фильтр",
             "format": "int64",
             "type": "integer"
           }
@@ -2090,7 +2203,11 @@
         "required": [
           "items",
           "total",
-          "counts"
+          "counts",
+          "folder_counts",
+          "source_counts",
+          "users_total",
+          "hidden_total"
         ],
         "type": "object"
       },
@@ -2350,6 +2467,11 @@
             ],
             "type": "string"
           },
+          "traffic_24h": {
+            "description": "Сколько унесла нода за последние сутки (вверх и вниз вместе), байты; у только что добавленной ноды 0",
+            "format": "int64",
+            "type": "integer"
+          },
           "update": {
             "$ref": "#/components/schemas/UpdateStatus",
             "description": "Как идёт или прошло обновление ноды"
@@ -2375,6 +2497,7 @@
           "cpu_percent",
           "mem_used",
           "mem_total",
+          "traffic_24h",
           "behind",
           "can_update"
         ],
@@ -2399,6 +2522,67 @@
           "node",
           "key",
           "command"
+        ],
+        "type": "object"
+      },
+      "NodeShare": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "description": "up + down",
+            "format": "int64",
+            "type": "integer"
+          },
+          "down": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "local": {
+            "description": "Своя нода панели",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "Имя ноды; у своей ноды панели может быть пустым",
+            "type": "string"
+          },
+          "up": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "local",
+          "up",
+          "down",
+          "bytes"
+        ],
+        "type": "object"
+      },
+      "NodeSharesOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "description": "Все ноды, больше всех сверху",
+            "items": {
+              "$ref": "#/components/schemas/NodeShare"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Сколько унесли все ноды вместе",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
         ],
         "type": "object"
       },
@@ -2475,6 +2659,25 @@
           "expired",
           "traffic_90",
           "traffic_100"
+        ],
+        "type": "object"
+      },
+      "OrderFoldersInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "ids": {
+            "description": "Все папки, каждая один раз, в том порядке, в каком их показывает список",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
         ],
         "type": "object"
       },
@@ -2750,6 +2953,36 @@
           "password": {
             "description": "Пароль, которым шифруется файл: от 20 символов. Файл остаётся в истории чата навсегда; без пароля его не открыть",
             "maxLength": 256,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PatchFolderInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "enum": [
+              "gray",
+              "red",
+              "orange",
+              "yellow",
+              "green",
+              "teal",
+              "blue",
+              "purple",
+              "pink"
+            ],
+            "type": "string"
+          },
+          "emoji": {
+            "description": "Пустая строка убирает значок",
+            "maxLength": 16,
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 40,
+            "minLength": 1,
             "type": "string"
           }
         },
@@ -3149,6 +3382,16 @@
           "expires_at": {
             "format": "date-time",
             "type": "string"
+          },
+          "folder_id": {
+            "description": "Положить в папку; 0 — убрать из папки",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "hidden": {
+            "description": "Скрыть пользователя из списка или вернуть в него; доступ он не теряет",
+            "type": "boolean"
           },
           "inbounds": {
             "items": {
@@ -5653,6 +5896,18 @@
               "null"
             ]
           },
+          "folder_id": {
+            "description": "Папка пользователя; null — вне папок",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "hidden": {
+            "description": "Скрыт из списка пользователей. Только прячет строку: подписка, оплата и ноды работают как у всех, счётчики обзора не меняются",
+            "type": "boolean"
+          },
           "id": {
             "format": "int64",
             "type": "integer"
@@ -5706,6 +5961,16 @@
               "string",
               "null"
             ]
+          },
+          "source": {
+            "description": "Откуда пользователь: admin — создан в панели или по ключу API, bot — куплен в боте, trial — пробный период бота, import — перенесён из другой панели. Заполняется при создании, не меняется",
+            "enum": [
+              "admin",
+              "bot",
+              "trial",
+              "import"
+            ],
+            "type": "string"
           },
           "state": {
             "enum": [
@@ -5801,6 +6066,9 @@
           "bound_devices",
           "online_at",
           "torrent_ban",
+          "source",
+          "folder_id",
+          "hidden",
           "created_at"
         ],
         "type": "object"
@@ -6769,6 +7037,200 @@
         "summary": "Начать настройку 2FA",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/api/v1/folders": {
+      "get": {
+        "operationId": "list-folders",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FolderView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Папки пользователей",
+        "tags": [
+          "users"
+        ]
+      },
+      "post": {
+        "operationId": "create-folder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFolderInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderView"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Создать папку",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/folders/order": {
+      "put": {
+        "operationId": "order-folders",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderFoldersInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Порядок папок",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/folders/{id}": {
+      "delete": {
+        "operationId": "delete-folder",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Удалить папку: её пользователи остаются, но вне папок",
+        "tags": [
+          "users"
+        ]
+      },
+      "patch": {
+        "operationId": "update-folder",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchFolderInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Изменить папку",
+        "tags": [
+          "users"
         ]
       }
     },
@@ -7911,6 +8373,63 @@
           }
         },
         "summary": "История проверок скорости ноды",
+        "tags": [
+          "node"
+        ]
+      }
+    },
+    "/api/v1/nodes/{id}/traffic": {
+      "get": {
+        "operationId": "node-traffic",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "range",
+            "schema": {
+              "default": "7d",
+              "enum": [
+                "24h",
+                "7d",
+                "30d"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrafficOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "График трафика ноды",
         "tags": [
           "node"
         ]
@@ -9350,6 +9869,54 @@
         ]
       }
     },
+    "/api/v1/stats/nodes": {
+      "get": {
+        "description": "Сколько унесла каждая нода за период. Учёт идёт с версии, где он появился: прошлое по нодам не восстанавливается.",
+        "operationId": "stats-nodes",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "range",
+            "schema": {
+              "default": "24h",
+              "enum": [
+                "24h",
+                "7d",
+                "30d"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeSharesOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Трафик по нодам",
+        "tags": [
+          "stats"
+        ]
+      }
+    },
     "/api/v1/stats/overview": {
       "get": {
         "operationId": "stats-overview",
@@ -10163,6 +10730,52 @@
             "name": "q",
             "schema": {
               "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "description": "all — любая; none — вне папок; число — id папки",
+            "explode": false,
+            "in": "query",
+            "name": "folder",
+            "schema": {
+              "default": "all",
+              "description": "all — любая; none — вне папок; число — id папки",
+              "maxLength": 20,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Откуда пользователь, см. source у пользователя",
+            "explode": false,
+            "in": "query",
+            "name": "source",
+            "schema": {
+              "default": "all",
+              "description": "Откуда пользователь, см. source у пользователя",
+              "enum": [
+                "all",
+                "admin",
+                "bot",
+                "trial",
+                "import"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "show — вместе со скрытыми (по умолчанию: скрытие касается только списка в панели); hide — без скрытых; only — только скрытые",
+            "explode": false,
+            "in": "query",
+            "name": "hidden",
+            "schema": {
+              "default": "show",
+              "description": "show — вместе со скрытыми (по умолчанию: скрытие касается только списка в панели); hide — без скрытых; only — только скрытые",
+              "enum": [
+                "hide",
+                "show",
+                "only"
+              ],
               "type": "string"
             }
           },

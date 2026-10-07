@@ -18,6 +18,8 @@
   --lagoon-50: #e0f1f4; --lagoon-400: #58afbe; --lagoon-500: #2b8c9e; --lagoon-600: #247685;
   --honey-50: #fcf1da; --honey-500: #e0a021; --honey-600: #8f5e06;
   --berry-50: #fce7e4; --berry-600: #bb382f;
+  /* Folder colours that no other token has. */
+  --fc-blue: #3d6fd9; --fc-purple: #7a5bcf; --fc-pink: #cc4f98;
 
   --surface: rgba(255, 255, 255, 0.8);
   --surface-soft: rgba(255, 255, 255, 0.55);
@@ -53,6 +55,7 @@ html[data-theme="midnight"] {
   --lagoon-50: #17343b; --lagoon-400: #66c7d8; --lagoon-500: #42afc2; --lagoon-600: #79d6e4;
   --honey-50: #3a3018; --honey-500: #efb53b; --honey-600: #ffd36b;
   --berry-50: #3d2021; --berry-600: #ff7069;
+  --fc-blue: #7aa2ff; --fc-purple: #b39bff; --fc-pink: #ff8cc6;
   --surface: rgba(22, 29, 39, .92);
   --surface-soft: rgba(24, 31, 42, .72);
   --surface-hover: rgba(40, 50, 64, .96);
@@ -244,6 +247,24 @@ html[data-theme="forest"] {
   .chip:disabled { opacity: 0.5; cursor: not-allowed; }
   .chip:disabled:hover { background: var(--surface-soft); color: var(--ink-600); }
   .chip-count { font-size: 12px; opacity: 0.7; }
+  /* Folders: the API names a colour, the class below gives it; the text keeps the ink colour. */
+  .fc-gray { --fc: var(--ink-400); }
+  .fc-red { --fc: var(--berry-600); }
+  .fc-orange { --fc: var(--mikan-500); }
+  .fc-yellow { --fc: var(--honey-500); }
+  .fc-green { --fc: var(--leaf-500); }
+  .fc-teal { --fc: var(--lagoon-500); }
+  .fc-blue { --fc: var(--fc-blue); }
+  .fc-purple { --fc: var(--fc-purple); }
+  .fc-pink { --fc: var(--fc-pink); }
+  .fdot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--fc, var(--ink-400)); }
+  .fmark { flex: none; font-size: 16px; line-height: 20px; }
+  .fbadge { display: inline-flex; align-items: center; gap: 4px; height: 20px; max-width: 160px; padding: 0 8px; border-radius: 999px; background: color-mix(in srgb, var(--fc, var(--ink-400)) 16%, transparent); font-size: 11px; color: var(--ink-700); }
+  .fbadge .fmark { font-size: 12px; line-height: 16px; }
+  .fbadge > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .swatch { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--fc, var(--ink-400)); color: #fff; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35); transition: transform 0.12s; }
+  .swatch:hover { transform: scale(1.08); }
+  .swatch[aria-checked="true"] { outline: 2px solid var(--ink-900); outline-offset: 2px; }
   .search-field { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--hairline); min-width: 280px; color: var(--ink-500); transition: border-color 0.2s, box-shadow 0.2s; }
   .search-field:focus-within { border-color: var(--mikan-600); box-shadow: 0 0 0 3px rgba(240, 122, 46, 0.18); }
   .search-field input { flex: 1; border: 0; outline: 0; background: none; min-width: 0; color: var(--ink-900); }

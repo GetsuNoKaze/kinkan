@@ -2,6 +2,7 @@
 package domain
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -85,6 +86,21 @@ func NewUsers(st *store.Store, pool *Pool, changes Changes, now func() time.Time
 	return &Users{st: st, now: now, pool: pool, changes: changes}
 }
 
+// Where a user came from, kept for the admin's list (users.source). It is a record, not a
+// permission: nothing reads it to decide what a user may do.
+const (
+	UserFromAdmin  = "admin"  // made in the panel or by an API key
+	UserFromBot    = "bot"    // bought in the Telegram bot
+	UserFromTrial  = "trial"  // the bot's free trial
+	UserFromImport = "import" // brought over from another panel
+)
+
+// UserOrigins lists them in the order the list shows them.
+var UserOrigins = []string{UserFromAdmin, UserFromBot, UserFromTrial, UserFromImport}
+
+// ValidOrigin tells a source the database accepts.
+func ValidOrigin(s string) bool { return slices.Contains(UserOrigins, s) }
+
 type CreateInput struct {
 	Name     string
 	Contact  string
@@ -93,6 +109,9 @@ type CreateInput struct {
 	TariffID int64
 	// TermDays is the term bought (a payment's); invalid: the tariff's own.
 	TermDays sql.NullInt64
+	// Source is where the user comes from; empty: UserFromAdmin. Every path that makes
+	// users names its own.
+	Source string
 }
 
 func (s *Users) Create(ctx context.Context, in CreateInput) (db.User, error) {
@@ -129,6 +148,10 @@ func (s *Users) createTx(ctx context.Context, q *db.Queries, in CreateInput, any
 	if err != nil {
 		return db.User{}, err
 	}
+	source := cmp.Or(in.Source, UserFromAdmin)
+	if !ValidOrigin(source) {
+		return db.User{}, fieldErr("source", "bad_source")
+	}
 	t, err := q.GetTariff(ctx, in.TariffID)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && t.Archived != 0 && !anyTariff) {
 		return db.User{}, fmt.Errorf("tariff %d: %w", in.TariffID, ErrNotFound)
@@ -149,6 +172,7 @@ func (s *Users) createTx(ctx context.Context, q *db.Queries, in CreateInput, any
 		ResetStrategy: t.ResetStrategy, PeriodDays: 30, PeriodStart: now,
 		ExpiresAt:  tariffExpiry(time.Unix(now, 0), durationTariff{termDays(t, in.TermDays), t.BillingDay}),
 		BillingDay: t.BillingDay, SubToken: secure.Token(24), SlotID: sql.NullInt64{Int64: slot.ID, Valid: true}, CreatedAt: now, UpdatedAt: now,
+		Source: source,
 	})
 	if err != nil {
 		return u, err
@@ -168,7 +192,7 @@ func (s *Users) Purchase(ctx context.Context, q *db.Queries, userID, tariffID in
 		u, err = q.GetUser(ctx, userID)
 	}
 	if userID == 0 || errors.Is(err, sql.ErrNoRows) {
-		u, err = s.createTx(ctx, q, CreateInput{Name: name, Note: "Telegram", TariffID: tariffID, TermDays: term}, true)
+		u, err = s.createTx(ctx, q, CreateInput{Name: name, Note: "Telegram", TariffID: tariffID, TermDays: term, Source: UserFromBot}, true)
 		return u, err == nil, err
 	}
 	if err != nil {
@@ -281,6 +305,12 @@ type Patch struct {
 	ClearBillingDay     bool
 	Inbounds            *[]int64 // empty slice = all inbounds
 	TariffID            *int64   // applies the tariff's limits and restarts the term from now
+	// Hidden takes the user off the admin's list (or back on it). It changes nothing else:
+	// the subscription, the billing and the nodes see the same user.
+	Hidden *bool
+	// FolderID puts the user into a folder; ClearFolder takes the user out of theirs.
+	FolderID    *int64
+	ClearFolder bool
 	// Extend adds a term to the expiry the transaction reads, so a payment that lands
 	// meanwhile is not overwritten by an absolute date worked out before it.
 	Extend *Extension
@@ -330,6 +360,13 @@ func (s *Users) Update(ctx context.Context, id int64, p Patch) (db.User, error) 
 
 // updateOn applies a patch on q's transaction; the caller tells the nodes.
 func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) (db.User, error) {
+	// The folder is locked before the user's row, as a deleted folder locks its own first
+	// and then its users': the two never wait for each other in a circle.
+	if p.FolderID != nil {
+		if err := lockFolder(ctx, q, *p.FolderID); err != nil {
+			return db.User{}, err
+		}
+	}
 	u, err := q.GetUser(ctx, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return db.User{}, ErrNotFound
@@ -418,7 +455,46 @@ func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) 
 			par.Inbounds = sql.NullString{String: string(raw), Valid: true}
 		}
 	}
-	return q.UpdateUser(ctx, par)
+	out, err := q.UpdateUser(ctx, par)
+	if err != nil {
+		return out, err
+	}
+	// Where the user is listed is not one of the fields above: it changes on its own
+	// statements, and the row returned follows.
+	if p.Hidden != nil {
+		out.Hidden = b2i(*p.Hidden)
+		if err := q.SetUserHidden(ctx, db.SetUserHiddenParams{Hidden: out.Hidden, UpdatedAt: now, ID: id}); err != nil {
+			return out, err
+		}
+	}
+	if p.FolderID != nil || p.ClearFolder {
+		out.FolderID = sql.NullInt64{}
+		if p.FolderID != nil && !p.ClearFolder {
+			out.FolderID = sql.NullInt64{Int64: *p.FolderID, Valid: true}
+		}
+		if err := q.SetUserFolder(ctx, db.SetUserFolderParams{FolderID: out.FolderID, UpdatedAt: now, ID: id}); err != nil {
+			return out, err
+		}
+	}
+	return out, nil
+}
+
+func b2i(b bool) int64 {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// lockFolder keeps a folder from being deleted until the transaction ends; a folder that
+// is not there is the caller's mistake, not a missing record.
+func lockFolder(ctx context.Context, q *db.Queries, id int64) error {
+	if _, err := q.LockFolder(ctx, id); errors.Is(err, sql.ErrNoRows) {
+		return fieldErr("folder_id", "folder_not_found")
+	} else if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Extend adds days to the current expiry, or to now if the term already ended.
@@ -549,28 +625,47 @@ const (
 	BulkDisable = "disable"
 	BulkEnable  = "enable"
 	BulkDelete  = "delete"
+	// Where a user is listed, not what the user may do: no word goes to the nodes.
+	BulkHide   = "hide"
+	BulkUnhide = "unhide"
+	BulkMove   = "move"
 )
+
+// BulkOpt is what an action needs besides the users.
+type BulkOpt struct {
+	// Days is for BulkExtend (0: one paid period).
+	Days int64
+	// Folder is where BulkMove puts the users; nil takes them out of their folders.
+	Folder *int64
+}
 
 // Bulk does one action to every user of ids in one transaction: all of them, or, if one
 // fails, none (half a list applied, and no record of it, was what a loop of single
 // changes left behind). A user that is gone is skipped; a user listed twice is done once.
-// days is for BulkExtend (0: one paid period). It returns how many users changed.
+// It returns how many users changed.
 //
 // The users are locked in id order and changed by a few set-based statements, so READ
 // COMMITTED is enough: what each change reads (the expiry an extension adds to) comes
 // from the locked rows, and the traffic batches lock the same rows in the same order.
-func (s *Users) Bulk(ctx context.Context, ids []int64, action string, days int64) (int, error) {
+func (s *Users) Bulk(ctx context.Context, ids []int64, action string, opt BulkOpt) (int, error) {
 	switch action {
-	case BulkExtend, BulkReset, BulkDisable, BulkEnable, BulkDelete:
+	case BulkExtend, BulkReset, BulkDisable, BulkEnable, BulkDelete, BulkHide, BulkUnhide, BulkMove:
 	default:
 		return 0, fmt.Errorf("bulk action %q", action)
 	}
+	days := opt.Days
 	want := slices.Clone(ids)
 	slices.Sort(want)
 	want = slices.Compact(want)
 	done := 0
 	err := s.st.TxRC(ctx, func(q *db.Queries) error {
 		done = 0
+		// The folder first, then the users: the order a deleted folder takes its own.
+		if action == BulkMove && opt.Folder != nil {
+			if err := lockFolder(ctx, q, *opt.Folder); err != nil {
+				return err
+			}
+		}
 		lock := q.LockUserRows
 		if action == BulkDelete {
 			lock = q.LockUserRowsForDelete
@@ -602,6 +697,14 @@ func (s *Users) Bulk(ctx context.Context, ids []int64, action string, days int64
 			err = q.SetUsersStatus(ctx, db.SetUsersStatusParams{Status: status, UpdatedAt: now.Unix(), Ids: found})
 		case BulkDelete:
 			err = deleteUsers(ctx, q, found, now.Unix())
+		case BulkHide, BulkUnhide:
+			err = q.SetUsersHidden(ctx, db.SetUsersHiddenParams{Hidden: b2i(action == BulkHide), UpdatedAt: now.Unix(), Ids: found})
+		case BulkMove:
+			folder := sql.NullInt64{}
+			if opt.Folder != nil {
+				folder = sql.NullInt64{Int64: *opt.Folder, Valid: true}
+			}
+			err = q.SetUsersFolder(ctx, db.SetUsersFolderParams{FolderID: folder, UpdatedAt: now.Unix(), Ids: found})
 		}
 		if err != nil {
 			return err
@@ -612,7 +715,7 @@ func (s *Users) Bulk(ctx context.Context, ids []int64, action string, days int64
 	if err != nil {
 		return 0, err
 	}
-	if done > 0 {
+	if done > 0 && action != BulkHide && action != BulkUnhide && action != BulkMove {
 		s.changes.PoliciesChanged()
 	}
 	return done, nil

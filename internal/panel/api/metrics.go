@@ -141,6 +141,14 @@ func (h *handlers) renderMetrics(ctx context.Context, now time.Time) ([]byte, er
 		}
 		m.sample("mikan_node_up", b2f(ok), "node_id", id, "node", n.Name)
 	}
+	// Counted from the day the panel started to count by node, so a counter and not the
+	// rows of node_traffic_*, which are cut when old.
+	m.help("mikan_node_traffic_bytes_total", "Traffic the node carried for users since it was counted by node. Drops when the node is deleted.", "counter")
+	for _, n := range nodes {
+		id := strconv.FormatInt(n.ID, 10)
+		m.sample("mikan_node_traffic_bytes_total", float64(n.TotalUp), "node_id", id, "node", n.Name, "direction", "up")
+		m.sample("mikan_node_traffic_bytes_total", float64(n.TotalDown), "node_id", id, "node", n.Name, "direction", "down")
+	}
 	if len(live) > 0 {
 		for _, f := range []struct {
 			name, help string

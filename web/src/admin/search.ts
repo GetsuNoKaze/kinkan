@@ -4,7 +4,23 @@
 import type { User } from "../api/client";
 
 export const USER_STATES = ["all", "active", "expiring", "limited", "expired", "disabled"] as const;
-export type UsersSearch = { state: "all" | User["state"]; q: string; user?: number; create?: true };
+export const USER_SOURCES = ["all", "admin", "bot", "trial", "import"] as const;
+/** Hidden users: left off the list, listed with the rest, or the only ones listed. */
+export const USER_HIDDEN = ["hide", "show", "only"] as const;
+/**
+ * The filters of the users list live in the URL, so a reload or a shared link keeps them.
+ * What is the default (any folder, any source, hidden left off) is left out of it.
+ * folder: "none" (outside folders) or a folder's id.
+ */
+export type UsersSearch = {
+  state: "all" | User["state"];
+  q: string;
+  user?: number;
+  create?: true;
+  folder?: number | "none";
+  source?: Exclude<(typeof USER_SOURCES)[number], "all">;
+  hidden?: Exclude<(typeof USER_HIDDEN)[number], "hide">;
+};
 
 export const SETTINGS_TABS = ["general", "subscription", "routing", "rules", "security", "import"] as const;
 export type SettingsSearch = { tab: (typeof SETTINGS_TABS)[number] };
