@@ -494,7 +494,22 @@ html[data-theme="forest"] {
   .section-layout { display: grid; grid-template-columns: 216px minmax(0, 1fr); gap: 24px; align-items: start; }
   .section-nav { position: sticky; top: var(--sticky-top); }
 }
+/* Folded by the admin on a wide screen: the same icons-only sidebar as on a narrower one. */
+.fold-btn { margin-left: auto; color: var(--ink-500); }
+@media (min-width: 1280px) {
+  .app[data-folded] { grid-template-columns: 76px minmax(0, 1fr); }
+  .app[data-folded] .sidebar { padding: 16px 8px; align-items: center; }
+  .app[data-folded] .brand { padding: 4px; flex-direction: column; gap: 8px; }
+  .app[data-folded] .fold-btn { margin-left: 0; }
+  .app[data-folded] :is(.brand-name, .nav-label, .nav-count, .node-card, .admin-row .who-wrap, .admin-row .logout, .update-label) { display: none; }
+  .app[data-folded] .nav-item { justify-content: center; width: 48px; padding: 0; }
+  .app[data-folded] .update-chip { justify-content: center; width: 48px; padding: 8px 0; }
+  .app[data-folded] .sidebar .lang-switch { flex-direction: column; align-self: center; }
+}
 @media (max-width: 1279px) {
+  .fold-btn { display: none; }
+  .update-label { display: none; }
+  .update-chip { justify-content: center; width: 48px; padding: 8px 0; }
   .app { grid-template-columns: 76px minmax(0, 1fr); }
   .sidebar { padding: 16px 8px; align-items: center; }
   .brand { padding: 4px; }
