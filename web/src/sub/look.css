@@ -152,6 +152,7 @@
 .md a { color: var(--mikan-700); text-decoration: underline; text-underline-offset: 3px; }
 .md code { padding: 1px 4px; border-radius: 6px; background: var(--hover); }
 .md pre { padding: 12px; border-radius: var(--r-md); background: var(--code-bg); color: var(--code-fg); font: 12px/1.6 var(--font-mono-stack); white-space: pre-wrap; overflow-x: auto; }
+.md pre code { padding: 0; border-radius: 0; background: none; }
 .md blockquote { padding: 8px 12px; border-radius: var(--r-md); background: var(--hover); color: var(--ink-700); }
 .md img { display: block; max-width: 100%; height: auto; border-radius: var(--r-md); border: 1px solid var(--hairline); }
 .md hr { border: 0; border-top: 1px solid var(--hairline); }

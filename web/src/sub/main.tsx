@@ -20,7 +20,10 @@ const AFTER_PAYMENT_MS = [2_000, 5_000, 10_000];
 
 // What the admin made of the page, in its HTML: the look goes on before the first paint.
 const page = readPage();
-const asset = (path?: string) => (path ? subRoot + "/" + path : undefined);
+// The subscription path, as the server's <base> gives it: the images and instructions are
+// under it, whether the page is opened by its token or as the Mini App (/tg).
+const pageRoot = new URL(".", document.baseURI).href.replace(/\/$/, "");
+const asset = (path?: string) => (path ? pageRoot + "/" + path : undefined);
 applyLook(page, asset);
 const config = page.config;
 
@@ -304,7 +307,7 @@ function SubPage() {
         <DocScreen
           key={docId}
           item={page.docs.find((d) => d.id === docId)}
-          load={() => request(`${subRoot}/docs/${docId}`).then((r) => json<DocView>(r))}
+          load={() => request(`${pageRoot}/docs/${docId}`).then((r) => json<DocView>(r))}
           onBack={() => history.back()}
           tgMode={tgMode}
         />
