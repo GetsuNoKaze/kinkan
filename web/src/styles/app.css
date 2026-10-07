@@ -211,12 +211,54 @@ html[data-theme="forest"] {
   .kpi-value { font: 500 32px/40px var(--font-display-stack); letter-spacing: -0.03em; }
   .kpi-value small { font: 500 16px/20px var(--font-display-stack); color: var(--ink-500); margin-left: 4px; letter-spacing: -0.01em; }
   .kpi-foot { margin-top: auto; font-size: 12px; color: var(--ink-500); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .tabs { display: flex; gap: 4px; padding: 4px; overflow-x: auto; scrollbar-width: none; border-radius: var(--r-md); background: var(--ink-50); width: max-content; max-width: 100%; }
-  .tabs::-webkit-scrollbar { display: none; }
-  .tabs button { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--ink-600); transition: background-color 0.2s, color 0.2s, box-shadow 0.2s; }
-  .tabs button:hover { color: var(--ink-900); }
+  /* A page's few sections (up to four): one bar as wide as the content, equal parts, no scrolling. */
+  .tabs { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; padding: 4px; border-radius: var(--r-md); background: var(--ink-50); width: 100%; }
+  .tabs button { min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--ink-600); transition: background-color 0.2s, color 0.2s, box-shadow 0.2s; }
+  .tabs button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tabs button svg { flex: none; }
+  .tabs button:hover { color: var(--ink-900); background: var(--hover); }
   .tabs button[aria-selected="true"] { background: var(--surface-solid); color: var(--ink-900); box-shadow: var(--shadow-sm); }
   .tabs button:focus-visible { outline: 2px solid var(--mikan-600, currentColor); outline-offset: 2px; }
+  /* A page's many sections: a list beside the content on wide screens, a select on narrow ones. */
+  .section-layout { display: flex; flex-direction: column; gap: 16px; align-items: stretch; }
+  .section-nav { display: flex; flex-direction: column; gap: 4px; }
+  .section-nav ul { display: flex; flex-direction: column; gap: 4px; }
+  .section-nav button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 40px; padding: 8px 12px; border-radius: var(--r-md); text-align: left; font-weight: 500; color: var(--ink-600); transition: background-color 0.2s, color 0.2s, box-shadow 0.2s; }
+  .section-nav button:hover { background: var(--surface-soft); color: var(--ink-900); }
+  .section-nav button[aria-current="page"], .section-nav button[data-open="true"] { color: var(--ink-900); }
+  .section-nav button[aria-current="page"] { background: var(--surface-solid); box-shadow: var(--shadow-sm); }
+  .section-nav button[aria-current="page"] svg, .section-nav button[data-open="true"] svg { color: var(--mikan-600); }
+  .section-nav button svg { flex: none; }
+  .section-nav .sub { gap: 2px; margin: 0 0 4px 28px; padding-left: 12px; border-left: 1px solid var(--hairline); }
+  .section-nav .sub button { min-height: 32px; padding: 6px 12px; font-size: 13px; }
+  .section-nav-badge { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--ink-500); }
+  .section-body { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+  .section-body.narrow { max-width: 720px; }
+  /* An editor with its live preview beside it once both fit; the preview follows the scroll. */
+  .with-preview { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+  .with-preview > aside { position: sticky; top: var(--sticky-top, 16px); }
+  /* The bar of a page's unsaved draft: under the content, kept in view while scrolling. */
+  .savebar { position: sticky; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 25; align-self: center; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; max-width: 100%; padding: 8px 8px 8px 16px; border-radius: var(--r-lg); }
+  .savebar-text { font-size: 13px; font-weight: 500; }
+  /* Save and reset of a card's form: always at its bottom right. */
+  .form-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--hairline); }
+  .form-actions-note { margin-right: auto; font-size: 12px; color: var(--ink-500); }
+  /* A row with a switch: what it is on the left, the switch on the right. */
+  .switch-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 12px 0; }
+  .switch-row-title { font-size: 13px; font-weight: 500; color: var(--ink-900); }
+  .switch-row-sub { margin-top: 4px; font-size: 12px; color: var(--ink-500); }
+  .switch-row-sub.warn { color: var(--honey-600); }
+  /* What most people never change, folded away under a title. */
+  .disclosure { border-top: 1px solid var(--hairline); }
+  .disclosure > summary { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 12px 0; cursor: pointer; list-style: none; border-radius: 8px; }
+  .disclosure > summary::-webkit-details-marker { display: none; }
+  .disclosure > summary:hover .disclosure-title { color: var(--ink-900); }
+  .disclosure > summary > svg { flex: none; color: var(--ink-500); transition: transform 0.2s var(--ease-out); }
+  .disclosure[open] > summary > svg { transform: rotate(90deg); }
+  .disclosure-title { font-size: 13px; font-weight: 600; color: var(--ink-700); }
+  .disclosure-sub { font-size: 12px; color: var(--ink-500); }
+  .disclosure-body { padding: 4px 0 8px; }
+  .card > .disclosure:last-child .disclosure-body { padding-bottom: 0; }
   .seg { display: inline-flex; padding: 4px; gap: 4px; border-radius: var(--r-md); background: var(--ink-50); }
   .seg button { height: 28px; padding: 0 12px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--ink-600); transition: background-color 0.2s, color 0.2s, box-shadow 0.2s; }
   .seg button:hover { color: var(--ink-900); }
@@ -427,6 +469,15 @@ html[data-theme="forest"] {
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Wide screens: the page's title and main actions stay at the top while it scrolls, the
+   section list stands beside the content. */
+@media (min-width: 1024px) {
+  :root { --sticky-top: 96px; }
+  .topbar { position: sticky; top: 0; z-index: 20; margin: -16px -16px 0; padding: 16px 20px 12px; min-height: 80px; background: color-mix(in srgb, var(--bg) 86%, transparent); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); box-shadow: 0 1px 0 var(--hairline); }
+  .topbar .page-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .section-layout { display: grid; grid-template-columns: 216px minmax(0, 1fr); gap: 24px; align-items: start; }
+  .section-nav { position: sticky; top: var(--sticky-top); }
+}
 @media (max-width: 1279px) {
   .app { grid-template-columns: 76px minmax(0, 1fr); }
   .sidebar { padding: 16px 8px; align-items: center; }
@@ -443,12 +494,14 @@ html[data-theme="forest"] {
   .mnav .active { color: var(--ink-900); }
   .mnav .active svg { color: var(--mikan-600); }
   .main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
-  .bulk-bar { bottom: calc(88px + env(safe-area-inset-bottom)); }
+  .bulk-bar, .savebar { bottom: calc(88px + env(safe-area-inset-bottom)); }
 }
 @media (max-width: 760px) {
   .page-title { font-size: 22px; line-height: 28px; }
   .kpi-value { font-size: 26px; line-height: 32px; }
   .search-field { min-width: 0; flex: 1; }
+  .tabs button { padding: 0 8px; }
+  .tabs button svg { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
@@ -456,4 +509,5 @@ html[data-theme="forest"] {
 }
 @media (prefers-reduced-transparency: reduce) {
   .glass, .glass-strong { background: var(--surface-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .topbar { background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
