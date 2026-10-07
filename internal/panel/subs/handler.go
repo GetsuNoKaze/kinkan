@@ -150,7 +150,8 @@ var unbindPath = regexp.MustCompile(`^devices/([0-9]{1,18})/unbind$`)
 
 // ServeHTTP handles "/<token>", "/<token>/info", "POST /<token>/devices/<id>/unbind" (the
 // subscription page), the page assets under the sub prefix, the admin's images
-// ("/brand/<name>") and instructions ("/docs/<id>").
+// ("/brand/<name>") and instructions ("/<token>/docs/<id>": for subscribers only, not for
+// whoever counts ids).
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 	token, rest, _ := strings.Cut(p, "/")
@@ -176,10 +177,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case token == "brand" && h.pages != nil:
 		h.image(w, r, rest)
 		return
-	case token == "docs" && h.pages != nil:
-		h.doc(w, r, rest)
-		return
-	case rest != "" && rest != "info":
+	case rest != "" && rest != "info" && !strings.HasPrefix(rest, "docs/"):
 		server.NotFound(w)
 		return
 	}
@@ -195,6 +193,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if unbind != nil {
 		id, _ := strconv.ParseInt(unbind[1], 10, 64)
 		h.unbind(w, r, u, id)
+		return
+	}
+	if id, ok := strings.CutPrefix(rest, "docs/"); ok {
+		if h.pages == nil {
+			server.NotFound(w)
+			return
+		}
+		h.doc(w, r, id)
 		return
 	}
 	cfg, err := h.cfg(r.Context())

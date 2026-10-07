@@ -192,7 +192,7 @@ func (h *handlers) putSubPage(ctx context.Context, in *putSubPageInput) (*subPag
 	if c.Look.Accent == "brand" && accent == "" {
 		details = append(details, &huma.ErrorDetail{Location: "body.brand_accent", Message: "color_required"})
 	}
-	if in.Body.Brand != nil && strings.ContainsAny(*in.Body.Brand, "\r\n") {
+	if in.Body.Brand != nil && (strings.ContainsAny(*in.Body.Brand, "\r\n") || subpage.HasControl(*in.Body.Brand)) {
 		details = append(details, &huma.ErrorDetail{Location: "body.brand", Message: "one_line"})
 	}
 	assets, err := h.subPages().Assets(ctx)

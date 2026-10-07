@@ -140,13 +140,21 @@ func TestTooManyOwnBlocks(t *testing.T) {
 
 func TestCleanCSS(t *testing.T) {
 	for in, want := range map[string]string{
-		"body{color:red}":                                  "body{color:red}",
-		"a{}</style><script>alert(1)</script>":             "a{}/style>script>alert(1)/script>",
-		"@import url(https://evil.example/x.css); a{}":     "url(https://evil.example/x.css); a{}",
-		"@IMPORT 'x'; @imp@importort 'y';":                 "'x';  'y';",
-		`@\69mport url(x); b{}`:                            "69mport url(x); b{}",
-		".x::after{content:'<'}":                           ".x::after{content:''}",
-		"  @media (max-width: 400px){.a{color:red}}  \n\n": "@media (max-width: 400px){.a{color:red}}",
+		"body{color:red}":                              "body{color:red}",
+		"a{}</style><script>alert(1)</script>":         "a{}/style>script>alert(1)/script>",
+		"@import url(https://evil.example/x.css); a{}": "none; a{}",
+		"@IMPORT 'x'; @imp@importort 'y';":             "'x';  'y';",
+		`@\69mport url(x); b{}`:                        "@69mport url(x); b{}",
+		// Images of other sites would let them count the subscribers; the panel's and
+		// data: images stay, and an escape cannot spell url( past the check.
+		"body{background:url(https://t.example/p.gif)}":         "body{background:none}",
+		"a{background:URL( '//t.example/p.gif' )}":              "a{background:none}",
+		"a{background:image-set('https://t.example/a.png' 1x)}": "a{background:none}",
+		`a{background:u\72l(https://t.example/p.gif)}`:          "a{background:u72l(https://t.example/p.gif)}",
+		"a{background:url(/sub/brand/logo)}":                    "a{background:url(/sub/brand/logo)}",
+		"a{background:url(data:image/png;base64,AAAA)}":         "a{background:url(data:image/png;base64,AAAA)}",
+		".x::after{content:'<'}":                                ".x::after{content:''}",
+		"  @media (max-width: 400px){.a{color:red}}  \n\n":      "@media (max-width: 400px){.a{color:red}}",
 	} {
 		if got := CleanCSS(in); got != want {
 			t.Errorf("CleanCSS(%q) = %q, want %q", in, got, want)

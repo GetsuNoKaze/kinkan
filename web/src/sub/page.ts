@@ -160,9 +160,10 @@ export function titleOf(config: PageConfig, type: BlockType): string {
  * at-rule spelled with an escape. The preview applies the draft the same way.
  */
 export function cleanCSS(css: string): string {
-  let out = css.replaceAll("<", "").replaceAll("\0", "");
+  // As the server's subpage.CleanCSS: no escapes, no @import, no url() of another site.
+  let out = css.replaceAll("<", "").replaceAll("\0", "").replaceAll("\\", "");
   for (;;) {
-    const next = out.replace(/@import/gi, "").replaceAll("@\\", "");
+    const next = out.replace(/@import/gi, "").replace(/(url|image-set|image)\(\s*['"]?\s*(https?:|\/\/)[^)]*\)/gi, "none");
     if (next === out) break;
     out = next;
   }

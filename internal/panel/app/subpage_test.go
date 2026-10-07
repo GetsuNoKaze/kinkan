@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -68,7 +69,10 @@ func TestSubPageDefaultIsUnchanged(t *testing.T) {
 		t.Fatalf("page: %d %s", resp.StatusCode, body)
 	}
 	p := pageData(t, body)
-	if !reflect.DeepEqual(p.Config, subpage.Default()) || p.Brand != "VPN" || p.Accent != "" || p.Logo != "" || p.Background != "" || len(p.Docs) != 0 {
+	// The page gets the blocks that are on: the default's own, in its order.
+	def := subpage.Default()
+	def.Blocks = slices.DeleteFunc(def.Blocks, func(b subpage.PageBlock) bool { return !b.On })
+	if !reflect.DeepEqual(p.Config, def) || p.Brand != "VPN" || p.Accent != "" || p.Logo != "" || p.Background != "" || len(p.Docs) != 0 {
 		t.Fatalf("default page data: %+v", p)
 	}
 	for _, extra := range []string{"<style", "og:", "<link"} {
@@ -82,7 +86,7 @@ func TestSubPageDefaultIsUnchanged(t *testing.T) {
 		t.Errorf("CSP changed: %s", got)
 	}
 	// The Mini App is the same page.
-	if resp, body := h.do(http.MethodGet, "/"+subPath+"/tg", nil, nil); resp.StatusCode != http.StatusOK || !reflect.DeepEqual(pageData(t, body).Config, subpage.Default()) {
+	if resp, body := h.do(http.MethodGet, "/"+subPath+"/tg", nil, nil); resp.StatusCode != http.StatusOK || !reflect.DeepEqual(pageData(t, body).Config, def) {
 		t.Fatalf("mini app page: %d", resp.StatusCode)
 	}
 }
@@ -150,6 +154,8 @@ func TestSubPageEditorEndToEnd(t *testing.T) {
 	c.OG = subpage.PageOG{Title: "Mikan VPN", Description: "Подписка", Image: true}
 	c.CSS = ".card{color:red}</style><script>alert(1)</script>@import url(https://evil.example/x.css);"
 	c.Blocks = append(c.Blocks, subpage.PageBlock{ID: "text-a", Type: subpage.TypeText, On: true, Text: "**Привет**"})
+	// A block turned off is a draft: it must not reach the page's source.
+	c.Blocks = append(c.Blocks, subpage.PageBlock{ID: "text-b", Type: subpage.TypeText, On: false, Text: "черновик для своих"})
 	resp, out = h.do(http.MethodPut, api+"/sub-page", map[string]any{"config": c, "brand": "Mikan", "brand_accent": "#2a813f"}, csrf)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("save: %d %s", resp.StatusCode, out)
@@ -159,7 +165,7 @@ func TestSubPageEditorEndToEnd(t *testing.T) {
 		BrandAccent string             `json:"brand_accent"`
 		Logo        *subpage.PageAsset `json:"logo"`
 	}
-	if json.Unmarshal(out, &view) != nil || view.Config.CSS != ".card{color:red}/style>script>alert(1)/script> url(https://evil.example/x.css);" || view.BrandAccent != "#2A813F" || view.Logo == nil {
+	if json.Unmarshal(out, &view) != nil || view.Config.CSS != ".card{color:red}/style>script>alert(1)/script> none;" || view.BrandAccent != "#2A813F" || view.Logo == nil {
 		t.Fatalf("saved: %s", out)
 	}
 
@@ -185,7 +191,10 @@ func TestSubPageEditorEndToEnd(t *testing.T) {
 	if p.Brand != "Mikan" || p.Accent != "#2A813F" || p.Logo != "brand/logo?v="+asset.Hash || p.Config.Look.Palette != "forest" || len(p.Docs) != 1 || p.Docs[0].ID != shown || p.Config.CSS != "" {
 		t.Fatalf("page data: %+v", p)
 	}
-	for _, want := range []string{`<meta property="og:title" content="Mikan VPN">`, `<meta property="og:image" content="https://203.0.113.10:21355/` + subPath + `/brand/logo?v=` + asset.Hash + `">`, `<style id="mikan-css">.card{color:red}/style>script>alert(1)/script> url(https://evil.example/x.css);</style>`} {
+	if bytes.Contains(body, []byte("черновик для своих")) {
+		t.Fatal("a block turned off is in the page")
+	}
+	for _, want := range []string{`<meta property="og:title" content="Mikan VPN">`, `<meta property="og:image" content="https://203.0.113.10:21355/` + subPath + `/brand/logo?v=` + asset.Hash + `">`, `<style id="mikan-css">.card{color:red}/style>script>alert(1)/script> none;</style>`} {
 		if !bytes.Contains(body, []byte(want)) {
 			t.Errorf("page lacks %s:\n%s", want, body)
 		}
@@ -219,13 +228,17 @@ func TestSubPageEditorEndToEnd(t *testing.T) {
 	}
 
 	// An instruction opens by its id, a draft does not.
-	resp, body = h.do(http.MethodGet, "/"+subPath+"/docs/"+strconv.FormatInt(shown, 10), nil, nil)
+	// Only a subscriber opens them: an id alone is not enough.
+	if resp, _ := h.do(http.MethodGet, "/"+subPath+"/docs/"+strconv.FormatInt(shown, 10), nil, nil); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("an instruction without a token: %d", resp.StatusCode)
+	}
+	resp, body = h.do(http.MethodGet, sub+"/docs/"+strconv.FormatInt(shown, 10), nil, nil)
 	var doc subpage.DocView
 	if resp.StatusCode != http.StatusOK || json.Unmarshal(body, &doc) != nil || doc.Body != "## Шаг 1\nОткройте Happ" || doc.Platform != "ios" {
 		t.Fatalf("doc: %d %s", resp.StatusCode, body)
 	}
 	for _, id := range []string{strconv.FormatInt(draft, 10), "999", "x", "-1"} {
-		if resp, _ := h.do(http.MethodGet, "/"+subPath+"/docs/"+id, nil, nil); resp.StatusCode != http.StatusNotFound {
+		if resp, _ := h.do(http.MethodGet, sub+"/docs/"+id, nil, nil); resp.StatusCode != http.StatusNotFound {
 			t.Errorf("doc %s: %d", id, resp.StatusCode)
 		}
 	}
@@ -244,7 +257,7 @@ func TestSubPageEditorEndToEnd(t *testing.T) {
 	if resp, _ := h.do(http.MethodDelete, api+"/sub-docs/"+strconv.FormatInt(shown, 10), nil, csrf); resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("delete: %d", resp.StatusCode)
 	}
-	if resp, _ := h.do(http.MethodGet, "/"+subPath+"/docs/"+strconv.FormatInt(shown, 10), nil, nil); resp.StatusCode != http.StatusNotFound {
+	if resp, _ := h.do(http.MethodGet, sub+"/docs/"+strconv.FormatInt(shown, 10), nil, nil); resp.StatusCode != http.StatusNotFound {
 		t.Fatal("a deleted instruction still opens")
 	}
 

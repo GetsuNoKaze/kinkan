@@ -343,6 +343,10 @@ func normalizeBlocks(c *Page) []Problem {
 				bad(i, "text", "too_long", 8000)
 				b.Text = ""
 			}
+			if HasControl(b.Text) {
+				bad(i, "text", "value_invalid", nil)
+				b.Text = ""
+			}
 			if u := FirstBadImage(b.Text); u != "" {
 				bad(i, "text", "image_https", u)
 			}
@@ -443,23 +447,36 @@ func appName(s string) bool {
 	})
 }
 
-var cssImport = regexp.MustCompile(`(?i)@import`)
+var (
+	cssImport = regexp.MustCompile(`(?i)@import`)
+	// A url() or image-set() that leaves the panel: every subscriber's app would fetch it,
+	// telling another site their address.
+	cssRemote = regexp.MustCompile(`(?i)(url|image-set|image)\(\s*['"]?\s*(https?:|//)[^)]*\)`)
+)
 
-// CleanCSS keeps the admin's CSS inside its <style>: no "<" at all (so no "</style>"
-// either; CSS needs it nowhere but in strings), no @import (no rules from other sites)
-// and no at-rule written with an escape, which is how @import is spelled to slip by.
+// CleanCSS keeps the admin's CSS inside its <style> and the subscribers to the panel: no
+// "<" at all (so no "</style>" either; CSS needs it nowhere but in strings), no @import,
+// no escapes (they spell @import or url( so that the checks miss them) and no url() of
+// another site, which would let it count the visitors. Local and data: images stay.
 func CleanCSS(css string) string {
 	css = strings.ReplaceAll(css, "<", "")
 	css = strings.ReplaceAll(css, "\x00", "")
+	css = strings.ReplaceAll(css, `\`, "")
 	for {
 		next := cssImport.ReplaceAllString(css, "")
-		next = strings.ReplaceAll(next, `@\`, "")
+		next = cssRemote.ReplaceAllString(next, "none")
 		if next == css {
 			break
 		}
 		css = next
 	}
 	return strings.TrimSpace(css)
+}
+
+// HasControl says whether s holds a control character other than a line break or a tab:
+// PostgreSQL refuses NUL in text, and the rest only breaks the page.
+func HasControl(s string) bool {
+	return strings.ContainsFunc(s, func(r rune) bool { return unicode.IsControl(r) && r != '\n' && r != '\t' })
 }
 
 // Doc is an instruction as the admin writes it: a page of Markdown with a title, an emoji
@@ -493,6 +510,9 @@ func NormalizeDoc(d *Doc) []Problem {
 	}
 	if utf8.RuneCountInString(d.Body) > 20000 {
 		bad("body", "too_long", 20000)
+	}
+	if HasControl(d.Body) {
+		bad("body", "value_invalid", nil)
 	}
 	if u := FirstBadImage(d.Body); u != "" {
 		bad("body", "image_https", u)

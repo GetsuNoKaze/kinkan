@@ -10,6 +10,7 @@ import (
 	"errors"
 	"html"
 	"net/http"
+	"slices"
 
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
@@ -145,6 +146,8 @@ func (s *Service) Public(ctx context.Context, brand, accent string) (Public, err
 	}
 	p := Public{Config: c, Brand: brand, Docs: []DocItem{}, css: c.CSS}
 	p.Config.CSS = ""
+	// A block turned off is the admin's draft: it does not go into the page's source.
+	p.Config.Blocks = slices.DeleteFunc(slices.Clone(c.Blocks), func(b PageBlock) bool { return !b.On })
 	if c.Look.Accent == "brand" && ValidColor(accent) {
 		p.Accent = accent
 	}
@@ -165,9 +168,9 @@ func (s *Service) Public(ctx context.Context, brand, accent string) (Public, err
 }
 
 // RemoteImages says whether the page may show images from other sites: an instruction or
-// a text block may hold https images, the admin's CSS may point at them.
+// a text block may hold https images. The admin's CSS may not (CleanCSS).
 func (p Public) RemoteImages() bool {
-	if len(p.Docs) > 0 || p.css != "" {
+	if len(p.Docs) > 0 {
 		return true
 	}
 	for _, b := range p.Config.Blocks {

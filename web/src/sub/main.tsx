@@ -311,7 +311,7 @@ function SubPage() {
         <DocScreen
           key={docId}
           item={page.docs.find((d) => d.id === docId)}
-          load={() => request(`${pageRoot}/docs/${docId}`).then((r) => json<DocView>(r))}
+          load={() => request(`${subURL}/docs/${docId}`).then((r) => json<DocView>(r))}
           onBack={() => history.back()}
           tgMode={tgMode}
         />
