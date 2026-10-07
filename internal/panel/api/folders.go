@@ -266,6 +266,9 @@ func (h *handlers) deleteFolder(ctx context.Context, in *folderIDInput) (*struct
 				freed = int(r.N)
 			}
 		}
+		if _, err := q.LockFolderUsers(ctx, sql.NullInt64{Int64: in.ID, Valid: true}); err != nil {
+			return err
+		}
 		n, err := q.DeleteFolder(ctx, in.ID)
 		if err != nil {
 			return err

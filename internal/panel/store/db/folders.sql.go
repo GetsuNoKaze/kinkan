@@ -167,6 +167,35 @@ func (q *Queries) LockFolder(ctx context.Context, id int64) (int64, error) {
 	return id_2, err
 }
 
+const lockFolderUsers = `-- name: LockFolderUsers :many
+SELECT id FROM users WHERE folder_id = $1 ORDER BY id FOR NO KEY UPDATE
+`
+
+// The folder's users, locked in id order like every other writer of users rows: the
+// foreign key would otherwise lock them in index order and deadlock with traffic batches.
+func (q *Queries) LockFolderUsers(ctx context.Context, folderID sql.NullInt64) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, lockFolderUsers, folderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setFolderSort = `-- name: SetFolderSort :exec
 UPDATE user_folders SET sort = $1 WHERE id = $2
 `

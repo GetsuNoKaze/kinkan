@@ -188,7 +188,7 @@ type listUsersInput struct {
 	Query  string `query:"q" maxLength:"100"`
 	Folder string `query:"folder" maxLength:"20" default:"all" doc:"all — любая; none — вне папок; число — id папки"`
 	Source string `query:"source" enum:"all,admin,bot,trial,import" default:"all" doc:"Откуда пользователь, см. source у пользователя"`
-	Hidden string `query:"hidden" enum:"hide,show,only" default:"hide" doc:"hide — без скрытых; show — вместе со скрытыми; only — только скрытые"`
+	Hidden string `query:"hidden" enum:"hide,show,only" default:"show" doc:"show — вместе со скрытыми (по умолчанию: скрытие касается только списка в панели); hide — без скрытых; only — только скрытые"`
 	Limit  int    `query:"limit" minimum:"1" maximum:"500" default:"100"`
 	Offset int    `query:"offset" minimum:"0" default:"0"`
 }

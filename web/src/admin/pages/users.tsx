@@ -64,7 +64,8 @@ export function UsersPage() {
   // The last search text this page itself put into the URL: a different one in the URL
   // came from outside (Back, a link, the reset button) and replaces what is typed.
   const written = useRef(search.q);
-  const users = useUsers({ state: search.state, q: search.q, folder: search.folder, source: search.source, hidden: search.hidden });
+  // The list hides the hidden unless asked: the API's own default shows everyone.
+  const users = useUsers({ state: search.state, q: search.q, folder: search.folder, source: search.source, hidden: search.hidden ?? "hide" });
   const tariffs = useTariffs();
   const folders = useFolders();
   const overview = useOverview();

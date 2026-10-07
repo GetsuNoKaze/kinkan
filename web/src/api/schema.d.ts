@@ -7344,7 +7344,7 @@ export interface operations {
                 folder?: string;
                 /** @description Откуда пользователь, см. source у пользователя */
                 source?: "all" | "admin" | "bot" | "trial" | "import";
-                /** @description hide — без скрытых; show — вместе со скрытыми; only — только скрытые */
+                /** @description show — вместе со скрытыми (по умолчанию: скрытие касается только списка в панели); hide — без скрытых; only — только скрытые */
                 hidden?: "hide" | "show" | "only";
                 limit?: number;
                 offset?: number;

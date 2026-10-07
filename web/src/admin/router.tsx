@@ -60,7 +60,7 @@ export function createAppRouter(queryClient: QueryClient) {
       user: typeof s.user === "number" ? s.user : Number(s.user) || undefined,
       create: s.create === true || s.create === "true" ? true : undefined,
       // A folder is "none" or an id; anything else in a hand-made link is dropped.
-      folder: s.folder === "none" ? "none" : Number.isSafeInteger(Number(s.folder)) && Number(s.folder) >= 1 ? Number(s.folder) : undefined,
+      folder: s.folder === "none" ? "none" : (typeof s.folder === "number" || typeof s.folder === "string") && Number.isSafeInteger(Number(s.folder)) && Number(s.folder) >= 1 ? Number(s.folder) : undefined,
       source: USER_SOURCES.includes(s.source as (typeof USER_SOURCES)[number]) && s.source !== "all" ? (s.source as UsersSearch["source"]) : undefined,
       hidden: s.hidden === "show" || s.hidden === "only" ? s.hidden : undefined,
     }),

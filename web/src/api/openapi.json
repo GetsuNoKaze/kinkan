@@ -10764,13 +10764,13 @@
             }
           },
           {
-            "description": "hide — без скрытых; show — вместе со скрытыми; only — только скрытые",
+            "description": "show — вместе со скрытыми (по умолчанию: скрытие касается только списка в панели); hide — без скрытых; only — только скрытые",
             "explode": false,
             "in": "query",
             "name": "hidden",
             "schema": {
-              "default": "hide",
-              "description": "hide — без скрытых; show — вместе со скрытыми; only — только скрытые",
+              "default": "show",
+              "description": "show — вместе со скрытыми (по умолчанию: скрытие касается только списка в панели); hide — без скрытых; only — только скрытые",
               "enum": [
                 "hide",
                 "show",

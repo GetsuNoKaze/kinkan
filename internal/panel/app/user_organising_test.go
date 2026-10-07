@@ -159,8 +159,13 @@ func TestFoldersAndHiddenUsers(t *testing.T) {
 	if resp, body := k.do(http.MethodPatch, k.api+"/users/"+idOf(users["anna"]), map[string]any{"hidden": true}, k.csrf); resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"hidden":true`) {
 		t.Fatalf("hide one: %d %s", resp.StatusCode, body)
 	}
-	if l := list(url.Values{}); !slices.Equal(l.names(), []string{"clara"}) || l.UsersTotal != 4 || l.HiddenTotal != 3 || l.FolderCounts[idOf(friends)] != 1 {
+	// The panel's list asks for "hide"; the API's default keeps everyone, so a script that
+	// read all users before still does.
+	if l := list(url.Values{"hidden": {"hide"}}); !slices.Equal(l.names(), []string{"clara"}) || l.UsersTotal != 4 || l.HiddenTotal != 3 || l.FolderCounts[idOf(friends)] != 1 {
 		t.Fatalf("hidden users on the list: %+v", l)
+	}
+	if l := list(url.Values{}); l.Total != 4 {
+		t.Fatalf("the API's default shows everyone: %d", l.Total)
 	}
 	if l := list(url.Values{"hidden": {"show"}}); l.Total != 4 {
 		t.Fatalf("show hidden: %d", l.Total)
@@ -168,7 +173,7 @@ func TestFoldersAndHiddenUsers(t *testing.T) {
 	if l := list(url.Values{"hidden": {"only"}}); !slices.Equal(l.names(), []string{"anna", "boris", "dmitry"}) {
 		t.Fatalf("only hidden: %v", l.names())
 	}
-	if l := list(url.Values{"q": {"boris"}}); l.Total != 0 || l.UsersTotal != 4 {
+	if l := list(url.Values{"q": {"boris"}, "hidden": {"hide"}}); l.Total != 0 || l.UsersTotal != 4 {
 		t.Fatalf("a search does not reach hidden users unless asked: %+v", l)
 	}
 	// The overview counts them all; the subscription of a hidden user still opens.

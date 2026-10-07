@@ -47,8 +47,9 @@ export const meQuery = {
   retry: false,
 };
 
-/** What the list is asked for: left out, a part of the filter is "any" (hidden: hide, as the API has it). */
-type UsersFilter = Pick<UsersSearch, "state" | "q" | "folder" | "source" | "hidden">;
+/** What the list is asked for: left out, a part of the filter is "any" (hidden: everyone, as
+ * the API has it; the Users page asks for "hide"). */
+type UsersFilter = Pick<UsersSearch, "state" | "q" | "folder" | "source"> & { hidden?: "hide" | "show" | "only" };
 
 /** The users page lists everyone it can (the API's cap); a card that shows a few asks for just those. */
 const USERS_MAX = 500;
@@ -184,6 +185,8 @@ export function useUserMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TRe
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: qk.users });
       void qc.invalidateQueries({ queryKey: qk.overview });
+      // A user moved in or out of a folder changes its count.
+      void qc.invalidateQueries({ queryKey: qk.folders });
     },
   });
 }
@@ -233,7 +236,9 @@ export function useNodeTraffic(id: number | undefined, range: "24h" | "7d" | "30
     queryKey: qk.nodeTraffic(id ?? 0, range),
     queryFn: ({ signal }) => unwrap(api.GET("/api/v1/nodes/{id}/traffic", { params: { path: { id: id! }, query: { range } }, signal })),
     enabled: !!id,
-    placeholderData: keepPreviousData,
+    // Another range of the same node keeps its chart while loading; another node never
+    // shows the previous one's.
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[1] === (id ?? 0) ? prev : undefined),
     refetchInterval: 60_000,
   });
 }
