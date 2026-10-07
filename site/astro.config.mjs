@@ -35,6 +35,8 @@ export default defineConfig({
 			components: {
 				Head: './src/components/Head.astro',
 				Header: './src/components/Header.astro',
+				ThemeSelect: './src/components/ThemeSelect.astro',
+				LanguageSelect: './src/components/LanguageSelect.astro',
 				Footer: './src/components/Footer.astro',
 				Hero: './src/components/Hero.astro',
 			},
