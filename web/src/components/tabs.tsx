@@ -54,14 +54,3 @@ export function Tabs<T extends string>({ id, tabs, value, onChange, label, child
     </div>
   );
 }
-
-/** Two columns of cards on wide screens, one on phones; wide "left" keeps a narrow right column (a preview) in view. */
-export function Columns({ left, right, wide }: { left: ReactNode; right?: ReactNode; wide?: "left" | "even" }) {
-  const cols = wide === "left" ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "xl:grid-cols-2";
-  return (
-    <div className={`grid items-start gap-4 ${right ? cols : ""}`}>
-      <div className="flex min-w-0 flex-col gap-4">{left}</div>
-      {right ? <div className={`flex min-w-0 flex-col gap-4 ${wide === "left" ? "xl:sticky xl:top-4" : ""}`}>{right}</div> : null}
-    </div>
-  );
-}

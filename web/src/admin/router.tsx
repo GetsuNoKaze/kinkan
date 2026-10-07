@@ -4,7 +4,7 @@ import { ApiError, basePath, setCsrf } from "../api/client";
 import { meQuery } from "../api/hooks";
 import { useLocale } from "../i18n";
 import { NotFoundPage, PageLoading, RouteError } from "./route-states";
-import { SETTINGS_PARTS, SETTINGS_TABS, TARIFF_TABS, TELEGRAM_TABS, USER_SOURCES, USER_STATES, type SettingsSearch, type TariffsSearch, type TelegramSearch, type UsersSearch } from "./search";
+import { PAYMENT_TABS, SETTINGS_PARTS, SETTINGS_TABS, TARIFF_TABS, TELEGRAM_TABS, USER_SOURCES, USER_STATES, type PaymentsSearch, type SettingsSearch, type TariffsSearch, type TelegramSearch, type UsersSearch } from "./search";
 import { Shell } from "./shell";
 
 /**
@@ -97,7 +97,14 @@ export function createAppRouter(queryClient: QueryClient) {
     }),
   });
   const promocodes = createRoute({ getParentRoute: () => app, path: "/promocodes", component: page(() => import("./pages/promocodes"), "PromocodesPage") });
-  const payments = createRoute({ getParentRoute: () => app, path: "/payments", component: page(() => import("./pages/payments"), "PaymentsPage") });
+  const payments = createRoute({
+    getParentRoute: () => app,
+    path: "/payments",
+    component: page(() => import("./pages/payments"), "PaymentsPage"),
+    validateSearch: (s: Record<string, unknown>): PaymentsSearch => ({
+      tab: PAYMENT_TABS.includes(s.tab as (typeof PAYMENT_TABS)[number]) ? (s.tab as PaymentsSearch["tab"]) : undefined,
+    }),
+  });
   const apiDocs = createRoute({ getParentRoute: () => app, path: "/settings/api", component: page(() => import("./pages/api"), "ApiPage") });
   // The API section lived in the sidebar until 0.4.2: old links land on its new place.
   const apiDocsOld = createRoute({ getParentRoute: () => app, path: "/api-docs", beforeLoad: () => { throw redirect({ to: "/settings/api" }); } });

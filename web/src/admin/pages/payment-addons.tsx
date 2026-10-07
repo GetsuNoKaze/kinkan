@@ -199,15 +199,15 @@ function AddonBlock({ a, busy, selling }: { a: Addon; busy: boolean; selling: bo
           <Webhook label={t("addons.webhook")} url={a.webhook_url} />
         </>
       ) : null}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+        <Button type="button" size="sm" variant="danger" className="mr-auto" onClick={() => setRemove(true)} disabled={busy}>
+          <Trash2 size={16} aria-hidden /> {t("addons.remove")}
+        </Button>
         {!failed && !a.info_error && (enabled || a.enabled) ? (
           <Button type="submit" size="sm" variant="primary" loading={save.isPending}>
             {t("common.save")}
           </Button>
         ) : null}
-        <Button type="button" size="sm" variant="danger" onClick={() => setRemove(true)} disabled={busy}>
-          <Trash2 size={16} aria-hidden /> {t("addons.remove")}
-        </Button>
       </div>
       <Confirm
         open={remove}

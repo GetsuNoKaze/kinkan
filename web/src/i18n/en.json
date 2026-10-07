@@ -1306,10 +1306,6 @@
     "apiSub": "Keys for scripts and integrations, and a reference of every panel method.",
     "apiOpen": "Open",
     "sales": "Selling subscriptions",
-    "salesSub": "Plans are sold in the bot and the Mini App: Telegram Stars, YooKassa, CryptoBot.",
-    "salesOnNote": "Payment methods, plan prices and the history are in Payments.",
-    "salesOffNote": "Off: the bot and the Mini App sell nothing and Payments leaves the menu. Invoices opened before are still applied.",
-    "openPayments": "Payments",
     "salesOnToast": "Selling is on",
     "salesOffToast": "Selling is off",
     "subPort": "Subscription port",
@@ -1871,9 +1867,9 @@
   },
   "telegram": {
     "subtitle": "A bot for subscription owners and a Mini App with the subscription page",
+    "summary": "Your bot",
+    "notConnected": "The bot is not connected yet",
     "saved": "Bot settings saved",
-    "unsaved": "Unsaved changes",
-    "discard": "Discard",
     "leaveTitle": "Leave without saving?",
     "leaveText": "Changes to the bot's menu, texts and options are not saved yet and will be lost.",
     "leaveConfirm": "Leave",
@@ -2015,7 +2011,6 @@
     "infra": {
       "title": "Infrastructure status",
       "subtitle": "Private alerts for the admin and a public status for users",
-      "saved": "Alert settings saved",
       "admin": "Private alerts",
       "adminHint": "Outages and recoveries are sent to your private chat with the bot.",
       "adminChat": "Admin chat",
@@ -2163,6 +2158,12 @@
   "payments": {
     "title": "Payments",
     "subtitle": "Plans paid for in the bot and the Mini App: subscriptions are issued and renewed by themselves.",
+    "sections": "Payment sections",
+    "tabs": {
+      "history": "Payments",
+      "methods": "Payment methods",
+      "rules": "Sales rules"
+    },
     "history": "History",
     "total": "{n} for {sum}",
     "noTotals": "No payments in 30 days",
@@ -2192,7 +2193,6 @@
     "refunded": "Stars refunded",
     "refundTitle": "Refund {sum}?",
     "refundText": "The Stars go back to the buyer, and the subscription or traffic this payment gave is taken back: a new subscription is turned off, a renewal loses its term, a traffic package is removed.",
-    "settings": "Accepting payments",
     "settingsSub": "Keys stay in the panel and are never shown again.",
     "saved": "Payment settings saved",
     "live": "Accepting",
@@ -2216,7 +2216,6 @@
     "openTariffs": "Open plans",
     "salesOff": "Selling is off: the bot and the Mini App sell nothing. Payment methods can be set up beforehand.",
     "kindPackage": "traffic package",
-    "sellNow": "Start selling",
     "invoiceFailed": "The invoice did not open: {error}.",
     "rublesInMarketplace": "Rubles (YooKassa, CryptoBot and more) are set up below, in Payment methods from the marketplace.",
     "moving": "YooKassa and CryptoBot moved to the marketplace and their keys came along. The server is installing the adapter ({names}): it takes no payments until then."
