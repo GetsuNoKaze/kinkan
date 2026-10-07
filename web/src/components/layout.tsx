@@ -40,6 +40,9 @@ export function SectionNav<T extends string>({
   const current = sections.find((s) => s.id === value);
   const currentPart = current?.parts?.find((p) => p.id === part);
   const title = currentPart ? `${current?.label}: ${currentPart.label}` : current?.label;
+  const body = useRef<HTMLElement>(null);
+  const packed = useMediaQuery(MASONRY);
+  useMasonry(body, narrow && packed);
   return (
     <div className="section-layout">
       {wide ? (
@@ -107,11 +110,59 @@ export function SectionNav<T extends string>({
           </select>
         </div>
       )}
-      <section className={clsx("section-body", narrow && "narrow")} aria-label={title}>
+      <section ref={body} className={clsx("section-body", narrow && "narrow")} aria-label={title}>
         {children}
       </section>
     </div>
   );
+}
+
+/** Where a section's cards go two in a row (app.css, .section-body.narrow). */
+const MASONRY = "(min-width: 1440px)";
+/** The grid's row unit and the gap between cards, as in app.css. */
+const ROW = 4;
+const GAP = 16;
+
+/**
+ * Packs the cards of a two-column grid without holes: each card spans as many small rows as
+ * it is tall, and the grid fills the free space with the next card that fits ("dense"). A
+ * short card goes up beside a tall one instead of leaving a gap under the shorter one.
+ */
+function useMasonry(ref: RefObject<HTMLElement | null>, on: boolean) {
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const items = () => [...el.children] as HTMLElement[];
+    if (!on) {
+      el.classList.remove("masonry");
+      for (const c of items()) c.style.gridRowEnd = "";
+      return;
+    }
+    el.classList.add("masonry");
+    const place = (c: HTMLElement) => {
+      c.style.gridRowEnd = `span ${Math.max(1, Math.ceil((c.getBoundingClientRect().height + GAP) / ROW))}`;
+    };
+    const sizes = new ResizeObserver((entries) => {
+      for (const e of entries) place(e.target as HTMLElement);
+    });
+    const watch = () => {
+      sizes.disconnect();
+      for (const c of items()) {
+        place(c);
+        sizes.observe(c);
+      }
+    };
+    watch();
+    // Cards come and go with the section and with loading.
+    const list = new MutationObserver(watch);
+    list.observe(el, { childList: true });
+    return () => {
+      sizes.disconnect();
+      list.disconnect();
+      el.classList.remove("masonry");
+      for (const c of items()) c.style.gridRowEnd = "";
+    };
+  }, [ref, on]);
 }
 
 /** The width of an element, followed as it changes; 0 before the first measure. */

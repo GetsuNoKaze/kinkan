@@ -29,11 +29,11 @@ export function Dashboard() {
       />
       <Kpis />
       {/* Cards keep their own height: a long protocol list does not stretch the chart. */}
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)] xl:items-start">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)] xl:items-start">
         <TrafficCard />
         <ServerCard />
       </div>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <AttentionCard />
         <TopCard />
       </div>

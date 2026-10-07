@@ -149,7 +149,7 @@ html[data-theme="forest"] {
   .glass { background: var(--glass); -webkit-backdrop-filter: blur(24px) saturate(160%); backdrop-filter: blur(24px) saturate(160%); border: 1px solid var(--glass-edge); box-shadow: inset 0 1px 0 var(--glass-highlight), var(--shadow-md); }
   .glass-strong { background: var(--glass-strong); -webkit-backdrop-filter: blur(32px) saturate(170%); backdrop-filter: blur(32px) saturate(170%); border: 1px solid var(--glass-edge); box-shadow: inset 0 1px 0 var(--glass-highlight), var(--shadow-lg); }
   .card { border-radius: var(--r-lg); padding: 20px; }
-  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; min-height: 32px; }
+  .card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 16px; min-height: 32px; }
   .card-title { font: 600 15px/20px var(--font-ui-stack); letter-spacing: -0.01em; }
   .card-sub { font-size: 13px; color: var(--ink-500); margin-top: 2px; }
   .panel-soft { border-radius: 16px; background: var(--surface-soft); border: 1px solid var(--hairline); }
@@ -240,6 +240,8 @@ html[data-theme="forest"] {
     .section-body.narrow { max-width: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
     .section-body.narrow > :only-child, .section-body.narrow > .savebar, .section-body.narrow > .banner, .section-body.narrow > [role="status"] { grid-column: 1 / -1; }
     .section-body.narrow > .savebar { justify-self: center; }
+    /* Packed by useMasonry: rows of 4px, each card spans its height plus the 16px gap. */
+    .section-body.narrow.masonry { grid-auto-rows: 4px; row-gap: 0; grid-auto-flow: row dense; }
   }
   /* An editor with its live preview beside it once both fit; the preview follows the scroll. */
   .with-preview { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
