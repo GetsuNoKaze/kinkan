@@ -104,7 +104,7 @@ func TestRulesInProfile(t *testing.T) {
 		return -1
 	}
 	own, lan, geo := at("DOMAIN-SUFFIX,sber.ru,DIRECT"), at("GEOIP,LAN,DIRECT,no-resolve"), at("GEOSITE,category-ru,DIRECT")
-	if own < 0 || lan < 0 || geo < 0 || !(lan < own && own < geo) || cfg.Rules[len(cfg.Rules)-1] != "MATCH,Мой VPN" {
+	if own < 0 || lan < 0 || geo < 0 || !(lan < own && own < geo) || cfg.Rules[len(cfg.Rules)-2] != "MATCH,Мой VPN" {
 		t.Fatalf("order: %q", cfg.Rules)
 	}
 	if at("DOMAIN,vpn.example.com,DIRECT") > own {

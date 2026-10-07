@@ -132,7 +132,7 @@ func TestMihomoProfile(t *testing.T) {
 	if alias := cfg.Groups[2]; alias.Name != "PROXY" || !alias.Hidden || len(alias.Proxies) != 1 || alias.Proxies[0] != "VPN" {
 		t.Fatalf("PROXY alias: %+v", cfg.Groups)
 	}
-	wantRules := []string{"IP-CIDR,203.0.113.7/32,DIRECT,no-resolve", "DOMAIN,vpn.example.com,DIRECT", "GEOIP,LAN,DIRECT,no-resolve", "MATCH,VPN"}
+	wantRules := []string{"IP-CIDR,203.0.113.7/32,DIRECT,no-resolve", "DOMAIN,vpn.example.com,DIRECT", "GEOIP,LAN,DIRECT,no-resolve", "MATCH,VPN", "MATCH,REJECT"}
 	if strings.Join(cfg.Rules, "|") != strings.Join(wantRules, "|") {
 		t.Fatalf("rules: %v", cfg.Rules)
 	}
@@ -174,7 +174,7 @@ func TestCustomNames(t *testing.T) {
 	if cfg.Proxies[0]["name"] != "🇳🇱 Нидерланды" || cfg.Proxies[1]["name"] != "🇳🇱 Нидерланды 2" {
 		t.Fatalf("names: %v %v", cfg.Proxies[0]["name"], cfg.Proxies[1]["name"])
 	}
-	if cfg.Groups[0].Name != "🚀 Мой VPN" || cfg.Groups[0].Proxies[0] != "⚡ Быстрый" || cfg.Rules[len(cfg.Rules)-1] != "MATCH,🚀 Мой VPN" {
+	if cfg.Groups[0].Name != "🚀 Мой VPN" || cfg.Groups[0].Proxies[0] != "⚡ Быстрый" || cfg.Rules[len(cfg.Rules)-2] != "MATCH,🚀 Мой VPN" {
 		t.Fatalf("groups: %+v rules: %v", cfg.Groups, cfg.Rules)
 	}
 	links, err := URIs(prof)
@@ -217,7 +217,7 @@ func TestRouting(t *testing.T) {
 	}
 
 	ru := render(Groups{}, RoutingRUDirect)
-	want := []string{"IP-CIDR,203.0.113.7/32,DIRECT,no-resolve", "GEOIP,LAN,DIRECT,no-resolve", "GEOSITE,category-ru,DIRECT", "GEOIP,ru,DIRECT", "MATCH,VPN"}
+	want := []string{"IP-CIDR,203.0.113.7/32,DIRECT,no-resolve", "GEOIP,LAN,DIRECT,no-resolve", "GEOSITE,category-ru,DIRECT", "GEOIP,ru,DIRECT", "MATCH,VPN", "MATCH,REJECT"}
 	if strings.Join(ru.Rules, "|") != strings.Join(want, "|") {
 		t.Fatalf("ru_direct rules: %v", ru.Rules)
 	}
@@ -240,7 +240,7 @@ func TestRouting(t *testing.T) {
 
 	// The "#PROXY" suffix must name a group even when the admin calls the main group PROXY.
 	named := render(Groups{Main: "PROXY"}, RoutingRUDirect)
-	if named.Groups[0].Name != "PROXY" || named.Rules[len(named.Rules)-1] != "MATCH,PROXY" {
+	if named.Groups[0].Name != "PROXY" || named.Rules[len(named.Rules)-2] != "MATCH,PROXY" {
 		t.Fatalf("main group named PROXY: %+v %v", named.Groups, named.Rules)
 	}
 
