@@ -3,6 +3,27 @@
 Each release has a section in English and in Russian; the release workflow puts them in
 the signed manifest, and the panel shows the one in its language.
 
+## 0.5.0.3
+### en
+- **Routing for Clash apps** (Settings → Routing): send services (YouTube, Telegram, Discord, AI, games and more) through the VPN, direct, blocked or through one chosen server; Russian banks, state services and marketplaces past the tunnel; your own DNS; a "blocked only" mode where only what is blocked goes through the VPN. Or write your own Clash profile in YAML: the panel fills in the servers. Profiles are YAML now.
+- **Happ** (Settings → Subscription → Happ): a routing profile Happ adds with the subscription, hidden server settings (with your happ-proxy.com Provider ID), and an encrypted link (happ://crypt5) for the Happ button and the user's card, so the subscription address stays hidden.
+- **Masking for XHTTP** (Protocols → a protocol → Masking): padding and its obfuscation, the upload method and sizes, and how apps reuse connections, with ready sets. The strong options need recent apps.
+- **Users**: folders, the source of each user (created in the panel, bought in the bot, trial, import) and hidden users, all as filters on the Users page. **Traffic per node** on the node cards, in a chart and on the overview.
+- With a domain, the panel's own node serves the public certificate on Hysteria2, TUIC, AnyTLS and TrustTunnel, without a pin. Apps that have not refreshed the subscription lose these protocols on that node until they refresh it (they do so every hour).
+- A new domain gets its certificate at once. A site of your own: files in /opt/mikan/data/panel/www are served on the paths the panel does not use.
+- Blocking detection needs devices from two networks before it moves a port.
+- With XHTTP chosen in a Clash app, UDP (calls, QUIC) no longer leaves past the tunnel. XHTTP padding and session settings now reach the apps; REALITY over WebSocket is refused.
+
+### ru
+- **Маршрутизация для Clash-приложений** («Настройки → Маршрутизация»): сервисы (YouTube, Telegram, Discord, нейросети, игры и другие) через VPN, напрямую, в блок или через выбранный сервер; российские банки, госуслуги и маркетплейсы мимо туннеля; свои DNS; режим «только заблокированное», где через VPN идёт только то, что заблокировано. Или свой профиль Clash в YAML: серверы панель подставит сама. Профили теперь в YAML.
+- **Happ** («Настройки → Подписка → Happ»): профиль маршрутизации, который Happ добавит вместе с подпиской, скрытые настройки серверов (с вашим Provider ID с happ-proxy.com) и шифрованная ссылка (happ://crypt5) для кнопки Happ и карточки пользователя: адрес подписки не виден.
+- **Маскировка для XHTTP** («Подключения → подключение → Маскировка»): паддинг и его обфускация, метод и размеры отправки, переиспользование соединений в приложениях, готовые наборы. Сильные настройки требуют свежих приложений.
+- **Пользователи**: папки, источник каждого пользователя (создан в панели, куплен в боте, пробный, импорт) и скрытые пользователи, всё фильтрами на странице «Пользователи». **Трафик по нодам** на карточках нод, на графике и в обзоре.
+- С доменом своя нода панели отдаёт публичный сертификат на Hysteria2, TUIC, AnyTLS и TrustTunnel, без закрепления. Приложения, которые ещё не обновили подписку, теряют эти протоколы на этой ноде до обновления (оно идёт раз в час).
+- Новый домен получает сертификат сразу. Свой сайт: файлы из /opt/mikan/data/panel/www отдаются на путях, которые не заняты панелью.
+- Обнаружение блокировок переносит порт, только когда не доходят устройства хотя бы из двух сетей.
+- С выбранным XHTTP в Clash-приложении UDP (звонки, QUIC) больше не уходит мимо туннеля. Настройки паддинга и сессий XHTTP теперь доходят до приложений; REALITY поверх WebSocket не принимается.
+
 ## 0.5.0.2
 ### en
 - **Nodes update from the panel.** The Nodes page shows each node's version and marks the ones behind the panel, with **Update** and **Update all**. By default nodes follow the panel by themselves: after the panel updates, they are brought to its version one at a time, the next one starting when the previous one works. A node that fails goes back to its version, you get a notice, and the rollout stops. The switch is in Settings → General → Updates.

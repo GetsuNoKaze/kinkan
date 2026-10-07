@@ -1913,6 +1913,10 @@
           "updated_at": {
             "format": "date-time",
             "type": "string"
+          },
+          "xhttp": {
+            "$ref": "#/components/schemas/XHTTPTuning",
+            "description": "Тонкая настройка XHTTP; у других транспортов поля нет"
           }
         },
         "required": [
@@ -3063,6 +3067,10 @@
             "description": "SNI для клиентов, если dest — IP (цель из подбора соседей)",
             "maxLength": 253,
             "type": "string"
+          },
+          "xhttp": {
+            "$ref": "#/components/schemas/XHTTPTuning",
+            "description": "Тонкая настройка XHTTP целиком: пустое поле — значение ядра по умолчанию"
           }
         },
         "type": "object"
@@ -6247,6 +6255,95 @@
           "routes",
           "inbounds"
         ],
+        "type": "object"
+      },
+      "XHTTPTuning": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "description": "Режим XHTTP; пусто — по умолчанию",
+            "enum": [
+              "",
+              "stream-one",
+              "stream-up",
+              "packet-up"
+            ],
+            "type": "string"
+          },
+          "sc_max_each_post_bytes": {
+            "description": "Наибольший запрос отправки (packet-up), байт: число или диапазон",
+            "type": "string"
+          },
+          "sc_min_posts_interval_ms": {
+            "description": "Пауза между запросами отправки (packet-up), мс",
+            "type": "string"
+          },
+          "uplink_chunk_size": {
+            "description": "Размер куска отправки, байт: число или диапазон",
+            "type": "string"
+          },
+          "uplink_http_method": {
+            "enum": [
+              "",
+              "POST",
+              "PUT",
+              "PATCH"
+            ],
+            "type": "string"
+          },
+          "x_padding_bytes": {
+            "description": "Размер паддинга, байт: число или диапазон «100-1000»",
+            "type": "string"
+          },
+          "x_padding_header": {
+            "type": "string"
+          },
+          "x_padding_key": {
+            "type": "string"
+          },
+          "x_padding_method": {
+            "enum": [
+              "",
+              "repeat-x",
+              "tokenish"
+            ],
+            "type": "string"
+          },
+          "x_padding_obfs_mode": {
+            "description": "Паддинг в своём месте вместо Referer: нужен свежий Xray или mihomo 1.19.31+ у клиентов",
+            "type": "boolean"
+          },
+          "x_padding_placement": {
+            "enum": [
+              "",
+              "queryInHeader",
+              "header",
+              "cookie",
+              "query"
+            ],
+            "type": "string"
+          },
+          "xmux_c_max_reuse_times": {
+            "description": "Сколько раз переиспользовать соединение",
+            "type": "string"
+          },
+          "xmux_h_max_request_times": {
+            "description": "Запросов на соединение HTTP/2",
+            "type": "string"
+          },
+          "xmux_h_max_reusable_secs": {
+            "description": "Сколько секунд соединение живёт",
+            "type": "string"
+          },
+          "xmux_max_concurrency": {
+            "description": "Потоков на соединение: диапазон «16-32»",
+            "type": "string"
+          },
+          "xmux_max_connections": {
+            "description": "Соединений сразу; взаимоисключается с потоками",
+            "type": "string"
+          }
+        },
         "type": "object"
       }
     },

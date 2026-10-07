@@ -2328,6 +2328,8 @@ export interface components {
             type: string;
             /** Format: date-time */
             updated_at: string;
+            /** @description Тонкая настройка XHTTP; у других транспортов поля нет */
+            xhttp?: components["schemas"]["XHTTPTuning"];
         };
         Info: {
             apps?: string;
@@ -2746,6 +2748,8 @@ export interface components {
             port?: string;
             /** @description SNI для клиентов, если dest — IP (цель из подбора соседей) */
             server_name?: string;
+            /** @description Тонкая настройка XHTTP целиком: пустое поле — значение ядра по умолчанию */
+            xhttp?: components["schemas"]["XHTTPTuning"];
         };
         PatchLegacyInputBody: {
             /** @enum {string} */
@@ -3938,6 +3942,41 @@ export interface components {
             source?: "register" | "import" | "";
             /** @description Последняя проверка выхода через WARP с ноды; нет — у ноды ещё нет настроенного WARP */
             status?: components["schemas"]["WarpCheck"];
+        };
+        XHTTPTuning: {
+            /**
+             * @description Режим XHTTP; пусто — по умолчанию
+             * @enum {string}
+             */
+            mode?: "" | "stream-one" | "stream-up" | "packet-up";
+            /** @description Наибольший запрос отправки (packet-up), байт: число или диапазон */
+            sc_max_each_post_bytes?: string;
+            /** @description Пауза между запросами отправки (packet-up), мс */
+            sc_min_posts_interval_ms?: string;
+            /** @description Размер куска отправки, байт: число или диапазон */
+            uplink_chunk_size?: string;
+            /** @enum {string} */
+            uplink_http_method?: "" | "POST" | "PUT" | "PATCH";
+            /** @description Размер паддинга, байт: число или диапазон «100-1000» */
+            x_padding_bytes?: string;
+            x_padding_header?: string;
+            x_padding_key?: string;
+            /** @enum {string} */
+            x_padding_method?: "" | "repeat-x" | "tokenish";
+            /** @description Паддинг в своём месте вместо Referer: нужен свежий Xray или mihomo 1.19.31+ у клиентов */
+            x_padding_obfs_mode?: boolean;
+            /** @enum {string} */
+            x_padding_placement?: "" | "queryInHeader" | "header" | "cookie" | "query";
+            /** @description Сколько раз переиспользовать соединение */
+            xmux_c_max_reuse_times?: string;
+            /** @description Запросов на соединение HTTP/2 */
+            xmux_h_max_request_times?: string;
+            /** @description Сколько секунд соединение живёт */
+            xmux_h_max_reusable_secs?: string;
+            /** @description Потоков на соединение: диапазон «16-32» */
+            xmux_max_concurrency?: string;
+            /** @description Соединений сразу; взаимоисключается с потоками */
+            xmux_max_connections?: string;
         };
     };
     responses: never;

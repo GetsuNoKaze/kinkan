@@ -259,6 +259,13 @@ func Validate(t Template, o Options) error {
 		if p, _ := x["path"].(string); p != "" && !strings.HasPrefix(p, "/") {
 			return fail("config_path", "xhttp-config.path")
 		}
+		// The same checks as the form's: a value the core refuses would only show when the
+		// node loads the inbound.
+		if tune, ok := XHTTPOf(t); ok {
+			if err := tune.check(); err != nil {
+				return err
+			}
+		}
 	}
 	if p := t.str("ws-path"); t["ws-path"] != nil && !strings.HasPrefix(p, "/") {
 		return fail("config_path", "ws-path")

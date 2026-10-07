@@ -6,6 +6,7 @@ import { qk, useNodes, usePools, usePresets, useSettings } from "../../../api/ho
 import { Drawer } from "../../../components/overlay";
 import { useToast } from "../../../components/toast";
 import { Button, Field, Segmented } from "../../../components/ui";
+import { XHTTP_DEFAULT, XhttpTuning, type XHTTP } from "./xhttp";
 import { Switch } from "../../../components/switch";
 import { t } from "../../../i18n";
 import { FingerprintSelect } from "../../../components/fingerprint-select";
@@ -21,12 +22,13 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
   const toast = useToast();
   const presets = usePresets();
   const validate = useValidate();
-  const [tab, setTab] = useState<"main" | "config">("main");
+  const [tab, setTab] = useState<"main" | "xhttp" | "config">("main");
   const [port, setPort] = useState("");
   const [dest, setDest] = useState("");
   const [sni, setSni] = useState(""); // the site name clients send when dest is an IP
   const [fp, setFp] = useState(""); // the inbound's own fingerprint, "" for the settings' one
   const [obfs, setObfs] = useState(""); // Hysteria2: salamander or gecko
+  const [xhttp, setXhttp] = useState<XHTTP>(XHTTP_DEFAULT); // the masking tab, XHTTP only
   const [outbound, setOutbound] = useState<Inbound["outbound"]>("direct");
   const [exitNode, setExitNode] = useState<number>(0);
   const [poolId, setPoolId] = useState<number>(0);
@@ -52,6 +54,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
     setSni(inbound.server_names?.[0] ?? "");
     setFp(inbound.fingerprint ?? "");
     setObfs(inbound.obfs ?? "");
+    setXhttp({ ...XHTTP_DEFAULT, ...inbound.xhttp });
     setOutbound(inbound.outbound);
     setExitNode(inbound.exit_node_id ?? 0);
     setPoolId(inbound.pool_id ?? 0);
@@ -93,7 +96,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
       validate.reset();
       if (e instanceof ApiError && Object.keys(e.fields).length) {
         setErrors(e.fields);
-        setTab(e.fields.config ? "config" : "main");
+        setTab(e.fields.config ? "config" : e.fields.xhttp ? "xhttp" : "main");
       } else toast.error(errorText(e));
     },
   });
@@ -132,6 +135,8 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
     }
     if (!configChanged && inbound?.fingerprint !== undefined && fp !== inbound.fingerprint) body.fingerprint = fp;
     if (!configChanged && inbound?.obfs !== undefined && obfs !== inbound.obfs && (obfs === "salamander" || obfs === "gecko")) body.obfs = obfs;
+    // The whole tuning goes: an emptied field is a value too (back to the default).
+    if (!configChanged && inbound?.xhttp && JSON.stringify(xhttp) !== JSON.stringify(inbound.xhttp)) body.xhttp = xhttp;
     if (listenMode === "custom" && !listen) {
       reject({ listen: t("inbounds.listenRequired") });
       return;
@@ -196,6 +201,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
           onChange={setTab}
           options={[
             { value: "main", label: t("inbounds.tabMain") },
+            ...(inbound?.xhttp ? [{ value: "xhttp" as const, label: t("inbounds.xhttp.tab") }] : []),
             { value: "config", label: t("inbounds.tabConfig") },
           ]}
         />
@@ -483,6 +489,11 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                 ) : null}
               </div>
             </>
+          ) : tab === "xhttp" ? (
+            <XhttpTuning value={xhttp} onChange={(x) => {
+              setXhttp(x);
+              clearError("xhttp");
+            }} error={errors.xhttp} />
           ) : (
             <Field label={t("inbounds.configLabel")} hint={t("inbounds.configHint")} error={errors.config}>
               <Editor value={config} onChange={editConfig} invalid={!!errors.config} />
