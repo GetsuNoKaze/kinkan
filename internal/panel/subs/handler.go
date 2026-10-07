@@ -24,6 +24,7 @@ import (
 	"mikan/internal/panel/server"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/panel/subpage"
 	"mikan/internal/proto"
 )
 
@@ -76,6 +77,7 @@ type Handler struct {
 	tg         Telegram         // nil: no bot
 	shop       *billing.Service // nil: nothing on sale
 	promos     *promo.Service
+	pages      *subpage.Service // nil: the page as built, nothing of the admin's
 	log        *slog.Logger
 	logged     sync.Map // what has been logged lately → when, so a standing fault is one line an hour
 	promoLimit promoLimiter
@@ -112,6 +114,9 @@ func (h *Handler) warn(key, msg string, args ...any) {
 func (h *Handler) SetShop(s *billing.Service) { h.shop = s }
 func (h *Handler) SetPromo(s *promo.Service)  { h.promos = s }
 
+// SetPages gives the page what the admin made of it: its look, blocks, instructions, images.
+func (h *Handler) SetPages(s *subpage.Service) { h.pages = s }
+
 func NewHandler(st *store.Store, cfg func(ctx context.Context) (Config, error), page http.Handler, now func() time.Time, devices Binder, trustProxy bool) *Handler {
 	return &Handler{st: st, cfg: cfg, page: page, now: now, devices: devices, trustProxy: trustProxy, log: slog.New(slog.DiscardHandler)}
 }
@@ -125,7 +130,8 @@ func (h *Handler) clientIP(r *http.Request) string {
 var unbindPath = regexp.MustCompile(`^devices/([0-9]{1,18})/unbind$`)
 
 // ServeHTTP handles "/<token>", "/<token>/info", "POST /<token>/devices/<id>/unbind" (the
-// subscription page) and the page assets under the sub prefix.
+// subscription page), the page assets under the sub prefix, the admin's images
+// ("/brand/<name>") and instructions ("/docs/<id>").
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 	token, rest, _ := strings.Cut(p, "/")
@@ -147,6 +153,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	case (strings.HasPrefix(p, "assets/") || p == "favicon.png" || p == "apple-touch-icon.png") && h.page != nil:
 		h.page.ServeHTTP(w, r)
+		return
+	case token == "brand" && h.pages != nil:
+		h.image(w, r, rest)
+		return
+	case token == "docs" && h.pages != nil:
+		h.doc(w, r, rest)
 		return
 	case rest != "" && rest != "info":
 		server.NotFound(w)
@@ -181,8 +193,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	format := Format(r.Header.Get("User-Agent"), r.Header.Get("Accept"), r.URL.Query().Get("format"))
-	if format == "html" && h.page != nil {
-		h.page.ServeHTTP(w, r)
+	// A messenger that builds a preview of a pasted link gets the page, which has the
+	// preview's title and picture and nothing of the user's.
+	if (format == "html" || LinkPreview(r.Header.Get("User-Agent")) && r.URL.Query().Get("format") == "") && h.page != nil {
+		h.servePage(w, r, cfg)
 		return
 	}
 	grants, err := domain.UserGrantsLeft(r.Context(), h.st.Q, u.ID, h.now())
@@ -265,7 +279,8 @@ func (h *Handler) miniApp(w http.ResponseWriter, r *http.Request, rest string) {
 		hd := w.Header()
 		hd.Set("Content-Security-Policy", strings.Replace(hd.Get("Content-Security-Policy"), "frame-ancestors 'none'", "frame-ancestors https://web.telegram.org", 1))
 		hd.Del("X-Frame-Options")
-		h.page.ServeHTTP(w, r)
+		cfg, _ := h.cfg(r.Context())
+		h.servePage(w, r, cfg)
 	case r.Method == http.MethodPost && rest == "session" && sameOrigin(r):
 		var in struct {
 			InitData string `json:"init_data"`
@@ -788,6 +803,10 @@ type Info struct {
 	UnbindAfter *time.Time   `json:"unbind_after,omitempty" doc:"The subscriber may unbind again from then"`
 	// Pools: the user's traffic pools with a limit or with traffic used.
 	Pools []PoolInfo `json:"pools,omitempty"`
+	// The announcement the apps show, with the user's values in it; the page shows it when
+	// the admin turns its block on.
+	Announce    string `json:"announce,omitempty"`
+	AnnounceURL string `json:"announce_url,omitempty"`
 }
 
 // DeviceItem is a bound device as the subscription page lists it.
@@ -816,6 +835,9 @@ func (h *Handler) info(ctx context.Context, w http.ResponseWriter, u db.User, pr
 	}
 	if h.tg != nil {
 		out.Telegram = h.tg.LinkURL(ctx, u.ID)
+	}
+	if cfg.Announce != "" {
+		out.Announce, out.AnnounceURL = fillTitle(cfg.Announce, titleValues(u, grants.Main(u.ID), cfg, now)), cfg.AnnounceURL
 	}
 	if cfg.Binding {
 		devs, err := h.st.Q.ListBoundDevices(ctx, u.ID)
