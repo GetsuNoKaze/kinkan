@@ -149,7 +149,7 @@ html[data-theme="forest"] {
   .glass { background: var(--glass); -webkit-backdrop-filter: blur(24px) saturate(160%); backdrop-filter: blur(24px) saturate(160%); border: 1px solid var(--glass-edge); box-shadow: inset 0 1px 0 var(--glass-highlight), var(--shadow-md); }
   .glass-strong { background: var(--glass-strong); -webkit-backdrop-filter: blur(32px) saturate(170%); backdrop-filter: blur(32px) saturate(170%); border: 1px solid var(--glass-edge); box-shadow: inset 0 1px 0 var(--glass-highlight), var(--shadow-lg); }
   .card { border-radius: var(--r-lg); padding: 20px; }
-  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; min-height: 32px; }
+  .card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 16px; min-height: 32px; }
   .card-title { font: 600 15px/20px var(--font-ui-stack); letter-spacing: -0.01em; }
   .card-sub { font-size: 13px; color: var(--ink-500); margin-top: 2px; }
   .panel-soft { border-radius: 16px; background: var(--surface-soft); border: 1px solid var(--hairline); }
@@ -211,15 +211,69 @@ html[data-theme="forest"] {
   .kpi-value { font: 500 32px/40px var(--font-display-stack); letter-spacing: -0.03em; }
   .kpi-value small { font: 500 16px/20px var(--font-display-stack); color: var(--ink-500); margin-left: 4px; letter-spacing: -0.01em; }
   .kpi-foot { margin-top: auto; font-size: 12px; color: var(--ink-500); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .tabs { display: flex; gap: 4px; padding: 4px; overflow-x: auto; scrollbar-width: none; border-radius: var(--r-md); background: var(--ink-50); width: max-content; max-width: 100%; }
-  .tabs::-webkit-scrollbar { display: none; }
-  .tabs button { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--ink-600); transition: background-color 0.2s, color 0.2s, box-shadow 0.2s; }
-  .tabs button:hover { color: var(--ink-900); }
+  /* A page's few sections (up to four): one bar as wide as the content, equal parts, no scrolling. */
+  .tabs { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; padding: 4px; border-radius: var(--r-md); background: var(--ink-50); width: 100%; }
+  .tabs button { min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--ink-600); transition: background-color 0.2s, color 0.2s, box-shadow 0.2s; }
+  .tabs button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tabs button svg { flex: none; }
+  .tabs button:hover { color: var(--ink-900); background: var(--hover); }
   .tabs button[aria-selected="true"] { background: var(--surface-solid); color: var(--ink-900); box-shadow: var(--shadow-sm); }
   .tabs button:focus-visible { outline: 2px solid var(--mikan-600, currentColor); outline-offset: 2px; }
+  /* A page's many sections: a list beside the content on wide screens, a select on narrow ones. */
+  .section-layout { display: flex; flex-direction: column; gap: 16px; align-items: stretch; }
+  .section-nav { display: flex; flex-direction: column; gap: 4px; }
+  .section-nav ul { display: flex; flex-direction: column; gap: 4px; }
+  .section-nav button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 40px; padding: 8px 12px; border-radius: var(--r-md); text-align: left; font-weight: 500; color: var(--ink-600); transition: background-color 0.2s, color 0.2s, box-shadow 0.2s; }
+  .section-nav button:hover { background: var(--surface-soft); color: var(--ink-900); }
+  .section-nav button[aria-current="page"], .section-nav button[data-open="true"] { color: var(--ink-900); }
+  .section-nav button[aria-current="page"] { background: var(--surface-solid); box-shadow: var(--shadow-sm); }
+  .section-nav button[aria-current="page"] svg, .section-nav button[data-open="true"] svg { color: var(--mikan-600); }
+  .section-nav button svg { flex: none; }
+  .section-nav .sub { gap: 2px; margin: 0 0 4px 28px; padding-left: 12px; border-left: 1px solid var(--hairline); }
+  .section-nav .sub button { min-height: 32px; padding: 6px 12px; font-size: 13px; }
+  .section-nav-badge { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--ink-500); }
+  .section-body { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+  .section-body.narrow { max-width: 960px; }
+  /* On wide screens a section's cards go two in a row, in reading order, so a section fits
+     a screen or so. A lone card, a notice and the save bar take the whole row. */
+  @media (min-width: 1440px) {
+    .section-body.narrow { max-width: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+    .section-body.narrow > :only-child, .section-body.narrow > .savebar, .section-body.narrow > .banner, .section-body.narrow > [role="status"] { grid-column: 1 / -1; }
+    .section-body.narrow > .savebar { justify-self: center; }
+    /* Packed by useMasonry: rows of 4px, each card spans its height plus the 16px gap. */
+    .section-body.narrow.masonry { grid-auto-rows: 4px; row-gap: 0; grid-auto-flow: row dense; }
+  }
+  /* An editor with its live preview beside it once both fit; the preview follows the scroll. */
+  .with-preview { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+  .with-preview > aside { position: sticky; top: var(--sticky-top, 16px); }
+  /* The bar of a page's unsaved draft: under the content, kept in view while scrolling. */
+  .savebar { position: sticky; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 25; align-self: center; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; max-width: 100%; padding: 8px 8px 8px 16px; border-radius: var(--r-lg); }
+  .savebar-text { font-size: 13px; font-weight: 500; }
+  /* Save and reset of a card's form: always at its bottom right. */
+  .form-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--hairline); }
+  .form-actions-note { margin-right: auto; font-size: 12px; color: var(--ink-500); }
+  /* A row with a switch: what it is on the left, the switch on the right. */
+  .switch-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 12px 0; }
+  .switch-row-title { font-size: 13px; font-weight: 500; color: var(--ink-900); }
+  .switch-row-sub { margin-top: 4px; font-size: 12px; color: var(--ink-500); }
+  .switch-row-sub.warn { color: var(--honey-600); }
+  /* What most people never change, folded away under a title. */
+  .disclosure { border-top: 1px solid var(--hairline); }
+  .disclosure > summary { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 12px 0; cursor: pointer; list-style: none; border-radius: 8px; }
+  .disclosure > summary::-webkit-details-marker { display: none; }
+  .disclosure > summary:hover .disclosure-title { color: var(--ink-900); }
+  .disclosure > summary > svg { flex: none; color: var(--ink-500); transition: transform 0.2s var(--ease-out); }
+  .disclosure[open] > summary > svg { transform: rotate(90deg); }
+  .disclosure-title { font-size: 13px; font-weight: 600; color: var(--ink-700); }
+  .disclosure-sub { font-size: 12px; color: var(--ink-500); }
+  .disclosure-body { padding: 4px 0 8px; }
+  .card > .disclosure:last-child .disclosure-body { padding-bottom: 0; }
+  .disclosure-body > .dr-sec:first-child { border-top: 0; padding-top: 4px; }
   .seg { display: inline-flex; padding: 4px; gap: 4px; border-radius: var(--r-md); background: var(--ink-50); }
   .seg button { height: 28px; padding: 0 12px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--ink-600); transition: background-color 0.2s, color 0.2s, box-shadow 0.2s; }
   .seg button:hover { color: var(--ink-900); }
+  .seg-block { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; }
+  .seg-block button { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .seg button[aria-pressed="true"] { background: var(--surface-solid); color: var(--ink-900); box-shadow: var(--shadow-sm); }
   .lang-switch button { padding: 0 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; }
   .metric { padding: 12px; border-radius: 16px; background: var(--surface-soft); border: 1px solid var(--hairline); }
@@ -310,6 +364,7 @@ html[data-theme="forest"] {
   /* drawer */
   .scrim { position: fixed; inset: 0; background: rgba(22, 26, 36, 0.18); z-index: 40; }
   .drawer { position: fixed; top: 16px; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); width: min(480px, calc(100vw - 32px)); border-radius: var(--r-xl); z-index: 50; display: flex; flex-direction: column; overflow: hidden; }
+  .drawer.wide { width: min(560px, calc(100vw - 32px)); }
   .dr-head { display: flex; align-items: flex-start; gap: 16px; padding: 20px 20px 16px; border-bottom: 1px solid var(--hairline); }
   .dr-title h2 { font: 500 20px/28px var(--font-display-stack); letter-spacing: -0.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dr-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 8px; font-size: 12px; color: var(--ink-500); }
@@ -381,6 +436,7 @@ html[data-theme="forest"] {
   .menu-item[data-highlighted] { background: var(--hover); color: var(--ink-900); }
   .menu-item.danger { color: var(--berry-600); }
   .menu-sep { height: 1px; margin: 6px 4px; background: var(--hairline); }
+  .menu-label { padding: 8px 10px 4px; font-size: 12px; font-weight: 600; color: var(--ink-500); }
   .dialog { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; border-radius: var(--r-xl); padding: 24px; z-index: 60; }
   .dialog h2 { font: 500 18px/24px var(--font-display-stack); letter-spacing: -0.02em; }
 
@@ -427,6 +483,17 @@ html[data-theme="forest"] {
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Wide screens: the page's title and main actions stay at the top while it scrolls, the
+   section list stands beside the content. */
+@media (min-width: 1024px) {
+  :root { --sticky-top: 96px; }
+  /* Flat on the page at rest; once the page scrolls, a floating glass bar like the cards. */
+  .topbar { position: sticky; top: 8px; z-index: 20; margin: 0 -12px; padding: 8px 12px; min-height: 72px; border-radius: var(--r-xl); border: 1px solid transparent; transition: background-color 0.2s, box-shadow 0.2s, border-color 0.2s; }
+  .topbar[data-stuck] { background: color-mix(in srgb, var(--surface-solid) 82%, transparent); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); border-color: var(--hairline); box-shadow: var(--shadow-sm); }
+  .topbar .page-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .section-layout { display: grid; grid-template-columns: 216px minmax(0, 1fr); gap: 24px; align-items: start; }
+  .section-nav { position: sticky; top: var(--sticky-top); }
+}
 @media (max-width: 1279px) {
   .app { grid-template-columns: 76px minmax(0, 1fr); }
   .sidebar { padding: 16px 8px; align-items: center; }
@@ -443,12 +510,15 @@ html[data-theme="forest"] {
   .mnav .active { color: var(--ink-900); }
   .mnav .active svg { color: var(--mikan-600); }
   .main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
-  .bulk-bar { bottom: calc(88px + env(safe-area-inset-bottom)); }
+  .bulk-bar, .savebar { bottom: calc(88px + env(safe-area-inset-bottom)); }
 }
 @media (max-width: 760px) {
   .page-title { font-size: 22px; line-height: 28px; }
+  .topbar { flex-wrap: wrap; }
   .kpi-value { font-size: 26px; line-height: 32px; }
   .search-field { min-width: 0; flex: 1; }
+  .tabs button { padding: 0 8px; }
+  .tabs button svg { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
@@ -456,4 +526,5 @@ html[data-theme="forest"] {
 }
 @media (prefers-reduced-transparency: reduce) {
   .glass, .glass-strong { background: var(--surface-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .topbar[data-stuck] { background: var(--surface-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }

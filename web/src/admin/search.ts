@@ -22,11 +22,23 @@ export type UsersSearch = {
   hidden?: Exclude<(typeof USER_HIDDEN)[number], "hide">;
 };
 
-export const SETTINGS_TABS = ["general", "subscription", "page", "routing", "rules", "security", "import"] as const;
-export type SettingsSearch = { tab: (typeof SETTINGS_TABS)[number] };
+export const SETTINGS_TABS = ["general", "subscription", "page", "routing", "security", "system", "import"] as const;
+/** The parts of the sections that have them: the subscription page's editor and the routing. */
+export const SETTINGS_PARTS = {
+  page: ["look", "brand", "blocks", "apps", "docs", "css"],
+  routing: ["simple", "yaml", "rules", "torrent"],
+} as const;
+export type SettingsSearch = { tab: (typeof SETTINGS_TABS)[number]; part?: string };
 
 export const TARIFF_TABS = ["tariffs", "pools", "packages"] as const;
 export type TariffsSearch = { tab: (typeof TARIFF_TABS)[number] };
+
+/** Payments open on their history; without a way to take payments yet, on setting one up. */
+export const PAYMENT_TABS = ["history", "methods", "rules"] as const;
+export type PaymentsSearch = { tab?: (typeof PAYMENT_TABS)[number] };
+
+export const PROMO_TABS = ["codes", "history"] as const;
+export type PromoSearch = { tab: (typeof PROMO_TABS)[number] };
 
 export const TELEGRAM_TABS = ["connect", "menu", "notify", "infra", "broadcast"] as const;
 export type TelegramSearch = { tab: (typeof TELEGRAM_TABS)[number] };

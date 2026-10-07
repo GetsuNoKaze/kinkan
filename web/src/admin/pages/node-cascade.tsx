@@ -138,9 +138,11 @@ function Body({ nodeId, c, refetch, checking }: { nodeId: number; c: Cascade; re
             </select>
           ) : null}
         </Field>
-        <Button variant="primary" loading={save.isPending} disabled={!changed || (route === "node" && !exit)} onClick={() => save.mutate()}>
-          {t("common.save")}
-        </Button>
+        <div className="form-actions">
+          <Button variant="primary" loading={save.isPending} disabled={!changed || (route === "node" && !exit)} onClick={() => save.mutate()}>
+            {t("common.save")}
+          </Button>
+        </div>
       </section>
     </>
   );

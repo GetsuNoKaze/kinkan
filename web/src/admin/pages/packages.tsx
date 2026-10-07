@@ -2,7 +2,7 @@
 // sold in the bot and the Mini App like tariffs. The base quota of the period is spent
 // first, then the packages, the soonest to expire first.
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Archive, Pencil, Plus } from "lucide-react";
+import { Archive, Pencil } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../api/client";
 import { qk, usePackages, usePaymentSettings, usePools } from "../../api/hooks";
@@ -30,7 +30,8 @@ function lifetimeText(lifetime: Lifetime, days: number): string {
   return t(`packages.lifetime.${lifetime}`);
 }
 
-export function PackagesCard() {
+/** The packages; a new one is started from the page's header (`creating`) or the empty list. */
+export function PackagesCard({ creating, onCreateClose }: { creating: boolean; onCreateClose: () => void }) {
   const packages = usePackages();
   const pools = usePools();
   const selling = usePaymentSettings().data?.enabled === true;
@@ -55,9 +56,6 @@ export function PackagesCard() {
           <h2 className="card-title">{t("packages.title")}</h2>
           <div className="card-sub">{t("packages.sub")}</div>
         </div>
-        <Button size="sm" onClick={() => setEdit("new")}>
-          <Plus size={16} aria-hidden /> {t("packages.add")}
-        </Button>
       </div>
       <QueryBoundary query={packages} pending={<Skeleton style={{ height: 64 }} />}>
         {(list) =>
@@ -92,7 +90,15 @@ export function PackagesCard() {
           )
         }
       </QueryBoundary>
-      <PackageDrawer pkg={edit} pools={pools.data ?? []} selling={selling} onClose={() => setEdit(null)} />
+      <PackageDrawer
+        pkg={creating ? "new" : edit}
+        pools={pools.data ?? []}
+        selling={selling}
+        onClose={() => {
+          setEdit(null);
+          onCreateClose();
+        }}
+      />
       <Confirm
         open={!!archive}
         onOpenChange={(v) => !v && setArchive(null)}

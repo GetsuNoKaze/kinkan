@@ -2,16 +2,15 @@
 // what order, with the page itself next to the form. One draft for the page's settings,
 // saved together; images and instructions are saved as they are made.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useBlocker } from "@tanstack/react-router";
-import { ArrowDown, ArrowUp, ChevronDown, ImageUp, LayoutList, Link2, Monitor, Moon, Palette, Plus, RotateCcw, Smartphone, Sun, Trash2, Type, Code, BadgeCheck, FileText } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { Link, useBlocker } from "@tanstack/react-router";
+import { ArrowDown, ArrowUp, ChevronDown, ImageUp, Link2, Monitor, Moon, Plus, RotateCcw, Smartphone, Sun, Trash2, Type } from "lucide-react";
 import { useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { api, ApiError, basePath, errorText, unwrap, type Schemas } from "../../../api/client";
 import { qk, useNodes, useSettings } from "../../../api/hooks";
 import { Confirm } from "../../../components/overlay";
 import { QueryBoundary } from "../../../components/query";
-import { Switch } from "../../../components/switch";
-import { Tabs } from "../../../components/tabs";
+import { Switch, SwitchRow } from "../../../components/switch";
+import { SaveBar, WithPreview } from "../../../components/layout";
 import { useToast } from "../../../components/toast";
 import { Button, Field, Segmented, Skeleton } from "../../../components/ui";
 import { t, useLocale, type Key } from "../../../i18n";
@@ -23,6 +22,7 @@ import { CUSTOM_TYPES, MINI_APP_ONLY, orderApps, PLATFORMS, type BlockType } fro
 import type { ShopData } from "../../../sub/shop";
 import type { Info } from "../../../sub/types";
 import { firstPlatform } from "../../../sub/view";
+import type { SETTINGS_PARTS } from "../../search";
 import { DocsSection, PLATFORM_NAMES, useSubDocs } from "./sub-docs";
 import { PagePreview, type PreviewDevice } from "./sub-page-preview";
 
@@ -31,12 +31,12 @@ type Config = Schemas["Page"];
 type Block = Schemas["PageBlock"];
 type Look = Schemas["PageLook"];
 type Asset = Schemas["PageAsset"];
-type Form = { config: Config; brand: string; brand_accent: string };
+type Form = { config: Config; brand_accent: string };
 type Set = (f: (c: Config) => Config) => void;
 
-const SECTIONS = ["look", "brand", "blocks", "apps", "docs", "css"] as const;
-type Section = (typeof SECTIONS)[number];
-const SECTION_ICONS = { look: Palette, brand: BadgeCheck, blocks: LayoutList, apps: Smartphone, docs: FileText, css: Code } as const;
+/** The editor's parts, listed under "Subscription page" in the settings' section list. */
+export type SubPagePart = (typeof SETTINGS_PARTS.page)[number];
+type Section = SubPagePart;
 
 const COLOR = /^#[0-9A-Fa-f]{6}$/;
 const LIMITS = { logo: 512, background: 2048 } as const;
@@ -63,29 +63,20 @@ export function useSubPage() {
 
 const imageURL = (a?: Asset) => (a ? `${basePath}/api/v1/sub-page/images/${a.name}?v=${a.hash}` : undefined);
 
-export function SubPageSettings() {
+/** The editor of the subscription page; the open part is kept by the settings page (in the URL). */
+export function SubPageSettings({ section, onSection }: { section: SubPagePart; onSection: (s: SubPagePart) => void }) {
   const page = useSubPage();
   return (
-    <QueryBoundary
-      query={page}
-      pending={
-        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-          <Skeleton style={{ height: 520, borderRadius: 20 }} />
-          <Skeleton style={{ height: 640, borderRadius: 20 }} />
-        </div>
-      }
-      wrap={(state) => <section className="card glass">{state}</section>}
-    >
-      {(v) => <Editor v={v} />}
+    <QueryBoundary query={page} pending={<Skeleton style={{ height: 520, borderRadius: 20 }} />} wrap={(state) => <section className="card glass">{state}</section>}>
+      {(v) => <Editor v={v} section={section} setSection={onSection} />}
     </QueryBoundary>
   );
 }
 
-function Editor({ v }: { v: View }) {
+function Editor({ v, section, setSection }: { v: View; section: Section; setSection: (s: Section) => void }) {
   const qc = useQueryClient();
   const toast = useToast();
-  const { draft, setDraft, dirty, reset } = useDraft<Form>({ config: v.config, brand: v.brand, brand_accent: v.brand_accent });
-  const [section, setSection] = useState<Section>("look");
+  const { draft, setDraft, dirty, reset } = useDraft<Form>({ config: v.config, brand_accent: v.brand_accent });
   // The platform the apps section edits: the preview opens the same tab.
   const [appsTab, setAppsTab] = useState<Platform>("ios");
   const [live, setLive] = useState("");
@@ -94,7 +85,6 @@ function Editor({ v }: { v: View }) {
   const save = useMutation({
     mutationFn: (f: Form) => {
       const body: Schemas["PutSubPageInputBody"] = { config: f.config };
-      if (f.brand !== v.brand) body.brand = f.brand.trim();
       if (f.brand_accent !== v.brand_accent) body.brand_accent = f.brand_accent.trim().toUpperCase();
       return unwrap(api.PUT("/api/v1/sub-page", { body }));
     },
@@ -129,13 +119,11 @@ function Editor({ v }: { v: View }) {
 
   return (
     <>
-      <div className="grid items-start gap-4 pb-16 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="flex min-w-0 flex-col gap-4">
-          <Tabs id="sub-page" label={t("settings.page.sections")} tabs={SECTIONS.map((id) => ({ id, label: t(`settings.page.tab.${id}`), icon: SECTION_ICONS[id] }))} value={section} onChange={setSection}>
+      <WithPreview title={t("settings.page.preview")} preview={(bare) => <Preview v={v} draft={draft} platform={section === "apps" ? appsTab : undefined} bare={bare} />}>
             {section === "look" ? (
               <LookSection draft={draft} setDraft={setDraft} set={set} errors={errors} accentMissing={accentMissing} background={v.background} />
             ) : section === "brand" ? (
-              <BrandSection draft={draft} setDraft={setDraft} set={set} errors={errors} logo={v.logo} />
+              <BrandSection draft={draft} setDraft={setDraft} set={set} errors={errors} logo={v.logo} brandName={v.brand} />
             ) : section === "blocks" ? (
               <BlocksSection config={draft.config} set={set} errors={errors} announce={setLive} />
             ) : section === "apps" ? (
@@ -145,40 +133,17 @@ function Editor({ v }: { v: View }) {
             ) : (
               <CSSSection config={draft.config} set={set} error={errors["config.css"]} />
             )}
-          </Tabs>
           <div className="flex flex-wrap items-center gap-2 px-1">
             <Button variant="ghost" size="sm" onClick={() => setResetting(true)}>
-              <RotateCcw size={14} aria-hidden /> {t("settings.page.reset")}
+              <RotateCcw size={16} aria-hidden /> {t("settings.page.reset")}
             </Button>
             <span className="text-xs text-[var(--ink-500)]">{t("settings.page.resetHint")}</span>
           </div>
-        </div>
-        <Preview v={v} draft={draft} platform={section === "apps" ? appsTab : undefined} />
-      </div>
+      </WithPreview>
       <p className="sr-only" role="status" aria-live="polite">
         {live}
       </p>
-      <AnimatePresence>
-        {dirty ? (
-          <motion.div
-            className="bulk-bar glass-strong"
-            role="region"
-            aria-label={t("settings.page.unsaved")}
-            initial={{ opacity: 0, y: 24, x: "-50%" }}
-            animate={{ opacity: 1, y: 0, x: "-50%" }}
-            exit={{ opacity: 0, y: 24, x: "-50%" }}
-            transition={{ type: "spring", stiffness: 420, damping: 32 }}
-          >
-            <span className="text-[13px] font-medium">{t("settings.page.unsaved")}</span>
-            <Button variant="ghost" size="sm" onClick={reset} disabled={save.isPending}>
-              {t("settings.page.discard")}
-            </Button>
-            <Button variant="primary" size="sm" loading={save.isPending} onClick={submit}>
-              {t("common.save")}
-            </Button>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+      <SaveBar dirty={dirty} saving={save.isPending} onSave={submit} onReset={reset} />
       <Confirm
         open={resetting}
         onOpenChange={setResetting}
@@ -226,19 +191,6 @@ function Card({ title, sub, children }: { title: string; sub?: string; children:
       </div>
       {children}
     </section>
-  );
-}
-
-/** A row with a switch: what it is on the left, the switch on the right. */
-function SwitchRow({ label, sub, checked, onChange, disabled }: { label: string; sub?: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
-  return (
-    <div className="flex items-start justify-between gap-4 py-3">
-      <div className="min-w-0">
-        <div className="text-[13px] font-medium">{label}</div>
-        {sub ? <div className="mt-1 text-xs text-[var(--ink-500)]">{sub}</div> : null}
-      </div>
-      <Switch checked={checked} label={label} onChange={onChange} disabled={disabled} />
-    </div>
   );
 }
 
@@ -494,18 +446,23 @@ function ImageField({ name, asset, label, hint }: { name: "logo" | "background";
   );
 }
 
-function BrandSection({ draft, setDraft, set, errors, logo }: SectionProps & { logo?: Asset }) {
+function BrandSection({ draft, set, errors, logo, brandName }: SectionProps & { logo?: Asset; brandName: string }) {
   const b = draft.config.brand;
   const og = draft.config.og;
   const setBrand = (patch: Partial<Config["brand"]>) => set((c) => ({ ...c, brand: { ...c.brand, ...patch } }));
   const setOG = (patch: Partial<Config["og"]>) => set((c) => ({ ...c, og: { ...c.og, ...patch } }));
-  const name = draft.brand.trim() || "VPN";
+  const name = brandName.trim() || "VPN";
   return (
     <>
       <Card title={t("settings.page.brand")} sub={t("settings.page.brandSub")}>
         <div className="grid gap-x-3 sm:grid-cols-2">
-          <Field label={t("settings.brand")} htmlFor="sp-brand" hint={t("settings.page.brandNameHint")} error={errors.brand}>
-            <input id="sp-brand" className="input" value={draft.brand} maxLength={40} onChange={(e) => setDraft((d) => ({ ...d, brand: e.target.value }))} aria-invalid={!!errors.brand} />
+          <Field label={t("settings.brand")} hint={t("settings.page.brandNameHint")}>
+            <div className="flex min-h-11 items-center justify-between gap-2 rounded-[var(--r-md)] border border-[var(--hairline)] bg-[var(--surface-soft)] py-1 pr-1 pl-3">
+              <span className="truncate font-medium">{brandName.trim() || "VPN"}</span>
+              <Link to="/settings" search={{ tab: "general" }} className="btn btn-ghost btn-sm">
+                {t("settings.page.brandNameEdit")}
+              </Link>
+            </div>
           </Field>
           <Field label={t("settings.page.subtitle")} htmlFor="sp-subtitle" hint={t("settings.page.subtitleHint")} error={errors["config.brand.subtitle"]}>
             <input id="sp-subtitle" className="input" value={b.subtitle} maxLength={80} onChange={(e) => setBrand({ subtitle: e.target.value })} aria-invalid={!!errors["config.brand.subtitle"]} />
@@ -808,7 +765,7 @@ function CSSSection({ config, set, error }: { config: Config; set: Set; error?: 
 
 const SAMPLE_GB = 1024 ** 3;
 
-function Preview({ v, draft, platform: editing }: { v: View; draft: Form; platform?: Platform }) {
+function Preview({ v, draft, platform: editing, bare }: { v: View; draft: Form; platform?: Platform; bare?: boolean }) {
   const settings = useSettings();
   const nodes = useNodes();
   const docs = useSubDocs();
@@ -818,7 +775,7 @@ function Preview({ v, draft, platform: editing }: { v: View; draft: Form; platfo
   const [tg, setTg] = useState(false);
   const look = draft.config.look;
   const s = settings.data;
-  const brand = draft.brand.trim() || "VPN";
+  const brand = v.brand.trim() || "VPN";
   const info = useMemo<Info>(() => {
     const now = Date.now();
     const fill = (text: string) => text.replace(/\{(\w+)\}/g, (m, k: string) => ({ brand, name: t("settings.page.sample.name"), days: "23" })[k] ?? m);
@@ -861,9 +818,9 @@ function Preview({ v, draft, platform: editing }: { v: View; draft: Form; platfo
   const platform = editing ?? firstPlatform(draft.config, device === "phone" ? "ios" : "windows");
   const shownScheme = look.mode === "system" ? scheme : look.mode;
   return (
-    <section className="card glass flex flex-col gap-3 xl:sticky xl:top-4" aria-label={t("settings.page.preview")}>
+    <section className={bare ? "flex flex-col gap-3" : "card glass flex flex-col gap-3"} aria-label={t("settings.page.preview")}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="card-title">{t("settings.page.preview")}</h2>
+        {bare ? <span /> : <h2 className="card-title">{t("settings.page.preview")}</h2>}
         <div className="flex flex-wrap items-center gap-2">
           <div className="seg" role="group" aria-label={t("settings.page.previewDevice")}>
             <button type="button" aria-pressed={device === "phone"} onClick={() => setDevice("phone")} aria-label={t("settings.page.phone")} title={t("settings.page.phone")}>

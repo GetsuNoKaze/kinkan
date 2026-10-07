@@ -1,17 +1,20 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
-import { Undo2 } from "lucide-react";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { History as HistoryIcon, ListChecks, TriangleAlert, Undo2, Wallet } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { api, errorText, unwrap, type Schemas } from "../../api/client";
 import { qk, usePaymentSettings, useTariffs } from "../../api/hooks";
 import { Confirm } from "../../components/overlay";
 import { useToast } from "../../components/toast";
 import { QueryBoundary, StaleNotice } from "../../components/query";
-import { Switch } from "../../components/switch";
-import { Button, EmptyState, ErrorState, PageHeader, Pill, Skeleton, Spinner } from "../../components/ui";
+import { Switch, SwitchRow } from "../../components/switch";
+import { FormActions } from "../../components/layout";
+import { Tabs } from "../../components/tabs";
+import { Button, EmptyState, ErrorState, Field, PageHeader, Pill, Skeleton, Spinner } from "../../components/ui";
 import { t, tMaybe } from "../../i18n";
 import { useDraft } from "../../lib/draft";
 import { dateShort, days, money, num, time } from "../../lib/format";
+import { PAYMENT_TABS, type PaymentsSearch } from "../search";
 import { AddonsCard, addonName, useAddons } from "./payment-addons";
 
 type Settings = Schemas["PaymentSettingsView"];
@@ -30,6 +33,8 @@ const STATUS_TONE: Record<Status, "ok" | "warn" | "bad" | "off"> = {
 };
 const STATUSES: Status[] = ["applied", "paid", "pending", "failed", "expired", "refunded"];
 const BUILT_IN: Provider[] = ["stars"];
+const TAB_ICONS = { history: HistoryIcon, methods: Wallet, rules: ListChecks } as const;
+type PaymentTab = NonNullable<PaymentsSearch["tab"]>;
 
 /** Why a payment failed or waits, in words when the code is known; a provider's own code as is. */
 function paymentError(code: string): string {
@@ -43,38 +48,79 @@ function providerName(p: Provider, addons: Addons | undefined): string {
 
 export function PaymentsPage() {
   const settings = usePaymentSettings();
+  const { tab } = useSearch({ from: "/_app/payments" });
+  const navigate = useNavigate({ from: "/payments" });
+  const s = settings.data;
+  // Until a way to take payments is on, setting one up is what the page is for.
+  const ready = !!s && s.enabled && (s.available.stars || s.available.addons.length > 0);
+  const shown: PaymentTab = tab ?? (s && !ready ? "methods" : "history");
+  return (
+    <>
+      <PageHeader title={t("payments.title")} sub={t("payments.subtitle")} actions={<SellingSwitch s={s} />} />
+      {s?.moving.length ? <MovingBanner ids={s.moving} /> : null}
+      {s && !s.enabled ? (
+        <div className="banner warn" role="status">
+          <TriangleAlert size={16} className="shrink-0" aria-hidden />
+          <span className="min-w-0 flex-1">{t("payments.salesOff")}</span>
+        </div>
+      ) : null}
+      {s && (s.available.stars || s.available.addons.length > 0) && s.on_sale === 0 ? (
+        <div className="banner warn flex-wrap" role="status">
+          <span className="min-w-0 flex-1">{t("payments.nothingOnSale")}</span>
+          <Link to="/tariffs" search={{ tab: "tariffs" }} className="btn btn-glass btn-sm">
+            {t("payments.openTariffs")}
+          </Link>
+        </div>
+      ) : null}
+      <Tabs
+        id="payments"
+        label={t("payments.sections")}
+        tabs={PAYMENT_TABS.map((id) => ({ id, label: t(`payments.tabs.${id}`), icon: TAB_ICONS[id] }))}
+        value={shown}
+        onChange={(next) => void navigate({ search: { tab: next }, replace: true })}
+      >
+        {shown === "history" ? (
+          <History />
+        ) : (
+          <QueryBoundary query={settings} pending={<Skeleton style={{ height: 320, borderRadius: 20 }} />} wrap={(state) => <section className="card glass">{state}</section>}>
+            {(v) =>
+              shown === "methods" ? (
+                // The payment systems take the width, Stars sit beside them.
+                <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
+                  <AddonsCard selling={v.enabled} />
+                  <StarsCard s={v} />
+                </div>
+              ) : (
+                <div className="flex max-w-[960px] flex-col gap-4">
+                  <RulesCard s={v} />
+                </div>
+              )
+            }
+          </QueryBoundary>
+        )}
+      </Tabs>
+    </>
+  );
+}
+
+/** Selling on or off for the whole panel: the bot and the Mini App sell only while it is on. */
+function SellingSwitch({ s }: { s?: Settings }) {
   const qc = useQueryClient();
   const toast = useToast();
-  const sell = useMutation({
-    mutationFn: () => unwrap(api.PATCH("/api/v1/payments/settings", { body: { enabled: true } })),
+  const save = useMutation({
+    mutationFn: (enabled: boolean) => unwrap(api.PATCH("/api/v1/payments/settings", { body: { enabled } })),
     onSuccess: (v) => {
       qc.setQueryData(qk.paymentSettings, v);
-      toast.ok(t("settings.salesOnToast"));
+      toast.ok(v.enabled ? t("settings.salesOnToast") : t("settings.salesOffToast"));
     },
     onError: (e) => toast.error(errorText(e)),
   });
+  if (!s) return <Skeleton style={{ width: 160, height: 40, borderRadius: 12 }} />;
   return (
-    <>
-      <PageHeader title={t("payments.title")} sub={t("payments.subtitle")} />
-      {settings.data?.moving.length ? <MovingBanner ids={settings.data.moving} /> : null}
-      {settings.data && !settings.data.enabled ? (
-        <div className="banner warn mb-4 flex-wrap" role="status">
-          <span className="min-w-0 flex-1">{t("payments.salesOff")}</span>
-          <Button size="sm" variant="primary" loading={sell.isPending} onClick={() => sell.mutate()}>
-            {t("payments.sellNow")}
-          </Button>
-        </div>
-      ) : null}
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <History />
-        <div className="flex min-w-0 flex-col gap-4">
-          <QueryBoundary query={settings} pending={<Skeleton style={{ height: 420, borderRadius: 20 }} />} wrap={(state) => <section className="card glass">{state}</section>}>
-            {(s) => <SettingsCard s={s} />}
-          </QueryBoundary>
-          <AddonsCard selling={!!settings.data?.enabled} />
-        </div>
-      </div>
-    </>
+    <div className="flex h-10 items-center gap-3 rounded-[var(--r-md)] border border-[var(--hairline)] bg-[var(--surface)] px-3">
+      <span className="text-[13px] font-medium">{t("settings.sales")}</span>
+      <Switch checked={s.enabled} label={t("settings.sales")} disabled={save.isPending} onChange={(on) => save.mutate(on)} />
+    </div>
   );
 }
 
@@ -83,7 +129,7 @@ function MovingBanner({ ids }: { ids: string[] }) {
   const addons = useAddons().data;
   const names = ids.map((id) => addonName(id, addons)).join(", ");
   return (
-    <div className="banner info mb-4" role="status">
+    <div className="banner info" role="status">
       <Spinner />
       <span className="min-w-0 flex-1">{t("payments.moving", { names })}</span>
     </div>
@@ -218,77 +264,79 @@ function PaymentRow({ p, provider, onRefund }: { p: Payment; provider: string; o
   );
 }
 
-function SettingsCard({ s }: { s: Settings }) {
+function useSavePayments() {
   const qc = useQueryClient();
   const toast = useToast();
-  const tariffs = useTariffs();
-  const { draft: form, setDraft: setForm } = useDraft({ stars: s.stars, allowNew: s.allow_new, resetTraffic: s.renew_resets_traffic, trial: s.trial_tariff_id ?? 0 });
-  const save = useMutation({
+  return useMutation({
     mutationFn: (body: Schemas["PatchPaymentSettingsInputBody"]) => unwrap(api.PATCH("/api/v1/payments/settings", { body })),
     onSuccess: (v) => {
       qc.setQueryData(qk.paymentSettings, v);
       toast.ok(t("payments.saved"));
     },
   });
+}
+
+/** Telegram Stars, the way to take payments built into the panel; the others come from the marketplace below. */
+function StarsCard({ s }: { s: Settings }) {
+  const save = useSavePayments();
+  const { draft: stars, setDraft: setStars, dirty, reset } = useDraft(s.stars);
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    save.mutate({ stars: form.stars, allow_new: form.allowNew, renew_resets_traffic: form.resetTraffic, trial_tariff_id: form.trial });
+    save.mutate({ stars });
   };
-  const set = (k: "stars" | "allowNew" | "resetTraffic") => (v: boolean) => setForm((f) => ({ ...f, [k]: v }));
   return (
-    <section className="card glass reveal" style={{ "--i": 1 } as React.CSSProperties}>
+    <section className="card glass reveal">
+      <form onSubmit={submit} noValidate>
+        {save.error ? <div className="banner err mb-4">{errorText(save.error)}</div> : null}
+        <Provider title={t("payments.providers.stars")} sub={t("payments.starsSub")} on={stars} onChange={setStars} live={s.available.stars} selling={s.enabled} offline={s.enabled && stars && !s.available.stars ? t("payments.starsBotOff") : ""} />
+        <p className="text-xs text-[var(--ink-500)]">{t("payments.rublesInMarketplace")}</p>
+        <FormActions dirty={dirty} saving={save.isPending} onReset={reset} />
+      </form>
+    </section>
+  );
+}
+
+/** Who may buy, what a renewal does to the traffic, and the free trial. */
+function RulesCard({ s }: { s: Settings }) {
+  const tariffs = useTariffs();
+  const save = useSavePayments();
+  const { draft: form, setDraft: setForm, dirty, reset } = useDraft({ allowNew: s.allow_new, resetTraffic: s.renew_resets_traffic, trial: s.trial_tariff_id ?? 0 });
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    save.mutate({ allow_new: form.allowNew, renew_resets_traffic: form.resetTraffic, trial_tariff_id: form.trial });
+  };
+  return (
+    <section className="card glass reveal">
       <form onSubmit={submit} noValidate>
         <div className="card-head">
           <div>
-            <h2 className="card-title">{t("payments.settings")}</h2>
+            <h2 className="card-title">{t("payments.tabs.rules")}</h2>
             <div className="card-sub">{t("payments.settingsSub")}</div>
           </div>
         </div>
         {save.error ? <div className="banner err mb-4">{errorText(save.error)}</div> : null}
-        {(s.available.stars || s.available.addons.length > 0) && s.on_sale === 0 ? (
-          <div className="banner warn mb-4 flex-wrap" role="status">
-            <span className="min-w-0 flex-1">{t("payments.nothingOnSale")}</span>
-            <Link to="/tariffs" search={{ tab: "tariffs" }} className="btn btn-glass btn-sm">
-              {t("payments.openTariffs")}
-            </Link>
+        <div className="row-list">
+          <SwitchRow label={t("payments.allowNew")} sub={t("payments.allowNewSub")} checked={form.allowNew} onChange={(v) => setForm((f) => ({ ...f, allowNew: v }))} />
+          <SwitchRow
+            label={t("payments.resetTraffic")}
+            sub={form.resetTraffic ? t("payments.resetTrafficOn") : t("payments.resetTrafficOff")}
+            checked={form.resetTraffic}
+            onChange={(v) => setForm((f) => ({ ...f, resetTraffic: v }))}
+          />
+          <div className="pt-4">
+            <Field label={t("payments.trial")} htmlFor="pay-trial" hint={s.trials ? `${t("payments.trialSub")} ${t("payments.trialsGiven", { n: s.trials })}` : t("payments.trialSub")}>
+              <select id="pay-trial" className="input" value={form.trial} onChange={(e) => setForm((f) => ({ ...f, trial: Number(e.target.value) }))}>
+                <option value={0}>{t("payments.trialOff")}</option>
+                {(tariffs.data ?? []).map((tr) => (
+                  <option key={tr.id} value={tr.id}>
+                    {tr.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
           </div>
-        ) : null}
-
-        <Provider title={t("payments.providers.stars")} sub={t("payments.starsSub")} on={form.stars} onChange={set("stars")} live={s.available.stars} selling={s.enabled} offline={s.enabled && form.stars && !s.available.stars ? t("payments.starsBotOff") : ""} />
-        <p className="mb-4 text-xs text-[var(--ink-500)]">{t("payments.rublesInMarketplace")}</p>
-
-        <div className="mb-4 flex items-start justify-between gap-3 border-t border-[var(--hairline)] pt-4">
-          <div>
-            <div className="text-[13px] font-semibold">{t("payments.allowNew")}</div>
-            <div className="text-xs text-[var(--ink-500)]">{t("payments.allowNewSub")}</div>
-          </div>
-          <Switch checked={form.allowNew} onChange={set("allowNew")} label={t("payments.allowNew")} />
         </div>
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <div className="text-[13px] font-semibold">{t("payments.resetTraffic")}</div>
-            <div className="text-xs text-[var(--ink-500)]">{form.resetTraffic ? t("payments.resetTrafficOn") : t("payments.resetTrafficOff")}</div>
-          </div>
-          <Switch checked={form.resetTraffic} onChange={set("resetTraffic")} label={t("payments.resetTraffic")} />
-        </div>
-        <div className="mb-4 border-t border-[var(--hairline)] pt-4">
-          <label htmlFor="pay-trial" className="text-[13px] font-semibold">
-            {t("payments.trial")}
-          </label>
-          <div className="mb-2 text-xs text-[var(--ink-500)]">{t("payments.trialSub")}</div>
-          <select id="pay-trial" className="input" value={form.trial} onChange={(e) => setForm((f) => ({ ...f, trial: Number(e.target.value) }))}>
-            <option value={0}>{t("payments.trialOff")}</option>
-            {(tariffs.data ?? []).map((tr) => (
-              <option key={tr.id} value={tr.id}>
-                {tr.name}
-              </option>
-            ))}
-          </select>
-          {s.trials ? <div className="mt-1 text-xs text-[var(--ink-500)]">{t("payments.trialsGiven", { n: s.trials })}</div> : null}
-        </div>
-        <Button type="submit" variant="primary" loading={save.isPending}>
-          {t("common.save")}
-        </Button>
+        <FormActions dirty={dirty} saving={save.isPending} onReset={reset} />
       </form>
     </section>
   );
@@ -297,7 +345,7 @@ function SettingsCard({ s }: { s: Settings }) {
 // With selling off nothing takes payments: the readiness pill would only mislead, so it hides.
 function Provider({ title, sub, on, onChange, live, selling, offline, error, children }: { title: string; sub: string; on: boolean; onChange: (v: boolean) => void; live: boolean; selling: boolean; offline?: string; error?: string; children?: ReactNode }) {
   return (
-    <div className="mb-4 border-t border-[var(--hairline)] pt-4 first-of-type:border-t-0 first-of-type:pt-0" role="group" aria-label={title}>
+    <div className="mb-3" role="group" aria-label={title}>
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 text-[13px] font-semibold">

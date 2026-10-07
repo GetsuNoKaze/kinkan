@@ -1,14 +1,13 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { ArrowDownToLine, Globe, LayoutTemplate, Link2, ListFilter, Route, ShieldCheck } from "lucide-react";
+import { ArrowDownToLine, Cpu, Globe, LayoutTemplate, Link2, Route, ShieldCheck } from "lucide-react";
 import { useSettings } from "../../../api/hooks";
-import { LangSwitch } from "../../../components/lang";
+import { SectionNav } from "../../../components/layout";
 import { QueryBoundary } from "../../../components/query";
-import { Columns, Tabs } from "../../../components/tabs";
 import { ThemeCard } from "../../../components/theme";
 import { PageHeader, Skeleton } from "../../../components/ui";
-import { t } from "../../../i18n";
-import { SETTINGS_TABS } from "../../search";
-import { AutoCard, LanguageCard, SalesCard, ServerCard, UpdatesCard } from "./general";
+import { t, type Key } from "../../../i18n";
+import { SETTINGS_PARTS, SETTINGS_TABS, type SettingsSearch } from "../../search";
+import { AutoCard, LanguageCard, ServiceCard, UpdatesCard } from "./general";
 import { ImportCard, LegacyLinksCard } from "./import";
 import { ClashRulesCard } from "./rules";
 import { RoutingSection } from "./routing";
@@ -16,93 +15,112 @@ import { TorrentCard, TorrentHitsCard } from "./torrent";
 import { AccessCard, ApiCard, CertificateCard, PasswordCard, SessionsCard, TwoFactorCard } from "./security";
 import { AppsCard, DevicesCard, SubPortCard, SubscriptionCard } from "./subscription";
 import { HappCard } from "./happ";
-import { SubPageSettings } from "./sub-page";
+import { SubPageSettings, type SubPagePart } from "./sub-page";
 
-const ICONS = { general: Globe, subscription: Link2, page: LayoutTemplate, routing: Route, rules: ListFilter, security: ShieldCheck, import: ArrowDownToLine } as const;
+type Tab = SettingsSearch["tab"];
+type RoutingPart = (typeof SETTINGS_PARTS.routing)[number];
 
-/** Settings in six sections, one at a time; the section is in the URL, so a link opens it. */
+const ICONS = { general: Globe, subscription: Link2, page: LayoutTemplate, routing: Route, security: ShieldCheck, system: Cpu, import: ArrowDownToLine } as const;
+
+const PART_LABELS: Record<string, Key> = {
+  look: "settings.page.tab.look",
+  brand: "settings.page.tab.brand",
+  blocks: "settings.page.tab.blocks",
+  apps: "settings.page.tab.apps",
+  docs: "settings.page.tab.docs",
+  css: "settings.page.tab.css",
+  simple: "settings.routesViewSimple",
+  yaml: "settings.routesViewYaml",
+  rules: "settings.tabs.rules",
+  torrent: "settings.torrent.title",
+};
+
+/**
+ * Settings in sections listed beside the content (a select on phones); the section and its
+ * part are in the URL, so a link opens them. Forms keep one readable width; the editors with
+ * a live preview take the whole column.
+ */
 export function SettingsPage() {
   const settings = useSettings();
-  const { tab } = useSearch({ from: "/_app/settings" });
+  const { tab, part } = useSearch({ from: "/_app/settings" });
   const navigate = useNavigate({ from: "/settings" });
+  const go = (next: Tab, nextPart?: string) => void navigate({ search: { tab: next, part: nextPart }, replace: true });
+  // The routing opens where it is in use: the own YAML once there is one.
+  const routingPart: RoutingPart = (part as RoutingPart | undefined) ?? (settings.data?.sub_template.trim() ? "yaml" : "simple");
+  const pagePart: SubPagePart = (part as SubPagePart | undefined) ?? "look";
+  const shownPart = tab === "routing" ? routingPart : tab === "page" ? pagePart : undefined;
+  const wide = tab === "page" || (tab === "routing" && (routingPart === "simple" || routingPart === "yaml"));
   return (
     <>
-      <PageHeader title={t("nav.settings")} sub={t("settings.subtitle")} actions={<LangSwitch />} />
-      <Tabs
-        id="settings"
+      <PageHeader title={t("nav.settings")} sub={t("settings.subtitle")} />
+      <SectionNav
         label={t("settings.sections")}
-        tabs={SETTINGS_TABS.map((id) => ({ id, label: t(`settings.tabs.${id}`), icon: ICONS[id] }))}
+        sections={SETTINGS_TABS.map((id) => ({
+          id,
+          label: t(`settings.tabs.${id}`),
+          icon: ICONS[id],
+          parts: id in SETTINGS_PARTS ? SETTINGS_PARTS[id as keyof typeof SETTINGS_PARTS].map((p) => ({ id: p, label: t(PART_LABELS[p]!) })) : undefined,
+        }))}
         value={tab}
-        onChange={(next) => void navigate({ search: { tab: next }, replace: true })}
+        part={shownPart}
+        onChange={go}
+        narrow={!wide}
       >
-        <QueryBoundary query={settings} pending={<Skeleton style={{ height: 320, borderRadius: 20 }} />} wrap={(state) => <section className="card glass">{state}</section>}>
-          {(s) =>
-            tab === "general" ? (
-              <Columns
-                left={
-                  <>
-                    <ServerCard s={s} />
-                    <LanguageCard s={s} />
-                    <AutoCard s={s} />
-                  </>
-                }
-                right={
-                  <>
-                    <UpdatesCard />
-                    <SalesCard />
-                    <ThemeCard />
-                  </>
-                }
-              />
-            ) : tab === "subscription" ? (
-              <Columns
-                left={
-                  <>
-                    <SubscriptionCard s={s} />
-                    <DevicesCard s={s} />
-                  </>
-                }
-                right={
-                  <>
-                    <SubPortCard s={s} />
-                    <AppsCard s={s} />
-                    <HappCard s={s} />
-                  </>
-                }
-              />
-            ) : tab === "page" ? (
-              <SubPageSettings />
-            ) : tab === "routing" ? (
-              <RoutingSection s={s} />
-            ) : tab === "import" ? (
-              <Columns left={<ImportCard />} right={<LegacyLinksCard />} />
-            ) : tab === "rules" ? (
-              <div className="flex max-w-4xl flex-col gap-4">
-                <ClashRulesCard s={s} />
-                <TorrentCard />
-                <TorrentHitsCard />
-              </div>
-            ) : (
-              <Columns
-                left={
-                  <>
-                    <AccessCard s={s} />
-                    <CertificateCard s={s} />
-                    <ApiCard />
-                  </>
-                }
-                right={
-                  <>
-                    <PasswordCard />
-                    <TwoFactorCard />
-                    <SessionsCard />
-                  </>
-                }
-              />
-            )
-          }
-        </QueryBoundary>
-      </Tabs>
+        {tab === "page" ? (
+          // The editor loads its own data and keeps its own draft.
+          <SubPageSettings section={pagePart} onSection={(p) => go("page", p)} />
+        ) : tab === "routing" && routingPart === "torrent" ? (
+          <>
+            <TorrentCard />
+            <TorrentHitsCard />
+          </>
+        ) : (
+          <QueryBoundary query={settings} pending={<Skeleton style={{ height: 320, borderRadius: 20 }} />} wrap={(state) => <section className="card glass">{state}</section>}>
+            {(s) =>
+              tab === "general" ? (
+                <>
+                  <ServiceCard s={s} />
+                  <LanguageCard s={s} />
+                  <ThemeCard />
+                </>
+              ) : tab === "subscription" ? (
+                <>
+                  <DevicesCard s={s} />
+                  <AppsCard s={s} />
+                  <HappCard s={s} />
+                  <SubscriptionCard s={s} />
+                  <SubPortCard s={s} />
+                </>
+              ) : tab === "routing" ? (
+                routingPart === "rules" ? (
+                  <ClashRulesCard s={s} />
+                ) : (
+                  <RoutingSection s={s} view={routingPart === "yaml" ? "yaml" : "simple"} />
+                )
+              ) : tab === "security" ? (
+                <>
+                  <PasswordCard />
+                  <TwoFactorCard />
+                  <SessionsCard />
+                  <AccessCard s={s} />
+                  <CertificateCard s={s} />
+                  <ApiCard />
+                </>
+              ) : tab === "system" ? (
+                <>
+                  <UpdatesCard />
+                  <AutoCard s={s} />
+                </>
+              ) : (
+                <>
+                  <ImportCard />
+                  <LegacyLinksCard />
+                </>
+              )
+            }
+          </QueryBoundary>
+        )}
+      </SectionNav>
     </>
   );
 }

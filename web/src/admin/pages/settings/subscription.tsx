@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from "react";
 import type { Schemas } from "../../../api/client";
 import { useInbounds, useNodes } from "../../../api/hooks";
+import { Disclosure, FormActions } from "../../../components/layout";
 import { Button, Field, Pill } from "../../../components/ui";
-import { Switch } from "../../../components/switch";
+import { SwitchRow } from "../../../components/switch";
 import { t } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
 import { fieldErrors } from "../../../lib/fields";
@@ -84,17 +85,14 @@ export function SubPortCard({ s }: { s: Schemas["SettingsView"] }) {
             );
           })}
         </div>
-        <p className="mb-4 text-xs text-[var(--ink-500)]">{t("settings.subPortNote")}</p>
-        <div className="flex flex-wrap gap-2">
-          <Button type="submit" variant="primary" loading={save.isPending && save.variables?.sub_port === next} disabled={!changed || !valid}>
-            {t("common.save")}
-          </Button>
+        <p className="text-xs text-[var(--ink-500)]">{t("settings.subPortNote")}</p>
+        <FormActions saving={save.isPending && save.variables?.sub_port === next} disabled={!changed || !valid}>
           {s.sub_port ? (
             <Button variant="ghost" loading={save.isPending && save.variables?.sub_port === 0} onClick={() => save.mutate({ sub_port: 0 })}>
               {t("settings.subPortOff", { port: current === s.sub_port ? s.panel_port : current })}
             </Button>
           ) : null}
-        </div>
+        </FormActions>
       </form>
     </section>
   );
@@ -103,12 +101,12 @@ export function SubPortCard({ s }: { s: Schemas["SettingsView"] }) {
 export function SubscriptionCard({ s }: { s: Schemas["SettingsView"] }) {
   const save = useSaveSettings();
   const inbounds = useInbounds();
-  const { draft: form, setDraft: setForm } = useDraft({ brand: s.brand, support_url: s.support_url, sub_group_main: s.sub_group_main, sub_group_auto: s.sub_group_auto, client_fingerprint: s.client_fingerprint });
+  const { draft: form, setDraft: setForm, dirty, reset } = useDraft({ sub_group_main: s.sub_group_main, sub_group_auto: s.sub_group_auto, client_fingerprint: s.client_fingerprint });
   const [fpOk, setFpOk] = useState(true);
   const errors = fieldErrors(save.error);
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    save.mutate({ brand: form.brand, support_url: form.support_url, sub_group_main: form.sub_group_main.trim(), sub_group_auto: form.sub_group_auto.trim(), client_fingerprint: form.client_fingerprint });
+    save.mutate({ sub_group_main: form.sub_group_main.trim(), sub_group_auto: form.sub_group_auto.trim(), client_fingerprint: form.client_fingerprint });
   };
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const proxies = (inbounds.data ?? []).filter((i) => i.enabled).map((i) => i.sub_name);
@@ -117,13 +115,10 @@ export function SubscriptionCard({ s }: { s: Schemas["SettingsView"] }) {
       <form onSubmit={submit} noValidate>
         <div className="card-head">
           <div>
-            <h2 className="card-title">{t("settings.subscription")}</h2>
+            <h2 className="card-title">{t("settings.profile")}</h2>
             <div className="card-sub">{t("settings.subscriptionSub")}</div>
           </div>
         </div>
-        <Field label={t("settings.brand")} htmlFor="s-brand" hint={t("settings.brandHint")}>
-          <input id="s-brand" className="input" value={form.brand} onChange={set("brand")} maxLength={40} />
-        </Field>
         <div className="grid gap-x-3 sm:grid-cols-2">
           <Field label={t("settings.groupMain")} htmlFor="s-gmain" hint={t("settings.groupMainHint")} error={errors.sub_group_main}>
             <input id="s-gmain" className="input" value={form.sub_group_main} onChange={set("sub_group_main")} maxLength={48} aria-invalid={!!errors.sub_group_main} autoComplete="off" />
@@ -134,15 +129,9 @@ export function SubscriptionCard({ s }: { s: Schemas["SettingsView"] }) {
         </div>
         <div className="panel-soft mb-4 p-3" aria-label={t("settings.preview")}>
           <div className="mb-2 text-xs text-[var(--ink-500)]">{t("settings.previewHint")}</div>
-          <div className="flex items-center gap-2">
-            <b className="truncate text-[13px]">{form.sub_group_main || "—"}</b>
-            <span className="rounded-md border border-[var(--hairline)] px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-[var(--ink-500)]">SELECTOR</span>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <span className="tag inline-flex items-center gap-1">
-              {form.sub_group_auto || "—"}
-              <span className="text-[10px] font-semibold tracking-wide text-[var(--ink-400)]">URLTEST</span>
-            </span>
+          <b className="block truncate text-[13px]">{form.sub_group_main || "—"}</b>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <span className="tag">{form.sub_group_auto || "—"}</span>
             {proxies.map((p) => (
               <span key={p} className="tag">
                 {p}
@@ -150,15 +139,12 @@ export function SubscriptionCard({ s }: { s: Schemas["SettingsView"] }) {
             ))}
           </div>
         </div>
-        <Field label={t("settings.fingerprint")} htmlFor="s-fp" hint={t("settings.fingerprintHint")} error={errors.client_fingerprint}>
-          <FingerprintSelect key={s.client_fingerprint} id="s-fp" value={form.client_fingerprint} onChange={(v) => setForm((f) => ({ ...f, client_fingerprint: v }))} invalid={!!errors.client_fingerprint} onValid={setFpOk} />
-        </Field>
-        <Field label={t("settings.support")} htmlFor="s-support" hint={t("settings.supportHint")} error={errors.support_url}>
-          <input id="s-support" className="input" value={form.support_url} onChange={set("support_url")} placeholder="https://t.me/your_support" aria-invalid={!!errors.support_url} />
-        </Field>
-        <Button type="submit" variant="primary" loading={save.isPending} disabled={!fpOk || !form.client_fingerprint}>
-          {t("common.save")}
-        </Button>
+        <Disclosure title={t("common.advanced")} open={!!errors.client_fingerprint || !fpOk}>
+          <Field label={t("settings.fingerprint")} htmlFor="s-fp" hint={t("settings.fingerprintHint")} error={errors.client_fingerprint}>
+            <FingerprintSelect key={s.client_fingerprint} id="s-fp" value={form.client_fingerprint} onChange={(v) => setForm((f) => ({ ...f, client_fingerprint: v }))} invalid={!!errors.client_fingerprint} onValid={setFpOk} />
+          </Field>
+        </Disclosure>
+        <FormActions dirty={dirty} saving={save.isPending} onReset={reset} disabled={!dirty || !fpOk || !form.client_fingerprint} />
       </form>
     </section>
   );
@@ -181,7 +167,7 @@ function unknownVars(text: string): string[] {
 // and the brand for the apps that read operator headers (ClashFest, SlothClash).
 export function AppsCard({ s }: { s: Schemas["SettingsView"] }) {
   const save = useSaveSettings();
-  const { draft: form, setDraft: setForm } = useDraft({ sub_title: s.sub_title, sub_announce: s.sub_announce, sub_announce_url: s.sub_announce_url, brand_accent: s.brand_accent, brand_logo_url: s.brand_logo_url });
+  const { draft: form, setDraft: setForm, dirty, reset } = useDraft({ sub_title: s.sub_title, sub_announce: s.sub_announce, sub_announce_url: s.sub_announce_url, brand_accent: s.brand_accent, brand_logo_url: s.brand_logo_url });
   const errors = fieldErrors(save.error);
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -245,13 +231,7 @@ export function AppsCard({ s }: { s: Schemas["SettingsView"] }) {
         <Field label={t("settings.announceUrl")} htmlFor="s-announce-url" hint={t("settings.announceUrlHint")} error={errors.sub_announce_url}>
           <input id="s-announce-url" className="input" value={form.sub_announce_url} onChange={set("sub_announce_url")} placeholder="https://t.me/your_channel" aria-invalid={!!errors.sub_announce_url} />
         </Field>
-        <div className="flex items-start justify-between gap-4 py-3">
-          <div className="min-w-0">
-            <div className="text-[13px] font-medium">{t("settings.appBranding")}</div>
-            <div className="mt-1 text-xs text-[var(--ink-500)]">{t("settings.appBrandingSub")}</div>
-          </div>
-          <Switch checked={s.app_branding} label={t("settings.appBranding")} disabled={save.isPending} onChange={(v) => save.mutate({ app_branding: v })} />
-        </div>
+        <SwitchRow className="border-t border-[var(--hairline)]" label={t("settings.appBranding")} sub={t("settings.appBrandingSub")} checked={s.app_branding} disabled={save.isPending} onChange={(v) => save.mutate({ app_branding: v })} />
         {s.app_branding ? (
           <div className="grid gap-x-3 sm:grid-cols-[160px_1fr]">
             <Field label={t("settings.brandAccent")} htmlFor="s-accent" hint={t("settings.brandAccentHint")} error={errors.brand_accent}>
@@ -265,9 +245,7 @@ export function AppsCard({ s }: { s: Schemas["SettingsView"] }) {
             </Field>
           </div>
         ) : null}
-        <Button type="submit" variant="primary" loading={save.isPending}>
-          {t("common.save")}
-        </Button>
+        <FormActions dirty={dirty} saving={save.isPending && save.variables?.app_branding === undefined} onReset={reset} />
       </form>
     </section>
   );
@@ -284,19 +262,11 @@ export function DevicesCard({ s }: { s: Schemas["SettingsView"] }) {
         </div>
       </div>
       <ul className="row-list">
-        <li className="flex items-start justify-between gap-4 py-3">
-          <div className="min-w-0">
-            <div className="text-[13px] font-medium">{t("settings.binding")}</div>
-            <div className="mt-1 text-xs text-[var(--ink-500)]">{t("settings.bindingSub")}</div>
-          </div>
-          <Switch checked={s.device_binding} label={t("settings.binding")} disabled={save.isPending} onChange={(v) => save.mutate({ device_binding: v })} />
+        <li>
+          <SwitchRow label={t("settings.binding")} sub={t("settings.bindingSub")} checked={s.device_binding} disabled={save.isPending} onChange={(v) => save.mutate({ device_binding: v })} />
         </li>
-        <li className="flex items-start justify-between gap-4 py-3">
-          <div className="min-w-0">
-            <div className="text-[13px] font-medium">{t("settings.requireHwid")}</div>
-            <div className="mt-1 text-xs text-[var(--ink-500)]">{t("settings.requireHwidSub")}</div>
-          </div>
-          <Switch checked={s.device_require_hwid} label={t("settings.requireHwid")} disabled={save.isPending || !s.device_binding} onChange={(v) => save.mutate({ device_require_hwid: v })} />
+        <li>
+          <SwitchRow label={t("settings.requireHwid")} sub={t("settings.requireHwidSub")} checked={s.device_require_hwid} disabled={save.isPending || !s.device_binding} onChange={(v) => save.mutate({ device_require_hwid: v })} />
         </li>
       </ul>
       <p className="mt-3 text-xs text-[var(--ink-500)]">{t("settings.devicesNote")}</p>

@@ -10,10 +10,10 @@ import { TELEGRAM_TABS } from "../search";
 import { ago, num } from "../../lib/format";
 import { Confirm } from "../../components/overlay";
 import { QueryBoundary } from "../../components/query";
-import { Columns, Tabs } from "../../components/tabs";
+import { SaveBar, SectionNav, WithPreview } from "../../components/layout";
 import { useToast } from "../../components/toast";
 import { Bar, Button, Field, PageHeader, Pill, Segmented, Skeleton } from "../../components/ui";
-import { Switch } from "../../components/switch";
+import { Switch, SwitchRow } from "../../components/switch";
 import { t, tMaybe, useLocale } from "../../i18n";
 
 type View = Schemas["TelegramView"];
@@ -53,8 +53,8 @@ export function TelegramPage() {
       <QueryBoundary
         query={tg}
         pending={
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <Skeleton style={{ height: 320, borderRadius: 20 }} />
+          <div className="flex flex-col gap-4" role="status" aria-busy aria-label={t("common.loading")}>
+            <Skeleton style={{ height: 72, borderRadius: 20 }} />
             <Skeleton style={{ height: 420, borderRadius: 20 }} />
           </div>
         }
@@ -69,91 +69,77 @@ export function TelegramPage() {
 function TelegramBody({ v }: { v: View }) {
   const { tab } = useSearch({ from: "/_app/telegram" });
   const navigate = useNavigate({ from: "/telegram" });
+  const go = (next: (typeof TELEGRAM_TABS)[number]) => void navigate({ search: { tab: next }, replace: true });
   const patch = usePatchTelegram();
   const toast = useToast();
-  // The draft follows the server's copy while untouched and keeps the edits when the copy
-  // changes under it (a poll, the bot saved from another session).
+  // The drafts follow the server's copy while untouched and keep the edits when the copy
+  // changes under them (a poll, the bot saved from another session). Menu, texts and options
+  // are one draft, the admin's alerts another; the bar below saves whatever was changed.
   const { draft, setDraft, dirty, reset } = useDraft(v.config);
   const infrastructure = useDraft(v.infrastructure);
+  const [infraError, setInfraError] = useState("");
+  const changed = dirty || infrastructure.dirty;
   const save = () =>
     patch.mutate(
-      { config: draft },
+      { ...(dirty ? { config: draft } : {}), ...(infrastructure.dirty ? { infrastructure: infrastructure.draft } : {}) },
       {
         onSuccess: (r) => {
           setDraft(r.config);
+          infrastructure.setDraft(r.infrastructure);
+          setInfraError("");
           toast.ok(t("telegram.saved"));
         },
-        onError: (e) => toast.error(errorText(e)),
+        onError: (e) => {
+          if (infrastructure.dirty && e instanceof ApiError && Object.keys(e.fields).length) {
+            setInfraError(Object.values(e.fields)[0] ?? errorText(e));
+            go("infra");
+          } else toast.error(errorText(e));
+        },
       },
     );
-  // Leaving the page drops the draft: ask first. Switching the section stays on the page.
-  const leave = useBlocker({ shouldBlockFn: ({ current, next }) => (dirty || infrastructure.dirty) && current.pathname !== next.pathname, enableBeforeUnload: () => dirty || infrastructure.dirty, withResolver: true });
+  const discard = () => {
+    reset();
+    infrastructure.reset();
+    setInfraError("");
+  };
+  // Leaving the page drops the drafts: ask first. Switching the section stays on the page.
+  const leave = useBlocker({ shouldBlockFn: ({ current, next }) => changed && current.pathname !== next.pathname, enableBeforeUnload: () => changed, withResolver: true });
+  const preview = (bare: boolean) => <Preview draft={draft} v={v} bare={bare} />;
 
   return (
     <>
-      <Tabs
-        id="telegram"
+      <BotSummary v={v} onConnect={() => go("connect")} />
+      <SectionNav
         label={t("telegram.sections")}
-        tabs={TELEGRAM_TABS.map((id) => ({ id, label: t(`telegram.tabs.${id}`), icon: TAB_ICONS[id] }))}
+        sections={TELEGRAM_TABS.map((id) => ({ id, label: t(`telegram.tabs.${id}`), icon: TAB_ICONS[id] }))}
         value={tab}
-        onChange={(next) => void navigate({ search: { tab: next }, replace: true })}
+        onChange={go}
+        narrow={tab === "infra" || tab === "broadcast"}
       >
         {tab === "connect" ? (
-          <Columns
-            wide="left"
-            left={
-              <>
-                <ConnectCard v={v} />
-                <RouteCard v={v} />
-              </>
-            }
-            right={<Preview draft={draft} v={v} />}
-          />
+          <WithPreview title={t("telegram.preview")} preview={preview}>
+            <ConnectCard v={v} />
+            <RouteCard v={v} />
+          </WithPreview>
         ) : tab === "menu" ? (
-          <Columns
-            wide="left"
-            left={
-              <>
-                <MenuCard draft={draft} setDraft={setDraft} />
-                <TextsCard draft={draft} setDraft={setDraft} defaults={v.defaults} />
-              </>
-            }
-            right={<Preview draft={draft} v={v} />}
-          />
+          <WithPreview title={t("telegram.preview")} preview={preview}>
+            <MenuCard draft={draft} setDraft={setDraft} />
+            <TextsCard draft={draft} setDraft={setDraft} defaults={v.defaults} />
+          </WithPreview>
         ) : tab === "notify" ? (
-          <Columns wide="left" left={<OptionsCard draft={draft} setDraft={setDraft} v={v} />} right={<Preview draft={draft} v={v} />} />
+          <WithPreview title={t("telegram.preview")} preview={preview}>
+            <OptionsCard draft={draft} setDraft={setDraft} v={v} />
+          </WithPreview>
         ) : tab === "infra" ? (
-          <div className="flex max-w-3xl flex-col gap-4">
-            <InfrastructureCard v={v} draft={infrastructure.draft} setDraft={infrastructure.setDraft} dirty={infrastructure.dirty} />
+          <>
+            <InfrastructureCard v={v} draft={infrastructure.draft} setDraft={infrastructure.setDraft} error={infraError} />
             <BackupCard />
-          </div>
+          </>
         ) : (
-          <div className="max-w-3xl">
-            <BroadcastCard v={v} />
-          </div>
+          <BroadcastCard v={v} />
         )}
-      </Tabs>
-      <AnimatePresence>
-        {dirty ? (
-          <motion.div
-            className="bulk-bar glass-strong"
-            role="region"
-            aria-label={t("telegram.unsaved")}
-            initial={{ opacity: 0, y: 24, x: "-50%" }}
-            animate={{ opacity: 1, y: 0, x: "-50%" }}
-            exit={{ opacity: 0, y: 24, x: "-50%" }}
-            transition={{ type: "spring", stiffness: 420, damping: 32 }}
-          >
-            <span className="text-[13px] font-medium">{t("telegram.unsaved")}</span>
-            <Button variant="ghost" size="sm" onClick={reset}>
-              {t("telegram.discard")}
-            </Button>
-            <Button variant="primary" size="sm" loading={patch.isPending} onClick={save}>
-              {t("common.save")}
-            </Button>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+        <SaveBar dirty={changed} saving={patch.isPending} onSave={save} onReset={discard} />
+      </SectionNav>
       <Confirm
         open={leave.status === "blocked"}
         onOpenChange={(open) => !open && leave.reset?.()}
@@ -167,61 +153,144 @@ function TelegramBody({ v }: { v: View }) {
   );
 }
 
-function InfrastructureCard({ v, draft, setDraft, dirty }: { v: View; draft: Schemas["AlertsConfig"]; setDraft: Dispatch<SetStateAction<Schemas["AlertsConfig"]>>; dirty: boolean }) {
+/** The bot at a glance above every section: who it is, whether it runs, and its switch. */
+function BotSummary({ v, onConnect }: { v: View; onConnect: () => void }) {
   const patch = usePatchTelegram();
+  const toast = useToast();
+  const st = statusOf(v);
+  return (
+    <section className="card glass reveal" aria-label={t("telegram.summary")}>
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--hover)] text-[var(--ink-700)]" aria-hidden>
+          <Bot size={20} />
+        </span>
+        <div className="min-w-0 flex-1">
+          {v.token_set && v.bot ? (
+            <a className="font-semibold text-[var(--ink-900)] hover:underline" href={`https://t.me/${encodeURIComponent(v.bot.username)}`} target="_blank" rel="noreferrer noopener">
+              @{v.bot.username}
+            </a>
+          ) : (
+            <div className="font-semibold">{t("telegram.notConnected")}</div>
+          )}
+          <div className="truncate text-xs text-[var(--ink-500)]">
+            {v.token_set ? (
+              <>
+                {t("telegram.stats", { linked: v.linked, accounts: v.accounts })}
+                {" · "}
+                {v.mini_app_url ? t("telegram.miniAppOn") : t("telegram.miniAppNoCert")}
+              </>
+            ) : (
+              t("telegram.connectSub")
+            )}
+          </div>
+        </div>
+        {v.token_set ? (
+          <div className="flex items-center gap-3">
+            <Pill tone={st.tone}>{st.text}</Pill>
+            <Switch checked={v.enabled} label={t("telegram.enabled")} disabled={patch.isPending} onChange={(on) => patch.mutate({ enabled: on }, { onError: (e) => toast.error(errorText(e)) })} />
+          </div>
+        ) : (
+          <Button variant="primary" onClick={onConnect}>
+            <Link2 size={16} aria-hidden /> {t("telegram.connectButton")}
+          </Button>
+        )}
+      </div>
+      {v.error && v.enabled ? (
+        <p className="mt-3 text-[13px] text-[var(--berry-600)]" role="alert">
+          {tMaybe(`telegram.err.${v.error}`) ?? v.error}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function InfrastructureCard({ v, draft, setDraft, error }: { v: View; draft: Schemas["AlertsConfig"]; setDraft: Dispatch<SetStateAction<Schemas["AlertsConfig"]>>; error: string }) {
   const qc = useQueryClient();
   const toast = useToast();
   const [connectURL, setConnectURL] = useState("");
-  const [channelError, setChannelError] = useState("");
   const connect = useMutation({
     mutationFn: () => unwrap(api.POST("/api/v1/telegram/infrastructure/connect", {})),
-    onSuccess: (r) => { setConnectURL(r.url); toast.ok(t("telegram.infra.linkReady")); },
+    onSuccess: (r) => {
+      setConnectURL(r.url);
+      toast.ok(t("telegram.infra.linkReady"));
+    },
     onError: (e) => toast.error(errorText(e)),
   });
   const disconnect = useMutation({
     mutationFn: () => unwrap(api.DELETE("/api/v1/telegram/infrastructure/connect", {})),
-    onSuccess: () => { setConnectURL(""); void qc.invalidateQueries({ queryKey: qk.telegram }); toast.ok(t("telegram.infra.disconnected")); },
+    onSuccess: () => {
+      setConnectURL("");
+      void qc.invalidateQueries({ queryKey: qk.telegram });
+      toast.ok(t("telegram.infra.disconnected"));
+    },
     onError: (e) => toast.error(errorText(e)),
-  });
-  const save = () => patch.mutate({ infrastructure: draft }, {
-    onSuccess: (r) => { setDraft(r.infrastructure); setChannelError(""); toast.ok(t("telegram.infra.saved")); },
-    onError: (e) => { setChannelError(errorText(e)); },
   });
   const change = (key: keyof typeof draft, value: boolean | string) => setDraft((d) => ({ ...d, [key]: value }));
   const event = (key: keyof typeof draft.events, value: boolean) => setDraft((d) => ({ ...d, events: { ...d.events, [key]: value } }));
   return (
-    <section className="card glass">
-      <div className="card-head"><div><h2 className="card-title">{t("telegram.infra.title")}</h2><div className="card-sub">{t("telegram.infra.subtitle")}</div></div></div>
-      <div className="divide-y divide-[var(--hairline)]">
-        <div className="flex flex-wrap items-center justify-between gap-3 py-4">
-          <div><div className="text-sm font-medium">{t("telegram.infra.admin")}</div><div className="text-xs text-[var(--ink-500)]">{t("telegram.infra.adminHint")}</div></div>
-          <Switch checked={draft.admin_enabled} label={t("telegram.infra.admin")} onChange={(on) => change("admin_enabled", on)} />
+    <section className="card glass reveal">
+      <div className="card-head">
+        <div>
+          <h2 className="card-title">{t("telegram.infra.title")}</h2>
+          <div className="card-sub">{t("telegram.infra.subtitle")}</div>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 py-4">
-          <div><div className="text-sm font-medium">{t("telegram.infra.adminChat")}</div><div className="text-xs text-[var(--ink-500)]">{v.admin_chat_set ? t("telegram.infra.adminConnected") : t("telegram.infra.adminNotConnected")}</div></div>
-          {v.admin_chat_set ? <Button size="sm" variant="ghost" loading={disconnect.isPending} onClick={() => disconnect.mutate()}>{t("telegram.infra.disconnect")}</Button> : <Button size="sm" loading={connect.isPending} disabled={!v.enabled} onClick={() => connect.mutate()}>{t("telegram.infra.connect")}</Button>}
-        </div>
-        {connectURL ? <div className="banner info my-3"><span>{t("telegram.infra.linkHint")}</span><a className="font-medium underline" href={connectURL} target="_blank" rel="noreferrer noopener">{t("telegram.infra.openBot")}</a></div> : null}
-        <div className="flex flex-wrap items-center justify-between gap-3 py-4">
-          <div><div className="text-sm font-medium">{t("telegram.infra.public")}</div><div className="text-xs text-[var(--ink-500)]">{t("telegram.infra.publicHint")}</div></div>
-          <Switch checked={draft.public_enabled} label={t("telegram.infra.public")} onChange={(on) => change("public_enabled", on)} />
-        </div>
-        <Field label={t("telegram.infra.channel")} htmlFor="infra-channel" hint={t("telegram.infra.channelHint")} error={channelError}>
-          <input id="infra-channel" className="input mono" value={draft.public_channel ?? ""} onChange={(e) => change("public_channel", e.target.value)} placeholder="@my_status" maxLength={40} autoComplete="off" />
-        </Field>
-        <div className="py-3"><Switch checked={draft.public_summary} label={t("telegram.infra.summary")} onChange={(on) => change("public_summary", on)} /><div className="ml-8 text-xs text-[var(--ink-500)]">{t("telegram.infra.summaryHint")}</div></div>
-        <div className="py-3"><Switch checked={draft.public_changes} label={t("telegram.infra.changes")} onChange={(on) => change("public_changes", on)} /><div className="ml-8 text-xs text-[var(--ink-500)]">{t("telegram.infra.changesHint")}</div></div>
       </div>
-      <h3 className="mt-5 mb-2 text-sm font-semibold">{t("telegram.infra.events")}</h3>
+      <div className="row-list">
+        <SwitchRow label={t("telegram.infra.admin")} sub={t("telegram.infra.adminHint")} checked={draft.admin_enabled} onChange={(on) => change("admin_enabled", on)} />
+        <div className="flex flex-wrap items-center justify-between gap-3 py-3">
+          <div className="min-w-0">
+            <div className="switch-row-title">{t("telegram.infra.adminChat")}</div>
+            <div className="switch-row-sub">{v.admin_chat_set ? t("telegram.infra.adminConnected") : t("telegram.infra.adminNotConnected")}</div>
+          </div>
+          {v.admin_chat_set ? (
+            <Button size="sm" variant="ghost" loading={disconnect.isPending} onClick={() => disconnect.mutate()}>
+              {t("telegram.infra.disconnect")}
+            </Button>
+          ) : (
+            <Button size="sm" loading={connect.isPending} disabled={!v.enabled} onClick={() => connect.mutate()}>
+              {t("telegram.infra.connect")}
+            </Button>
+          )}
+        </div>
+        {connectURL ? (
+          <div className="banner info my-3">
+            <span>{t("telegram.infra.linkHint")}</span>
+            <a className="font-medium underline" href={connectURL} target="_blank" rel="noreferrer noopener">
+              {t("telegram.infra.openBot")}
+            </a>
+          </div>
+        ) : null}
+        <SwitchRow label={t("telegram.infra.public")} sub={t("telegram.infra.publicHint")} checked={draft.public_enabled} onChange={(on) => change("public_enabled", on)} />
+        <div className="pt-4">
+          <Field label={t("telegram.infra.channel")} htmlFor="infra-channel" hint={t("telegram.infra.channelHint")} error={error}>
+            <input id="infra-channel" className="input mono" value={draft.public_channel ?? ""} onChange={(e) => change("public_channel", e.target.value)} placeholder="@my_status" maxLength={40} autoComplete="off" aria-invalid={!!error} />
+          </Field>
+        </div>
+        <SwitchRow label={t("telegram.infra.summary")} sub={t("telegram.infra.summaryHint")} checked={draft.public_summary} onChange={(on) => change("public_summary", on)} />
+        <SwitchRow label={t("telegram.infra.changes")} sub={t("telegram.infra.changesHint")} checked={draft.public_changes} onChange={(on) => change("public_changes", on)} />
+      </div>
+      <h3 className="mt-4 mb-1 text-[13px] font-semibold">{t("telegram.infra.events")}</h3>
       <p className="mb-3 text-xs text-[var(--ink-500)]">{t("telegram.infra.eventsHint")}</p>
       <div className="grid gap-2 sm:grid-cols-2">
-        {([
-          ["node", "eventNode"], ["warp", "eventWarp"], ["exit", "eventExit"], ["inbound", "eventInbound"],
-          ["autotune", "eventAutotune"], ["autotune_recovery", "eventAutotuneRecovery"], ["tls", "eventTLS"], ["update", "eventUpdate"],
-          ["torrent", "eventTorrent"],
-        ] as const).map(([key, label]) => <div key={key} className="panel-soft flex items-center justify-between gap-3 rounded-xl p-3"><span className="text-sm leading-5">{t(`telegram.infra.${label}`)}</span><Switch checked={draft.events[key]} label={t(`telegram.infra.${label}`)} onChange={(on) => event(key, on)} /></div>)}
+        {(
+          [
+            ["node", "eventNode"],
+            ["warp", "eventWarp"],
+            ["exit", "eventExit"],
+            ["inbound", "eventInbound"],
+            ["autotune", "eventAutotune"],
+            ["autotune_recovery", "eventAutotuneRecovery"],
+            ["tls", "eventTLS"],
+            ["update", "eventUpdate"],
+            ["torrent", "eventTorrent"],
+          ] as const
+        ).map(([key, label]) => (
+          <div key={key} className="panel-soft flex items-center justify-between gap-3 p-3">
+            <span className="text-[13px] leading-5">{t(`telegram.infra.${label}`)}</span>
+            <Switch checked={draft.events[key]} label={t(`telegram.infra.${label}`)} onChange={(on) => event(key, on)} />
+          </div>
+        ))}
       </div>
-      <div className="mt-5 flex justify-end"><Button variant="primary" loading={patch.isPending} disabled={!dirty} onClick={save}>{t("common.save")}</Button></div>
     </section>
   );
 }
@@ -367,47 +436,17 @@ function ConnectCard({ v }: { v: View }) {
       },
     );
   };
-  const st = statusOf(v);
   const showForm = !v.token_set || editing;
   return (
     <section {...rise(0)}>
       <div className="card-head">
         <div>
           <h2 className="card-title">{t("telegram.connect")}</h2>
-          <div className="card-sub">{t("telegram.connectSub")}</div>
+          <div className="card-sub">{v.token_set && v.bot ? v.bot.name : t("telegram.connectSub")}</div>
         </div>
-        {v.token_set ? (
-          <Switch checked={v.enabled} label={t("telegram.enabled")} disabled={patch.isPending} onChange={(on) => patch.mutate({ enabled: on }, { onError: (e) => toast.error(errorText(e)) })} />
-        ) : null}
       </div>
-      {v.token_set && v.bot ? (
-        <div className="panel-soft flex items-center gap-3 p-3">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-[var(--hover)] text-[var(--ink-700)]" aria-hidden>
-            <Bot size={20} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <a className="font-semibold text-[var(--ink-900)] hover:underline" href={`https://t.me/${encodeURIComponent(v.bot.username)}`} target="_blank" rel="noreferrer noopener">
-              @{v.bot.username}
-            </a>
-            <div className="truncate text-xs text-[var(--ink-500)]">{v.bot.name}</div>
-          </div>
-          <Pill tone={st.tone}>{st.text}</Pill>
-        </div>
-      ) : null}
-      {v.error && v.enabled ? (
-        <p className="mt-3 text-[13px] text-[var(--berry-600)]" role="alert">
-          {tMaybe(`telegram.err.${v.error}`) ?? v.error}
-        </p>
-      ) : null}
-      {v.token_set ? (
-        <p className="mt-3 text-xs text-[var(--ink-500)]">
-          {t("telegram.stats", { linked: v.linked, accounts: v.accounts })}
-          {" · "}
-          {v.mini_app_url ? t("telegram.miniAppOn") : t("telegram.miniAppNoCert")}
-        </p>
-      ) : null}
       {showForm ? (
-        <form onSubmit={submit} className="mt-4" noValidate>
+        <form onSubmit={submit} noValidate>
           {!v.token_set ? (
             <ol className="mb-4 flex list-decimal flex-col gap-1 pl-5 text-[13px] text-[var(--ink-600)]">
               <li>{t("telegram.step1")}</li>
@@ -588,9 +627,11 @@ function RouteCard({ v }: { v: View }) {
           </p>
         ) : null}
         {mode === "node" && !nodes.isPending && remote.length === 0 ? null : (
-          <Button variant="primary" type="submit" loading={patch.isPending} disabled={!changed || !ready}>
-            {mode === "direct" ? t("common.save") : t("telegram.routeSave")}
-          </Button>
+          <div className="form-actions">
+            <Button variant="primary" type="submit" loading={patch.isPending} disabled={!changed || !ready}>
+              {mode === "direct" ? t("common.save") : t("telegram.routeSave")}
+            </Button>
+          </div>
         )}
       </form>
     </section>
@@ -727,12 +768,8 @@ const NOTICES: (keyof Schemas["Notify"])[] = ["expire_3d", "expire_1d", "expired
 
 function OptionsCard({ draft, setDraft, v }: { draft: Config; setDraft: (c: Config) => void; v: View }) {
   const row = (title: string, sub: string, on: boolean, change: (v: boolean) => void) => (
-    <li key={title} className="flex items-start justify-between gap-4 py-3">
-      <div className="min-w-0">
-        <div className="text-[13px] font-medium">{title}</div>
-        <div className="mt-1 text-xs text-[var(--ink-500)]">{sub}</div>
-      </div>
-      <Switch checked={on} label={title} onChange={change} />
+    <li key={title}>
+      <SwitchRow label={title} sub={sub} checked={on} onChange={change} />
     </li>
   );
   return (
@@ -824,7 +861,7 @@ function BroadcastProgress({ b }: { b: Schemas["TelegramBroadcast"] }) {
 }
 
 /** The main menu as a subscriber sees it in Telegram, with sample data. */
-function Preview({ draft, v }: { draft: Config; v: View }) {
+function Preview({ draft, v, bare }: { draft: Config; v: View; bare?: boolean }) {
   const settings = useSettings();
   const brand = settings.data?.brand || "VPN";
   const support = !!settings.data?.support_url;
@@ -857,13 +894,17 @@ function Preview({ draft, v }: { draft: Config; v: View }) {
     else rows.push([b]);
   }
   return (
-    <section {...rise(1)} aria-label={t("telegram.preview")}>
-      <div className="card-head">
-        <div>
-          <h2 className="card-title">{t("telegram.preview")}</h2>
-          <div className="card-sub">{t("telegram.previewSub")}</div>
+    <section {...(bare ? {} : rise(1))} aria-label={t("telegram.preview")}>
+      {bare ? (
+        <p className="mb-3 text-[13px] text-[var(--ink-500)]">{t("telegram.previewSub")}</p>
+      ) : (
+        <div className="card-head">
+          <div>
+            <h2 className="card-title">{t("telegram.preview")}</h2>
+            <div className="card-sub">{t("telegram.previewSub")}</div>
+          </div>
         </div>
-      </div>
+      )}
       <div className="tg-chat">
         <div className="tg-bubble">{text}</div>
         <motion.div className="tg-keyboard" layout={!reduce} transition={slide}>

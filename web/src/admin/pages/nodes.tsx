@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Activity, ArrowDown, ArrowUp, ArrowUpCircle, Cloud, Copy, Gauge, KeyRound, LoaderCircle, Pencil, Plus, ShieldCheck, Trash2, Waypoints } from "lucide-react";
+import * as Menu from "@radix-ui/react-dropdown-menu";
+import { Activity, ArrowDown, ArrowUp, ArrowUpCircle, ArrowUpDown, Check, Cloud, Copy, Gauge, KeyRound, LoaderCircle, MoreHorizontal, Pencil, Plus, ShieldCheck, Trash2, Waypoints } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../api/client";
 import { qk, useNodes } from "../../api/hooks";
@@ -43,6 +44,9 @@ export function NodesPage() {
   const [trafficOf, setTrafficOf] = useState<Node | null>(null);
   const [cascadeOf, setCascadeOf] = useState<Node | null>(null);
   const [certOf, setCertOf] = useState<Node | null>(null);
+  // The arrows that order the nodes show only while ordering: most of the time they are noise.
+  const [ordering, setOrdering] = useState(false);
+  const many = (nodes.data?.length ?? 0) > 1;
   const [updateOf, setUpdateOf] = useState<Node | "all" | null>(null);
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: qk.nodes });
@@ -121,6 +125,12 @@ export function NodesPage() {
         sub={t("nodes.subtitle")}
         actions={
           <>
+            {many ? (
+              <Button aria-pressed={ordering} onClick={() => setOrdering((o) => !o)} aria-label={ordering ? t("nodes.orderDone") : t("nodes.orderEdit")}>
+                {ordering ? <Check size={18} aria-hidden /> : <ArrowUpDown size={18} aria-hidden />}
+                <span className="max-[760px]:hidden">{ordering ? t("nodes.orderDone") : t("nodes.orderEdit")}</span>
+              </Button>
+            ) : null}
             {toUpdate.length > 1 ? (
               <Button loading={update.isPending && update.variables === "all"} disabled={update.isPending || toUpdate.some(updating)} onClick={() => setUpdateOf("all")}>
                 <ArrowUpCircle size={18} aria-hidden />
@@ -158,11 +168,13 @@ export function NodesPage() {
                   <span>{t("nodes.nameLocalHint")}</span>
                 </div>
               ) : null}
-              {list.length > 1 ? (
-                <p className="text-[13px] text-[var(--ink-500)] lg:col-span-2">{t("nodes.orderHint")}</p>
+              {ordering && list.length > 1 ? (
+                <p className="banner info lg:col-span-2" role="status">
+                  {t("nodes.orderHint")}
+                </p>
               ) : null}
               {list.map((n, idx) => (
-                <NodeCard key={n.id} n={n} idx={idx} total={list.length} sorting={order.isPending} moving={order.isPending && order.variables.moved === n.id} onMove={(by) => move(list, idx, by)} updating={update.isPending && update.variables === n.id} busy={update.isPending} onUpdate={() => setUpdateOf(n)} onEdit={() => setEditing(n)} onWarp={() => setWarpOf(n)} onSpeed={() => setSpeedOf(n)} onTraffic={() => setTrafficOf(n)} onCascade={() => setCascadeOf(n)} onCert={() => setCertOf(n)} onRekey={() => setRekeying(n)} onRemove={() => setRemoving(n)} />
+                <NodeCard key={n.id} n={n} idx={idx} total={list.length} ordering={ordering} sorting={order.isPending} moving={order.isPending && order.variables.moved === n.id} onMove={(by) => move(list, idx, by)} updating={update.isPending && update.variables === n.id} busy={update.isPending} onUpdate={() => setUpdateOf(n)} onEdit={() => setEditing(n)} onWarp={() => setWarpOf(n)} onSpeed={() => setSpeedOf(n)} onTraffic={() => setTrafficOf(n)} onCascade={() => setCascadeOf(n)} onCert={() => setCertOf(n)} onRekey={() => setRekeying(n)} onRemove={() => setRemoving(n)} />
               ))}
             </div>
           )
@@ -230,6 +242,7 @@ function NodeCard({
   n,
   idx,
   total,
+  ordering,
   sorting,
   moving,
   onMove,
@@ -249,6 +262,8 @@ function NodeCard({
   idx: number;
   /** How many nodes there are: with one there is nothing to order. */
   total: number;
+  /** The admin is ordering the nodes: the arrows show. */
+  ordering: boolean;
   /** The new order is on its way to the panel: no second move now. */
   sorting: boolean;
   /** This node is the one being moved. */
@@ -270,7 +285,7 @@ function NodeCard({
 }) {
   const mem = n.mem_total ? Math.round((n.mem_used / n.mem_total) * 100) : 0;
   return (
-    <section className="card glass reveal" style={{ "--i": idx } as React.CSSProperties}>
+    <section className="card glass reveal flex flex-col" style={{ "--i": idx } as React.CSSProperties}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="font-display truncate text-lg font-medium tracking-tight">{nodeLabel(n)}</h2>
@@ -282,7 +297,7 @@ function NodeCard({
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <NodeStatus n={n} />
-          {total > 1 ? (
+          {total > 1 && ordering ? (
             <>
               <span className="num w-6 text-center text-xs text-[var(--ink-500)]" role="img" aria-label={t("nodes.position", { n: idx + 1, total })}>
                 {moving ? <LoaderCircle size={14} className="spin inline" aria-hidden /> : idx + 1}
@@ -366,7 +381,9 @@ function NodeCard({
         ) : null}
       </dl>
       <NodeUpdate n={n} />
-      <div className="mt-4 flex flex-wrap gap-2 border-t border-[var(--hairline)] pt-4">
+      {/* The actions stay at the card's bottom, level with the card beside it. */}
+      <div className="flex-1" aria-hidden />
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--hairline)] pt-4">
         {updatable(n) ? (
           <Button size="sm" variant="primary" loading={asking || updating(n)} disabled={busy || updating(n)} onClick={onUpdate}>
             <ArrowUpCircle size={16} aria-hidden /> {updating(n) ? t("nodes.updatingShort") : t("nodes.update")}
@@ -375,31 +392,43 @@ function NodeCard({
         <Button size="sm" onClick={onEdit}>
           <Pencil size={16} aria-hidden /> {t("nodes.configure")}
         </Button>
-        <Button size="sm" onClick={onWarp}>
-          <Cloud size={16} aria-hidden /> WARP
-        </Button>
-        <Button size="sm" onClick={onSpeed}>
-          <Gauge size={16} aria-hidden /> {t("speed.button")}
-        </Button>
         <Button size="sm" onClick={onTraffic}>
           <Activity size={16} aria-hidden /> {t("nodeTraffic.button")}
         </Button>
-        <Button size="sm" onClick={onCascade}>
-          <Waypoints size={16} aria-hidden /> {t("cascade.title")}
-        </Button>
-        <Button size="sm" onClick={onCert}>
-          <ShieldCheck size={16} aria-hidden /> {t("nodes.certButton")}
-        </Button>
-        {!n.local ? (
-          <>
-            <Button size="sm" onClick={onRekey}>
-              <KeyRound size={16} aria-hidden /> {t("nodes.rekey")}
-            </Button>
-            <Button size="sm" variant="danger" onClick={onRemove}>
-              <Trash2 size={16} aria-hidden /> {t("common.delete")}
-            </Button>
-          </>
-        ) : null}
+        <Menu.Root>
+          <Menu.Trigger asChild>
+            <button type="button" className="icon-btn ml-auto" aria-label={t("nodes.moreActions", { name: nodeLabel(n) })}>
+              <MoreHorizontal size={18} aria-hidden />
+            </button>
+          </Menu.Trigger>
+          <Menu.Portal>
+            <Menu.Content className="menu glass-strong" align="end" sideOffset={6}>
+              <Menu.Item className="menu-item" onSelect={onWarp}>
+                <Cloud size={16} aria-hidden /> WARP
+              </Menu.Item>
+              <Menu.Item className="menu-item" onSelect={onCascade}>
+                <Waypoints size={16} aria-hidden /> {t("cascade.title")}
+              </Menu.Item>
+              <Menu.Item className="menu-item" onSelect={onSpeed}>
+                <Gauge size={16} aria-hidden /> {t("speed.button")}
+              </Menu.Item>
+              <Menu.Item className="menu-item" onSelect={onCert}>
+                <ShieldCheck size={16} aria-hidden /> {t("nodes.certButton")}
+              </Menu.Item>
+              {!n.local ? (
+                <>
+                  <Menu.Item className="menu-item" onSelect={onRekey}>
+                    <KeyRound size={16} aria-hidden /> {t("nodes.rekey")}
+                  </Menu.Item>
+                  <Menu.Separator className="menu-sep" />
+                  <Menu.Item className="menu-item danger" onSelect={onRemove}>
+                    <Trash2 size={16} aria-hidden /> {t("common.delete")}
+                  </Menu.Item>
+                </>
+              ) : null}
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu.Root>
       </div>
     </section>
   );

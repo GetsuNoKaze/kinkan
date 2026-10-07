@@ -2,7 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../../api/client";
 import { useNodes } from "../../../api/hooks";
-import { Columns } from "../../../components/tabs";
+import { Disclosure, FormActions, WithPreview } from "../../../components/layout";
 import { Button, ErrorState, Field, Pill, Skeleton } from "../../../components/ui";
 import { t, useLocale } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
@@ -60,7 +60,7 @@ function parsePolicy(text: string): NonNullable<DNS["policy"]> {
 const policyText = (p: DNS["policy"]) => (p ?? []).map((x) => `${x.match}: ${x.servers.join(", ")}`).join("\n");
 
 /** The routing of Clash profiles: the mode, the services, the apps past the tunnel and DNS, with the profile it makes. */
-export function RoutingSection({ s }: { s: Schemas["SettingsView"] }) {
+export function RoutingSection({ s, view }: { s: Schemas["SettingsView"]; view: "simple" | "yaml" }) {
   const save = useSaveSettings();
   const nodes = useNodes();
   const locale = useLocale();
@@ -102,34 +102,19 @@ export function RoutingSection({ s }: { s: Schemas["SettingsView"] }) {
   };
   const nodeName = (n: { name: string; local: boolean }) => t("settings.routesOnServer", { name: n.name || (n.local ? t("settings.routesThisServer") : "—") });
   const routed = Object.keys(routes.services ?? {}).length + (routes.direct ?? []).length;
-  // The own profile opens where it is in use; its text lives here, so switching views keeps it.
-  const [view, setView] = useState<"simple" | "yaml">(s.sub_template.trim() ? "yaml" : "simple");
+  // The own profile's text lives here, so switching between the simple mode and it keeps it.
   const [yaml, setYaml] = useState(s.sub_template);
   const starter = () => unwrap(api.POST("/api/v1/settings/routes/preview", { body: { sub_routing: draft.mode, sub_routes: draft.routes, starter: true } })).then((r) => r.profile);
-  const views = (
-    <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label={t("settings.routesView")}>
-      {(["simple", "yaml"] as const).map((v) => (
-        <button key={v} type="button" aria-pressed={view === v} className="chip" onClick={() => setView(v)}>
-          {t(v === "simple" ? "settings.routesViewSimple" : "settings.routesViewYaml")}
-        </button>
-      ))}
-    </div>
-  );
   if (view === "yaml") {
     return (
-      <>
-        {views}
-        <Columns wide="left" left={<TemplateCard s={s} text={yaml} setText={setYaml} starter={starter} />} right={<PreviewCard mode={draft.mode} routes={draft.routes} template={yaml} />} />
-      </>
+      <WithPreview title={t("settings.routesPreview")} preview={(bare) => <PreviewCard mode={draft.mode} routes={draft.routes} template={yaml} bare={bare} />}>
+        <TemplateCard s={s} text={yaml} setText={setYaml} starter={starter} />
+      </WithPreview>
     );
   }
   return (
-    <>
-    {views}
-    {s.sub_template.trim() ? <div className="banner mb-4">{t("settings.routesYamlLive")}</div> : null}
-    <Columns
-      wide="left"
-      left={
+    <WithPreview title={t("settings.routesPreview")} preview={(bare) => <PreviewCard mode={draft.mode} routes={draft.routes} bare={bare} />}>
+    {s.sub_template.trim() ? <div className="banner info">{t("settings.routesYamlLive")}</div> : null}
         <section className="card glass reveal" style={{ "--i": 1 } as React.CSSProperties}>
           <form onSubmit={submit} noValidate>
             <div className="card-head">
@@ -195,16 +180,15 @@ export function RoutingSection({ s }: { s: Schemas["SettingsView"] }) {
               <div className="flex flex-col gap-2">
                 {(catalog.data?.direct ?? []).map((d) => (
                   <label key={d.id} className="flex items-start gap-2 text-sm">
-                    <input type="checkbox" className="mt-1" checked={(routes.direct ?? []).includes(d.id)} onChange={() => toggleDirect(d.id)} />
+                    <input type="checkbox" className="check mt-0.5 shrink-0" checked={(routes.direct ?? []).includes(d.id)} onChange={() => toggleDirect(d.id)} />
                     <span>{locale === "en" ? d.name_en : d.name}</span>
                   </label>
                 ))}
               </div>
             </Field>
 
-            <details className="mb-4">
-              <summary className="cursor-pointer text-sm font-medium text-[var(--ink-700)]">{t("settings.routesDns")}</summary>
-              <p className="mt-2 text-xs text-[var(--ink-500)]">{t("settings.routesDnsHint")}</p>
+            <Disclosure title={t("settings.routesDns")} sub={t("common.forExperts")}>
+              <p className="text-xs text-[var(--ink-500)]">{t("settings.routesDnsHint")}</p>
               <div className="my-3 flex flex-wrap gap-2" role="group" aria-label={t("settings.routesDnsPresets")}>
                 {DNS_PRESETS.map((p) => (
                   <button key={p.id} type="button" className="chip-btn" onClick={() => setDns(p.dns)}>
@@ -221,46 +205,38 @@ export function RoutingSection({ s }: { s: Schemas["SettingsView"] }) {
               <Field label={t("settings.routesDnsPolicy")} htmlFor="s-dns-policy" hint={t("settings.routesDnsPolicyHint")}>
                 <textarea id="s-dns-policy" className="input mono min-h-[72px]" value={dnsText.policy} onChange={editDns("policy")} spellCheck={false} placeholder="+.cn: https://dns.alidns.com/dns-query" />
               </Field>
-            </details>
+            </Disclosure>
 
             {error ? (
-              <p className="mb-3 text-xs text-[var(--berry-600)]" role="alert">
+              <p className="mt-3 text-xs text-[var(--berry-600)]" role="alert">
                 {error}
               </p>
             ) : null}
-            <p className="mb-4 text-xs text-[var(--ink-500)]">{t("settings.routesNote")}</p>
-            <div className="flex flex-wrap gap-2">
-              <Button type="submit" variant="primary" loading={save.isPending} disabled={!dirty}>
-                {t("common.save")}
-              </Button>
-              {dirty ? (
-                <Button variant="ghost" onClick={reset}>
-                  {t("telegram.discard")}
-                </Button>
-              ) : null}
-            </div>
+            <p className="mt-3 text-xs text-[var(--ink-500)]">{t("settings.routesNote")}</p>
+            <FormActions dirty={dirty} saving={save.isPending} onReset={reset} />
           </form>
         </section>
-      }
-      right={<PreviewCard mode={draft.mode} routes={draft.routes} />}
-    />
-    </>
+    </WithPreview>
   );
 }
 
 // The profile a user with every connection gets, before anything is saved.
-function PreviewCard({ mode, routes, template }: { mode: Schemas["SettingsView"]["sub_routing"]; routes: Routes; template?: string }) {
+function PreviewCard({ mode, routes, template, bare }: { mode: Schemas["SettingsView"]["sub_routing"]; routes: Routes; template?: string; bare?: boolean }) {
   const preview = useMutation({
     mutationFn: () => unwrap(api.POST("/api/v1/settings/routes/preview", { body: { sub_routing: mode, sub_routes: routes, ...(template?.trim() ? { sub_template: template } : {}) } })),
   });
   return (
-    <section className="card glass reveal" style={{ "--i": 2 } as React.CSSProperties}>
-      <div className="card-head">
-        <div>
-          <h2 className="card-title">{t("settings.routesPreview")}</h2>
-          <div className="card-sub">{t("settings.routesPreviewSub")}</div>
+    <section className={bare ? undefined : "card glass reveal"} style={{ "--i": 2 } as React.CSSProperties}>
+      {bare ? (
+        <p className="mb-3 text-[13px] text-[var(--ink-500)]">{t("settings.routesPreviewSub")}</p>
+      ) : (
+        <div className="card-head">
+          <div>
+            <h2 className="card-title">{t("settings.routesPreview")}</h2>
+            <div className="card-sub">{t("settings.routesPreviewSub")}</div>
+          </div>
         </div>
-      </div>
+      )}
       <Button variant="ghost" loading={preview.isPending} onClick={() => preview.mutate()}>
         {preview.data ? t("settings.routesPreviewAgain") : t("settings.routesPreviewShow")}
       </Button>

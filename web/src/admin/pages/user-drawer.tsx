@@ -3,6 +3,7 @@ import { CalendarPlus, MoreHorizontal, Power, RefreshCw, RotateCcw, Trash2 } fro
 import { useState } from "react";
 import { errorText, type User } from "../../api/client";
 import { onePeriod, userActions, useUser, useUserMutation } from "../../api/hooks";
+import { Disclosure } from "../../components/layout";
 import { Confirm, Drawer } from "../../components/overlay";
 import { useToast } from "../../components/toast";
 import { QueryBoundary } from "../../components/query";
@@ -22,6 +23,7 @@ export function UserDrawer({ id, onClose }: { id?: number; onClose: () => void }
   const u = user.data;
   return (
     <Drawer
+      wide
       open={!!id}
       onOpenChange={(v) => !v && onClose()}
       title={u?.name ?? t("userDrawer.fallbackTitle")}
@@ -106,18 +108,21 @@ function UserBody({ u, onDeleted }: { u: User; onDeleted: () => void }) {
         </Menu.Root>
       </div>
 
-      <TariffSection u={u} />
-      <TrafficSection u={u} />
-      <PoolsSection u={u} />
-      <GrantsSection u={u} />
-      <ExpirySection u={u} />
+      {/* What a card is opened for comes first: the link to send, the term, the traffic. */}
       <SubscriptionSection u={u} onReissue={() => setConfirm("reissue")} />
-      <TelegramSection u={u} />
+      <ExpirySection u={u} />
+      <TrafficSection u={u} />
       <DevicesSection u={u} />
-      <TorrentSection u={u} />
-      <ProtocolsSection u={u} />
-      <OrganiseSection u={u} />
+      <TariffSection u={u} />
       <NoteSection u={u} />
+      <Disclosure title={t("userDrawer.advanced")} sub={t("userDrawer.advancedSub")}>
+        <PoolsSection u={u} />
+        <GrantsSection u={u} />
+        <ProtocolsSection u={u} />
+        <TorrentSection u={u} />
+        <TelegramSection u={u} />
+        <OrganiseSection u={u} />
+      </Disclosure>
 
       <Confirm
         open={confirm === "reissue"}

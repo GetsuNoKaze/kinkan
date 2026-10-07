@@ -1,50 +1,68 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import clsx from "clsx";
-import { ChevronRight, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { api, errorText, unwrap, type Schemas } from "../../../api/client";
-import { qk, usePaymentSettings, useUpdates } from "../../../api/hooks";
+import { qk, useUpdates } from "../../../api/hooks";
 import { Confirm } from "../../../components/overlay";
 import { StaleNotice } from "../../../components/query";
 import { useToast } from "../../../components/toast";
+import { Disclosure, FormActions } from "../../../components/layout";
 import { Button, ErrorState, Field, Pill, Skeleton } from "../../../components/ui";
-import { Switch } from "../../../components/switch";
+import { SwitchRow } from "../../../components/switch";
 import { getLocale, LOCALES, t } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
 import { fieldErrors } from "../../../lib/fields";
 import { inlineMarkdown } from "../../../lib/inline-md";
-import { ago } from "../../../lib/format";
+import { ago, utcHourLabel } from "../../../lib/format";
 import { useSaveSettings } from "./shared";
 
-export function ServerCard({ s }: { s: Schemas["SettingsView"] }) {
+/** What the service is called, where it lives and where its people ask for help: the first things to fill in. */
+export function ServiceCard({ s }: { s: Schemas["SettingsView"] }) {
   const save = useSaveSettings();
   // Saving another card replaces `s`: what is typed here stays.
-  const { draft: form, setDraft: setForm } = useDraft({ public_host: s.public_host, domain: s.domain, quiet_hour_utc: String(s.quiet_hour_utc) });
+  const { draft: form, setDraft: setForm, dirty, reset } = useDraft({ brand: s.brand, public_host: s.public_host, domain: s.domain, support_url: s.support_url, quiet_hour_utc: s.quiet_hour_utc });
   const errors = fieldErrors(save.error);
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    save.mutate({ public_host: form.public_host, domain: form.domain, quiet_hour_utc: Number(form.quiet_hour_utc) });
+    save.mutate({ brand: form.brand, public_host: form.public_host, domain: form.domain, support_url: form.support_url, quiet_hour_utc: form.quiet_hour_utc });
   };
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const set = (k: "brand" | "public_host" | "domain" | "support_url") => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
   return (
     <section className="card glass reveal">
       <form onSubmit={submit} noValidate>
         <div className="card-head">
-          <h2 className="card-title">{t("settings.server")}</h2>
+          <div>
+            <h2 className="card-title">{t("settings.service")}</h2>
+            <div className="card-sub">{t("settings.serviceSub")}</div>
+          </div>
         </div>
-        <Field label={t("settings.host")} htmlFor="s-host" hint={t("settings.hostHint")} error={errors.public_host}>
-          <input id="s-host" className="input mono" value={form.public_host} onChange={set("public_host")} aria-invalid={!!errors.public_host} />
+        <Field label={t("settings.brand")} htmlFor="s-brand" hint={t("settings.brandHint")} error={errors.brand}>
+          <input id="s-brand" className="input" value={form.brand} onChange={set("brand")} maxLength={40} aria-invalid={!!errors.brand} />
         </Field>
-        <Field label={t("settings.domain")} htmlFor="s-domain" hint={t("settings.domainHint")} error={errors.domain}>
-          <input id="s-domain" className="input mono" value={form.domain} onChange={set("domain")} placeholder="vpn.example.com" aria-invalid={!!errors.domain} />
+        <div className="grid gap-x-3 sm:grid-cols-2">
+          <Field label={t("settings.host")} htmlFor="s-host" hint={t("settings.hostHint")} error={errors.public_host}>
+            <input id="s-host" className="input mono" value={form.public_host} onChange={set("public_host")} aria-invalid={!!errors.public_host} />
+          </Field>
+          <Field label={t("settings.domain")} htmlFor="s-domain" hint={t("settings.domainHint")} error={errors.domain}>
+            <input id="s-domain" className="input mono" value={form.domain} onChange={set("domain")} placeholder="vpn.example.com" aria-invalid={!!errors.domain} />
+          </Field>
+        </div>
+        <Field label={t("settings.support")} htmlFor="s-support" hint={t("settings.supportHint")} error={errors.support_url}>
+          <input id="s-support" className="input" value={form.support_url} onChange={set("support_url")} placeholder="https://t.me/your_support" aria-invalid={!!errors.support_url} />
         </Field>
-        <Field label={t("settings.quietHour")} htmlFor="s-quiet" hint={t("settings.quietHourHint")}>
-          <input id="s-quiet" className="input max-w-[100px]" inputMode="numeric" value={form.quiet_hour_utc} onChange={set("quiet_hour_utc")} />
-        </Field>
-        <Button type="submit" variant="primary" loading={save.isPending}>
-          {t("common.save")}
-        </Button>
+        <Disclosure title={t("common.advanced")} open={!!errors.quiet_hour_utc}>
+          <Field label={t("settings.quietHour")} htmlFor="s-quiet" hint={t("settings.quietHourHint")} error={errors.quiet_hour_utc}>
+            <select id="s-quiet" className="input max-w-[240px]" value={form.quiet_hour_utc} onChange={(e) => setForm((f) => ({ ...f, quiet_hour_utc: Number(e.target.value) }))}>
+              {Array.from({ length: 24 }, (_, h) => (
+                <option key={h} value={h}>
+                  {utcHourLabel(h)}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </Disclosure>
+        <FormActions dirty={dirty} saving={save.isPending} onReset={reset} />
       </form>
     </section>
   );
@@ -104,58 +122,12 @@ export function AutoCard({ s }: { s: Schemas["SettingsView"] }) {
       </div>
       <ul className="row-list">
         {rows.map((r) => (
-          <li key={r.key} className="flex items-start justify-between gap-4 py-3">
-            <div className="min-w-0">
-              <div className="text-[13px] font-medium">{r.title}</div>
-              <div className="mt-1 text-xs text-[var(--ink-500)]">{r.sub}</div>
-            </div>
-            <Switch checked={r.on} label={r.title} disabled={save.isPending} onChange={(v) => save.mutate({ [r.key]: v })} />
+          <li key={r.key}>
+            <SwitchRow label={r.title} sub={r.sub} checked={r.on} disabled={save.isPending} onChange={(v) => save.mutate({ [r.key]: v })} />
           </li>
         ))}
       </ul>
       <p className="mt-3 text-xs text-[var(--ink-500)]">{t("settings.autoNote")}</p>
-    </section>
-  );
-}
-
-// The switch for selling at all. Off, Payments leaves the menu; the page stays reachable
-// from here for the history.
-export function SalesCard() {
-  const qc = useQueryClient();
-  const toast = useToast();
-  const ps = usePaymentSettings();
-  const save = useMutation({
-    mutationFn: (enabled: boolean) => unwrap(api.PATCH("/api/v1/payments/settings", { body: { enabled } })),
-    onSuccess: (v) => {
-      qc.setQueryData(qk.paymentSettings, v);
-      toast.ok(v.enabled ? t("settings.salesOnToast") : t("settings.salesOffToast"));
-    },
-    onError: (e) => toast.error(errorText(e)),
-  });
-  const on = ps.data?.enabled === true;
-  return (
-    <section className="card glass reveal" style={{ "--i": 5 } as React.CSSProperties}>
-      <div className="card-head">
-        <div>
-          <h2 className="card-title">{t("settings.sales")}</h2>
-          <div className="card-sub">{t("settings.salesSub")}</div>
-        </div>
-        {ps.isPending ? (
-          <Skeleton style={{ width: 40, height: 24, borderRadius: 12 }} />
-        ) : ps.isError && !ps.data ? null : (
-          <Switch checked={on} label={t("settings.sales")} disabled={save.isPending} onChange={(v) => save.mutate(v)} />
-        )}
-      </div>
-      {ps.isError && !ps.data ? (
-        <ErrorState text={errorText(ps.error)} onRetry={() => void ps.refetch()} />
-      ) : ps.data ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="min-w-0 flex-1 text-xs text-[var(--ink-500)]">{on ? t("settings.salesOnNote") : t("settings.salesOffNote")}</p>
-          <Link to="/payments" className="btn btn-glass btn-sm">
-            {t("settings.openPayments")} <ChevronRight size={16} aria-hidden />
-          </Link>
-        </div>
-      ) : null}
     </section>
   );
 }
@@ -274,32 +246,15 @@ export function UpdatesCard() {
             : t("settings.updatesLastOk", { v: v.host.version, from: v.host.from, ago: lastAt })}
         </p>
       ) : null}
-      <ul className="row-list mt-3">
-        <li className="flex items-start justify-between gap-4 py-3">
-          <div className="min-w-0">
-            <div className="text-[13px] font-medium">{t("settings.updatesAuto")}</div>
-            <div className="mt-1 text-xs text-[var(--ink-500)]">{t("settings.updatesAutoSub")}</div>
-          </div>
-          <Switch checked={v.auto} label={t("settings.updatesAuto")} disabled={auto.isPending} onChange={(on) => auto.mutate(on)} />
+      <ul className="row-list mt-4 border-t border-[var(--hairline)]">
+        <li>
+          <SwitchRow label={t("settings.updatesAuto")} sub={t("settings.updatesAutoSub")} checked={v.auto} disabled={auto.isPending} onChange={(on) => auto.mutate(on)} />
         </li>
-        <li className="flex items-start justify-between gap-4 py-3">
-          <div className="min-w-0">
-            <div className="text-[13px] font-medium">{t("settings.updatesNodes")}</div>
-            <div className="mt-1 text-xs text-[var(--ink-500)]">{t("settings.updatesNodesSub")}</div>
-          </div>
-          <Switch checked={v.nodes_follow} label={t("settings.updatesNodes")} disabled={follow.isPending} onChange={(on) => follow.mutate(on)} />
+        <li>
+          <SwitchRow label={t("settings.updatesNodes")} sub={t("settings.updatesNodesSub")} checked={v.nodes_follow} disabled={follow.isPending} onChange={(on) => follow.mutate(on)} />
         </li>
-        <li className="flex items-start justify-between gap-4 py-3">
-          <div className="min-w-0">
-            <div className="text-[13px] font-medium">{t("settings.updatesBeta")}</div>
-            <div className="mt-1 text-xs text-[var(--ink-500)]">{t("settings.updatesBetaSub")}</div>
-          </div>
-          <Switch
-            checked={v.channel === "beta"}
-            label={t("settings.updatesBeta")}
-            disabled={channel.isPending}
-            onChange={(on) => channel.mutate(on)}
-          />
+        <li>
+          <SwitchRow label={t("settings.updatesBeta")} sub={t("settings.updatesBetaSub")} checked={v.channel === "beta"} disabled={channel.isPending} onChange={(on) => channel.mutate(on)} />
         </li>
       </ul>
       <Confirm

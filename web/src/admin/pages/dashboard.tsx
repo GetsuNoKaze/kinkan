@@ -28,13 +28,17 @@ export function Dashboard() {
         }
       />
       <Kpis />
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]">
-        <TrafficCard />
+      {/* The chart and under it the subscriptions to attend to and the top users; the tall
+          server card has the column beside them, so nothing leaves a hole under the chart. */}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)] xl:items-start">
+        <div className="grid min-w-0 gap-4">
+          <TrafficCard />
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-4 min-[1440px]:grid-cols-2 min-[1440px]:items-start">
+            <AttentionCard />
+            <TopCard />
+          </div>
+        </div>
         <ServerCard />
-      </div>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-        <AttentionCard />
-        <TopCard />
       </div>
       <NodeTrafficCard />
     </>
@@ -181,10 +185,16 @@ function TrafficCard() {
   );
 }
 
+/** How many protocols the server card lists before "N more". */
+const INBOUNDS_SHOWN = 5;
+
 function ServerCard() {
   const node = useNode();
   const inbounds = useInbounds();
+  const [allInbounds, setAllInbounds] = useState(false);
   const n = node.data;
+  const list = inbounds.data ?? [];
+  const shown = allInbounds ? list : list.slice(0, INBOUNDS_SHOWN);
   const memPct = n && n.system.mem_total ? (n.system.mem_used / n.system.mem_total) * 100 : 0;
   return (
     <section className="card glass reveal" style={{ "--i": 5 } as React.CSSProperties} aria-labelledby="srv-title">
@@ -233,7 +243,7 @@ function ServerCard() {
       </div>
       {inbounds.isError && !inbounds.data ? <CardError error={inbounds.error} onRetry={() => void inbounds.refetch()} /> : null}
       <div className="row-list border-t border-[var(--hairline)]">
-        {(inbounds.data ?? []).map((l) => (
+        {shown.map((l) => (
           <div key={l.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3">
             <div className="min-w-0">
               <div className="text-[13px] font-medium">{l.sub_name}</div>
@@ -254,6 +264,11 @@ function ServerCard() {
           </div>
         ))}
       </div>
+      {list.length > INBOUNDS_SHOWN ? (
+        <button type="button" className="link-btn mt-1 text-[13px]" aria-expanded={allInbounds} onClick={() => setAllInbounds((v) => !v)}>
+          {allInbounds ? t("dashboard.lessInbounds") : t("dashboard.moreInbounds", { n: list.length - INBOUNDS_SHOWN })}
+        </button>
+      ) : null}
       <div className="panel-soft mt-3 flex items-start gap-2 p-3 text-xs leading-4 text-[var(--ink-600)]">
         <ShieldCheck size={16} className="shrink-0 text-[var(--leaf-500)]" aria-hidden />
         <span>{t("dashboard.safetyNote")}</span>

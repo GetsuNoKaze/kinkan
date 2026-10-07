@@ -4,7 +4,7 @@ import { ApiError, basePath, setCsrf } from "../api/client";
 import { meQuery } from "../api/hooks";
 import { useLocale } from "../i18n";
 import { NotFoundPage, PageLoading, RouteError } from "./route-states";
-import { SETTINGS_TABS, TARIFF_TABS, TELEGRAM_TABS, USER_SOURCES, USER_STATES, type SettingsSearch, type TariffsSearch, type TelegramSearch, type UsersSearch } from "./search";
+import { PAYMENT_TABS, PROMO_TABS, SETTINGS_PARTS, SETTINGS_TABS, TARIFF_TABS, TELEGRAM_TABS, USER_SOURCES, USER_STATES, type PaymentsSearch, type PromoSearch, type SettingsSearch, type TariffsSearch, type TelegramSearch, type UsersSearch } from "./search";
 import { Shell } from "./shell";
 
 /**
@@ -79,9 +79,14 @@ export function createAppRouter(queryClient: QueryClient) {
     getParentRoute: () => app,
     path: "/settings",
     component: page(() => import("./pages/settings"), "SettingsPage"),
-    validateSearch: (s: Record<string, unknown>): SettingsSearch => ({
-      tab: SETTINGS_TABS.includes(s.tab as SettingsSearch["tab"]) ? (s.tab as SettingsSearch["tab"]) : "general",
-    }),
+    validateSearch: (s: Record<string, unknown>): SettingsSearch => {
+      // Sections that moved keep their old links working: the Clash rules are a part of the
+      // routing now.
+      if (s.tab === "rules") return { tab: "routing", part: "rules" };
+      const tab = SETTINGS_TABS.includes(s.tab as SettingsSearch["tab"]) ? (s.tab as SettingsSearch["tab"]) : "general";
+      const parts: readonly string[] | undefined = (SETTINGS_PARTS as Record<string, readonly string[]>)[tab];
+      return { tab, part: parts && typeof s.part === "string" && parts.includes(s.part) ? s.part : undefined };
+    },
   });
   const telegram = createRoute({
     getParentRoute: () => app,
@@ -91,8 +96,20 @@ export function createAppRouter(queryClient: QueryClient) {
       tab: TELEGRAM_TABS.includes(s.tab as TelegramSearch["tab"]) ? (s.tab as TelegramSearch["tab"]) : "connect",
     }),
   });
-  const promocodes = createRoute({ getParentRoute: () => app, path: "/promocodes", component: page(() => import("./pages/promocodes"), "PromocodesPage") });
-  const payments = createRoute({ getParentRoute: () => app, path: "/payments", component: page(() => import("./pages/payments"), "PaymentsPage") });
+  const promocodes = createRoute({
+    getParentRoute: () => app,
+    path: "/promocodes",
+    component: page(() => import("./pages/promocodes"), "PromocodesPage"),
+    validateSearch: (s: Record<string, unknown>): PromoSearch => ({ tab: PROMO_TABS.includes(s.tab as PromoSearch["tab"]) ? (s.tab as PromoSearch["tab"]) : "codes" }),
+  });
+  const payments = createRoute({
+    getParentRoute: () => app,
+    path: "/payments",
+    component: page(() => import("./pages/payments"), "PaymentsPage"),
+    validateSearch: (s: Record<string, unknown>): PaymentsSearch => ({
+      tab: PAYMENT_TABS.includes(s.tab as (typeof PAYMENT_TABS)[number]) ? (s.tab as PaymentsSearch["tab"]) : undefined,
+    }),
+  });
   const apiDocs = createRoute({ getParentRoute: () => app, path: "/settings/api", component: page(() => import("./pages/api"), "ApiPage") });
   // The API section lived in the sidebar until 0.4.2: old links land on its new place.
   const apiDocsOld = createRoute({ getParentRoute: () => app, path: "/api-docs", beforeLoad: () => { throw redirect({ to: "/settings/api" }); } });
