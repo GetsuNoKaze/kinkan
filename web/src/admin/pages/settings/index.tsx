@@ -10,7 +10,6 @@ import { SETTINGS_PARTS, SETTINGS_TABS, type SettingsSearch } from "../../search
 import { AutoCard, LanguageCard, ServiceCard, UpdatesCard } from "./general";
 import { ImportCard, LegacyLinksCard } from "./import";
 import { RoutingSection } from "./routing";
-import { TorrentCard, TorrentHitsCard } from "./torrent";
 import { AccessCard, ApiCard, CertificateCard, PasswordCard, SessionsCard, TwoFactorCard } from "./security";
 import { AppsCard, DevicesCard, SubPortCard, SubscriptionCard } from "./subscription";
 import { HappCard } from "./happ";
@@ -91,8 +90,6 @@ export function SettingsPage() {
                   <AccessCard s={s} />
                   <CertificateCard s={s} />
                   <ApiCard />
-                  <TorrentCard />
-                  <TorrentHitsCard />
                 </>
               ) : tab === "system" ? (
                 <>

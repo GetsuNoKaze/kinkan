@@ -34,6 +34,7 @@
     "settings": "Settings",
     "nodes": "Nodes",
     "telegram": "Telegram",
+    "addons": "Addons",
     "payments": "Payments",
     "promocodes": "Promo codes"
   },
@@ -45,6 +46,7 @@
     "settings": "Settings",
     "nodes": "Nodes",
     "telegram": "Bot",
+    "addons": "Addons",
     "api": "API",
     "payments": "Payments",
     "promocodes": "Promos"
@@ -2418,6 +2420,20 @@
     "cliExample": "mikan cert set --cert /etc/letsencrypt/live/DOMAIN/fullchain.pem \\\n  --key /etc/letsencrypt/live/DOMAIN/privkey.pem"
   },
   "addons": {
+    "subtitle": "Built-in tools and the marketplace's payment methods",
+    "tools": "Tools",
+    "payments": "Payments",
+    "telegram": "Telegram bot",
+    "telegramSub": "Selling plans, the Mini App, broadcasts, admin alerts and backups",
+    "torrentSub": "The nodes recognise BitTorrent and ban who uses it",
+    "paymentSub": "A payment method, set up in Payments",
+    "paymentAdd": "Add a payment method",
+    "paymentAddSub": "{n, plural, one {# method in the marketplace} other {# methods in the marketplace}}",
+    "on": "on",
+    "off": "off",
+    "stopped": "not running",
+    "stateFailed": "failed",
+    "back": "← Addons",
     "title": "Payment methods",
     "sub": "YooKassa, CryptoBot and more. Pick one in the catalog and enter the keys from the payment provider's account.",
     "add": "Add",
