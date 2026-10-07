@@ -224,6 +224,17 @@ func comparePrerelease(a, b string) int {
 	return 0
 }
 
+// NotesFor is the notes of version: its own section, or for a pre-release without one
+// (0.5.0.3-rc.1) the section of the release it leads to (0.5.0.3), so a beta needs no
+// changelog entry of its own.
+func NotesFor(changelog []byte, version string) map[string]string {
+	notes := Notes(changelog, version)
+	if base, _, pre := strings.Cut(version, "-"); pre && len(notes) == 0 {
+		notes = Notes(changelog, base)
+	}
+	return notes
+}
+
 // Notes takes a version's section out of CHANGELOG.md:
 //
 //	## 0.3.9
