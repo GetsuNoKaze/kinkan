@@ -45,6 +45,8 @@ export default defineConfig({
 				themes: ['github-dark-default'],
 				useStarlightDarkModeSwitch: false,
 				useStarlightUiThemeColors: false,
+				// Plain blocks for shell commands too: no fake window bar with dots.
+				defaultProps: { frame: 'code' },
 				styleOverrides: {
 					borderRadius: '12px',
 					borderColor: 'var(--mk-code-line)',
