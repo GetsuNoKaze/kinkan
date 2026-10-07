@@ -26,7 +26,8 @@ function tariffLimits(pool: Pool, tariffs: Tariff[] | undefined): string[] {
   });
 }
 
-export function PoolsCard() {
+/** The pools; a new one is started from the page's header (`creating`) or the empty list. */
+export function PoolsCard({ creating, onCreateClose }: { creating: boolean; onCreateClose: () => void }) {
   const pools = usePools();
   const tariffs = useTariffs();
   const qc = useQueryClient();
@@ -53,9 +54,6 @@ export function PoolsCard() {
           <h2 className="card-title">{t("pools.title")}</h2>
           <div className="card-sub">{t("pools.sub")}</div>
         </div>
-        <Button size="sm" onClick={() => setEdit("new")}>
-          <Plus size={16} aria-hidden /> {t("pools.add")}
-        </Button>
       </div>
       <QueryBoundary
         query={pools}
@@ -117,7 +115,13 @@ export function PoolsCard() {
         }
       </QueryBoundary>
       <p className="mt-3 text-xs text-[var(--ink-500)]">{t("pools.hint")}</p>
-      <PoolDrawer pool={edit} onClose={() => setEdit(null)} />
+      <PoolDrawer
+        pool={creating ? "new" : edit}
+        onClose={() => {
+          setEdit(null);
+          onCreateClose();
+        }}
+      />
       <Confirm
         open={!!removing}
         onOpenChange={(v) => !v && setRemoving(null)}
@@ -171,9 +175,14 @@ function PoolDrawer({ pool, onClose }: { pool: Pool | "new" | null; onClose: () 
       title={isNew ? t("pools.new") : t("pools.edit")}
       meta={t("pools.drawerMeta")}
       footer={
-        <Button variant="primary" block loading={save.isPending} disabled={!name.trim()} type="submit" form="pool-form">
-          {isNew ? t("pools.add") : t("common.save")}
-        </Button>
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+          <Button variant="primary" loading={save.isPending} disabled={!name.trim()} type="submit" form="pool-form">
+            {isNew ? t("pools.add") : t("common.save")}
+          </Button>
+        </>
       }
     >
       <form id="pool-form" onSubmit={submit} noValidate>

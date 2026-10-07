@@ -3,7 +3,7 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { errorText, type User } from "../../../api/client";
 import { userActions, useFolders, useUserMutation } from "../../../api/hooks";
-import { Switch } from "../../../components/switch";
+import { SwitchRow } from "../../../components/switch";
 import { useToast } from "../../../components/toast";
 import { Button } from "../../../components/ui";
 import { t } from "../../../i18n";
@@ -48,13 +48,7 @@ export function OrganiseSection({ u }: { u: User }) {
         ) : null}
       </div>
       {list.length === 0 ? <p className="mt-2 text-xs text-[var(--ink-500)]">{t("userDrawer.noFoldersYet")}</p> : null}
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[13px] font-medium">{t("userDrawer.hide")}</div>
-          <p className="text-xs text-[var(--ink-500)]">{t("userDrawer.hideHint")}</p>
-        </div>
-        <Switch checked={u.hidden} onChange={setHidden} label={t("userDrawer.hide")} disabled={update.isPending} />
-      </div>
+      <SwitchRow className="mt-1" label={t("userDrawer.hide")} sub={t("userDrawer.hideHint")} checked={u.hidden} onChange={setHidden} disabled={update.isPending} />
       <p className="mt-3 text-xs text-[var(--ink-500)]">
         {t("userDrawer.source")}: <span className="text-[var(--ink-700)]">{t(`users.sourceHints.${u.source}`)}</span>
       </p>

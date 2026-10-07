@@ -4,7 +4,7 @@ import { ApiError, basePath, setCsrf } from "../api/client";
 import { meQuery } from "../api/hooks";
 import { useLocale } from "../i18n";
 import { NotFoundPage, PageLoading, RouteError } from "./route-states";
-import { PAYMENT_TABS, SETTINGS_PARTS, SETTINGS_TABS, TARIFF_TABS, TELEGRAM_TABS, USER_SOURCES, USER_STATES, type PaymentsSearch, type SettingsSearch, type TariffsSearch, type TelegramSearch, type UsersSearch } from "./search";
+import { PAYMENT_TABS, PROMO_TABS, SETTINGS_PARTS, SETTINGS_TABS, TARIFF_TABS, TELEGRAM_TABS, USER_SOURCES, USER_STATES, type PaymentsSearch, type PromoSearch, type SettingsSearch, type TariffsSearch, type TelegramSearch, type UsersSearch } from "./search";
 import { Shell } from "./shell";
 
 /**
@@ -96,7 +96,12 @@ export function createAppRouter(queryClient: QueryClient) {
       tab: TELEGRAM_TABS.includes(s.tab as TelegramSearch["tab"]) ? (s.tab as TelegramSearch["tab"]) : "connect",
     }),
   });
-  const promocodes = createRoute({ getParentRoute: () => app, path: "/promocodes", component: page(() => import("./pages/promocodes"), "PromocodesPage") });
+  const promocodes = createRoute({
+    getParentRoute: () => app,
+    path: "/promocodes",
+    component: page(() => import("./pages/promocodes"), "PromocodesPage"),
+    validateSearch: (s: Record<string, unknown>): PromoSearch => ({ tab: PROMO_TABS.includes(s.tab as PromoSearch["tab"]) ? (s.tab as PromoSearch["tab"]) : "codes" }),
+  });
   const payments = createRoute({
     getParentRoute: () => app,
     path: "/payments",

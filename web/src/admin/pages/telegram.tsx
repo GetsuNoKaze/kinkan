@@ -627,9 +627,11 @@ function RouteCard({ v }: { v: View }) {
           </p>
         ) : null}
         {mode === "node" && !nodes.isPending && remote.length === 0 ? null : (
-          <Button variant="primary" type="submit" loading={patch.isPending} disabled={!changed || !ready}>
-            {mode === "direct" ? t("common.save") : t("telegram.routeSave")}
-          </Button>
+          <div className="form-actions">
+            <Button variant="primary" type="submit" loading={patch.isPending} disabled={!changed || !ready}>
+              {mode === "direct" ? t("common.save") : t("telegram.routeSave")}
+            </Button>
+          </div>
         )}
       </form>
     </section>

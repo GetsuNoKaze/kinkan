@@ -3,11 +3,12 @@ import { RotateCcw } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, errorText, unwrap, type Inbound, type Schemas } from "../../../api/client";
 import { qk, useNodes, usePools, usePresets, useSettings } from "../../../api/hooks";
+import { Disclosure } from "../../../components/layout";
 import { Drawer } from "../../../components/overlay";
 import { useToast } from "../../../components/toast";
 import { Button, Field, Segmented } from "../../../components/ui";
 import { XHTTP_DEFAULT, XhttpTuning, type XHTTP } from "./xhttp";
-import { Switch } from "../../../components/switch";
+import { SwitchRow } from "../../../components/switch";
 import { t } from "../../../i18n";
 import { FingerprintSelect } from "../../../components/fingerprint-select";
 import { fingerprintLabel, validFingerprint } from "../../../lib/fingerprints";
@@ -196,6 +197,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
     >
       <form id="edit-inbound" onSubmit={submit} className="pt-5" noValidate>
         <Segmented
+          block
           label={t("inbounds.tabs")}
           value={tab}
           onChange={setTab}
@@ -208,6 +210,9 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
         <div className="mt-4">
           {tab === "main" ? (
             <>
+              <p className="banner info mb-4" role="note">
+                {t("inbounds.reconnectWarning")}
+              </p>
               <Field label={t("inbounds.subName")} htmlFor="ed-name" hint={t("inbounds.subNameHint")} error={errors.display_name}>
                 <input id="ed-name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={defaultName} maxLength={48} aria-invalid={!!errors.display_name} autoComplete="off" />
               </Field>
@@ -360,11 +365,8 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                   </select>
                 </Field>
               ) : null}
-              <div className="mb-4 border-t border-[var(--hairline)] pt-4" role="group" aria-labelledby="ed-proxy">
-                <div id="ed-proxy" className="text-[13px] font-semibold">
-                  {t("inbounds.proxy")}
-                </div>
-                <p className="mt-1 mb-4 text-xs text-[var(--ink-500)]">{t("inbounds.proxySub")}</p>
+              <Disclosure title={t("inbounds.proxy")} sub={t("common.forExperts")} open={!!(errors.listen || errors["client.server"] || errors["client.port"] || errors["client.sni"]) || behindProxy}>
+                <p className="mb-4 text-xs text-[var(--ink-500)]">{t("inbounds.proxySub")}</p>
                 <Field
                   label={t("inbounds.listen")}
                   htmlFor={listenMode === "custom" ? "ed-listen" : undefined}
@@ -466,9 +468,8 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                         ? t("inbounds.clientHintReality")
                         : t("inbounds.clientHint")}
                 </p>
-              </div>
-              <div className="border-t border-[var(--hairline)] pt-4" role="group" aria-label={t("inbounds.auto")}>
-                <div className="mb-1 text-[13px] font-semibold">{t("inbounds.auto")}</div>
+              </Disclosure>
+              <Disclosure title={t("inbounds.auto")} sub={t("settings.autoSub")}>
                 <AutoSwitch
                   title={t("inbounds.autoPort")}
                   sub={t("inbounds.autoPortSub")}
@@ -487,7 +488,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                     onChange={setAutoSni}
                   />
                 ) : null}
-              </div>
+              </Disclosure>
             </>
           ) : tab === "xhttp" ? (
             <XhttpTuning value={xhttp} onChange={(x) => {
@@ -532,13 +533,5 @@ function AutoSwitch({
   onChange: (v: boolean) => void;
 }) {
   const note = locked ?? (globalOff ? t("inbounds.autoOffGlobal") : sub);
-  return (
-    <div className="flex items-start justify-between gap-4 py-2">
-      <div className="min-w-0">
-        <div className="text-[13px] font-medium">{title}</div>
-        <div className={locked || globalOff ? "mt-1 text-xs text-[var(--honey-600)]" : "mt-1 text-xs text-[var(--ink-500)]"}>{note}</div>
-      </div>
-      <Switch checked={locked ? false : on} label={title} onChange={onChange} disabled={!!locked} />
-    </div>
-  );
+  return <SwitchRow label={title} sub={note} warn={!!locked || globalOff} checked={locked ? false : on} onChange={onChange} disabled={!!locked} />;
 }

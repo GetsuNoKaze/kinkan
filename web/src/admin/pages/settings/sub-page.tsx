@@ -9,7 +9,7 @@ import { api, ApiError, basePath, errorText, unwrap, type Schemas } from "../../
 import { qk, useNodes, useSettings } from "../../../api/hooks";
 import { Confirm } from "../../../components/overlay";
 import { QueryBoundary } from "../../../components/query";
-import { Switch } from "../../../components/switch";
+import { Switch, SwitchRow } from "../../../components/switch";
 import { SaveBar, WithPreview } from "../../../components/layout";
 import { useToast } from "../../../components/toast";
 import { Button, Field, Segmented, Skeleton } from "../../../components/ui";
@@ -191,19 +191,6 @@ function Card({ title, sub, children }: { title: string; sub?: string; children:
       </div>
       {children}
     </section>
-  );
-}
-
-/** A row with a switch: what it is on the left, the switch on the right. */
-function SwitchRow({ label, sub, checked, onChange, disabled }: { label: string; sub?: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
-  return (
-    <div className="flex items-start justify-between gap-4 py-3">
-      <div className="min-w-0">
-        <div className="text-[13px] font-medium">{label}</div>
-        {sub ? <div className="mt-1 text-xs text-[var(--ink-500)]">{sub}</div> : null}
-      </div>
-      <Switch checked={checked} label={label} onChange={onChange} disabled={disabled} />
-    </div>
   );
 }
 

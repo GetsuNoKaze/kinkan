@@ -66,9 +66,9 @@ export function Avatar({ name, seed, size }: { name: string; seed: number; size?
   );
 }
 
-export function Segmented<T extends string>({ value, options, onChange, label }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; label: string }) {
+export function Segmented<T extends string>({ value, options, onChange, label, block }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; label: string; block?: boolean }) {
   return (
-    <div className="seg" role="group" aria-label={label}>
+    <div className={block ? "seg seg-block" : "seg"} role="group" aria-label={label}>
       {options.map((o) => (
         <button key={o.value} type="button" aria-pressed={o.value === value} onClick={() => onChange(o.value)}>
           {o.label}
