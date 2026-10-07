@@ -1,5 +1,5 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { ArrowDownToLine, Globe, LayoutTemplate, Link2, ListFilter, ShieldCheck } from "lucide-react";
+import { ArrowDownToLine, Globe, LayoutTemplate, Link2, ListFilter, Route, ShieldCheck } from "lucide-react";
 import { useSettings } from "../../../api/hooks";
 import { LangSwitch } from "../../../components/lang";
 import { QueryBoundary } from "../../../components/query";
@@ -11,14 +11,16 @@ import { SETTINGS_TABS } from "../../search";
 import { AutoCard, LanguageCard, SalesCard, ServerCard, UpdatesCard } from "./general";
 import { ImportCard, LegacyLinksCard } from "./import";
 import { ClashRulesCard } from "./rules";
+import { RoutingSection } from "./routing";
 import { TorrentCard, TorrentHitsCard } from "./torrent";
 import { AccessCard, ApiCard, CertificateCard, PasswordCard, SessionsCard, TwoFactorCard } from "./security";
 import { AppsCard, DevicesCard, SubPortCard, SubscriptionCard } from "./subscription";
+import { HappCard } from "./happ";
 import { SubPageSettings } from "./sub-page";
 
-const ICONS = { general: Globe, subscription: Link2, page: LayoutTemplate, rules: ListFilter, security: ShieldCheck, import: ArrowDownToLine } as const;
+const ICONS = { general: Globe, subscription: Link2, page: LayoutTemplate, routing: Route, rules: ListFilter, security: ShieldCheck, import: ArrowDownToLine } as const;
 
-/** Settings in five sections, one at a time; the section is in the URL, so a link opens it. */
+/** Settings in six sections, one at a time; the section is in the URL, so a link opens it. */
 export function SettingsPage() {
   const settings = useSettings();
   const { tab } = useSearch({ from: "/_app/settings" });
@@ -64,11 +66,14 @@ export function SettingsPage() {
                   <>
                     <SubPortCard s={s} />
                     <AppsCard s={s} />
+                    <HappCard s={s} />
                   </>
                 }
               />
             ) : tab === "page" ? (
               <SubPageSettings />
+            ) : tab === "routing" ? (
+              <RoutingSection s={s} />
             ) : tab === "import" ? (
               <Columns left={<ImportCard />} right={<LegacyLinksCard />} />
             ) : tab === "rules" ? (

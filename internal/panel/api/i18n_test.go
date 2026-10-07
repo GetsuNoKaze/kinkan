@@ -42,6 +42,11 @@ var (
 var codesByText = []string{
 	// billing.errCode: payments.error of a paid payment the panel could not apply yet.
 	"addon_unreachable", "no_slots", "timeout", "user_gone", "package_gone",
+	// subs.Routes.Check, as a detail's Message.
+	"routes_service", "routes_target", "routes_direct", "routes_dns",
+	// subs.TemplateError, as a detail's Message.
+	"template_yaml", "template_empty", "template_groups", "template_group_name", "template_group_dup", "template_group_member",
+	"template_rule", "template_rule_target", "template_rule_set",
 }
 
 // codesNotShown are sent but never shown by their text, so they need none.

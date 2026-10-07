@@ -175,7 +175,7 @@ function SubPage() {
     const app = Object.values(APPS)
       .flat()
       .find((a) => a.name === want);
-    if (app) location.href = app.link(subURL, current.brand);
+    if (app) location.href = app.link(subURL, current.brand, current.happ_link);
   }, [current, subURL]);
 
   // An instruction opens as a step of the history: back (the browser's, the phone's or

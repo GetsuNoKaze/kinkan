@@ -106,7 +106,7 @@ function block(b: PageBlock, p: BlocksProps): ReactNode {
     case "devices":
       return info.binding || info.devices?.length ? <Devices info={info} subURL={p.subURL} reload={p.reload} title={b.title} /> : null;
     case "apps":
-      return <Apps key={p.platform} block={b} config={p.config} subURL={p.subURL} brand={info.brand} tgMode={p.tgMode} platform={p.platform} />;
+      return <Apps key={p.platform} block={b} config={p.config} subURL={p.subURL} brand={info.brand} happ={info.happ_link} tgMode={p.tgMode} platform={p.platform} />;
     case "guide":
       return <Guide block={b} />;
     case "instructions":
@@ -234,7 +234,7 @@ export function firstPlatform(config: PageConfig, detected: Platform): Platform 
   return config.apps.platform === "auto" ? detected : config.apps.platform;
 }
 
-function Apps({ block: b, config, subURL, brand, tgMode, platform }: { block: PageBlock; config: PageConfig; subURL: string; brand: string; tgMode: boolean; platform?: Platform }) {
+function Apps({ block: b, config, subURL, brand, happ, tgMode, platform }: { block: PageBlock; config: PageConfig; subURL: string; brand: string; happ?: string; tgMode: boolean; platform?: Platform }) {
   const lists = Object.fromEntries(PLATFORMS.map((k) => [k, orderApps(APPS[k], config.apps[k])])) as Record<Platform, (typeof APPS)[Platform]>;
   const shown = PLATFORMS.filter((k) => lists[k].length > 0);
   const want = platform ?? firstPlatform(config, detectOnce());
@@ -274,7 +274,7 @@ function Apps({ block: b, config, subURL, brand, tgMode, platform }: { block: Pa
             </div>
             <a
               className={i === 0 ? "btn btn-primary btn-sm" : "btn btn-glass btn-sm"}
-              href={a.link(subURL, brand)}
+              href={a.link(subURL, brand, happ)}
               title={tgMode ? t("sub.tgBrowser") : undefined}
               {...outside(subURL + "#open=" + enc(a.name))}
             >
