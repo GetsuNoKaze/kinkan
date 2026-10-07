@@ -160,7 +160,7 @@ function SubPage() {
     const app = Object.values(APPS)
       .flat()
       .find((a) => a.name === want);
-    if (app) location.href = app.link(subURL, current.brand);
+    if (app) location.href = app.link(subURL, current.brand, current.happ_link);
   }, [current, subURL]);
 
   const copy = async () => {
@@ -399,7 +399,7 @@ function SubPage() {
               </div>
               <a
                 className={i === 0 ? "btn btn-primary btn-sm" : "btn btn-glass btn-sm"}
-                href={a.link(subURL, current.brand)}
+                href={a.link(subURL, current.brand, current.happ_link)}
                 title={tgMode ? t("sub.tgBrowser") : undefined}
                 {...outside(subURL + "#open=" + enc(a.name))}
               >
