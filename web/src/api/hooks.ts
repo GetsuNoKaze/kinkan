@@ -33,6 +33,7 @@ export const qk = {
   promocodeRedemptions: ["promocodes", "redemptions"] as const,
   userGrants: (id: number) => ["users", "grants", id] as const,
   torrent: ["torrent"] as const,
+  filters: ["filters"] as const,
   torrentHits: (user: number) => ["torrent", "hits", user] as const,
   speedTests: (node: number) => ["speedtests", node] as const,
   subPage: ["sub-page"] as const,
@@ -150,6 +151,11 @@ export function usePaymentSettings() {
 
 export function useTorrent() {
   return useQuery({ queryKey: qk.torrent, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/torrent", { signal })) });
+}
+
+/** The ingress and egress filters of the nodes. */
+export function useFilters() {
+  return useQuery({ queryKey: qk.filters, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/filters", { signal })) });
 }
 
 /** The torrent blocker's catches, newest first, a page at a time; user 0: everyone's. */

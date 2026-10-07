@@ -40,6 +40,30 @@ type DesiredState struct {
 	Exits []Exit `json:"exits,omitempty"`
 	// Torrent turns the torrent blocker on; nil: off. Nodes older than the blocker ignore it.
 	Torrent *TorrentBlock `json:"torrent,omitempty"`
+	// Filters keep users' traffic from places and strangers from the node; nil: none.
+	// Nodes older than the filters ignore it.
+	Filters *Filters `json:"filters,omitempty"`
+}
+
+// Filters are the ingress and egress filters of the node.
+type Filters struct {
+	Egress  Egress  `json:"egress"`
+	Ingress Ingress `json:"ingress"`
+}
+
+// Egress: users' traffic to these ports ("465", "1000-2000"), networks ("203.0.113.0/24")
+// and domains (with their subdomains) is refused.
+type Egress struct {
+	Ports    []string `json:"ports,omitempty"`
+	Networks []string `json:"networks,omitempty"`
+	Domains  []string `json:"domains,omitempty"`
+}
+
+// Ingress: connections from Networks are refused; with Allow, connections from anywhere
+// else are. Another node of the panel relaying its users is never refused.
+type Ingress struct {
+	Allow    bool     `json:"allow,omitempty"`
+	Networks []string `json:"networks,omitempty"`
 }
 
 type Inbound struct {

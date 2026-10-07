@@ -19,6 +19,7 @@ the signed manifest, and the panel shows the one in its language.
 - The nodes run mihomo 1.19.32.
 - **A tidier panel**: Settings and Telegram in sections listed beside the content (a list on phones), cards packed two in a row on wide screens, the page header and the save bar stay in view, the most used things first (the link and QR on top of the client card, a node's rare actions in "⋯", a "Filters" menu for clients). Payments in tabs, with the sales switch in the header. Plainer texts: "Clients" and "Protocols" everywhere.
 - **Addons** in the menu, in place of Telegram: the Telegram bot and the torrent blocker as tools, with their state, beside the payment methods from the marketplace. The bot keeps working as it did; old links to its page lead to the new one.
+- **Traffic filters** (Addons → Traffic filters): the nodes refuse users' traffic to chosen ports, networks and domains, with a preset that closes the mail ports (465, 587, 2525; 25 is closed already), and connections from chosen networks, or let in only those. Nodes older than the panel skip them.
 
 ### ru
 - **Маршрутизация для Clash-приложений** («Настройки → Маршрутизация»): сервисы (YouTube, Telegram, Discord, нейросети, игры и другие) через VPN, напрямую, в блок или через выбранный сервер; российские банки, госуслуги и маркетплейсы мимо туннеля; свои DNS; режим «только заблокированное», где через VPN идёт только то, что заблокировано. Или свой профиль Clash в YAML: серверы панель подставит сама. Профили теперь в YAML.
@@ -35,6 +36,7 @@ the signed manifest, and the panel shows the one in its language.
 - Ноды работают на mihomo 1.19.32.
 - **Панель удобнее**: Настройки и Telegram разбиты на разделы со списком сбоку (на телефоне выпадающий список), на широком экране карточки стоят по две в ряд, шапка страницы и кнопка сохранения всегда на виду, самое нужное наверху (ссылка и QR первыми в карточке клиента, редкие действия ноды в «⋯», меню «Фильтры» у клиентов). Платежи во вкладках, тумблер продажи в шапке. Тексты проще: «Клиенты» и «Протоколы» везде.
 - **Аддоны** в меню вместо Telegram: Telegram-бот и блокировка торрентов как инструменты, с их состоянием, рядом со способами оплаты из маркетплейса. Бот работает как работал; старые ссылки на его страницу ведут на новую.
+- **Фильтры трафика** («Аддоны → Фильтры трафика»): ноды не пропускают трафик пользователей на выбранные порты, сети и домены, с пресетом, закрывающим почтовые порты (465, 587, 2525; 25 закрыт и так), и не пускают подключения из выбранных сетей или пускают только из них. Ноды старше панели их пропускают.
 
 ## 0.5.0.2
 ### en

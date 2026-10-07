@@ -39,6 +39,10 @@ func (t *Tunnel) HandleTCPConn(conn net.Conn, m *C.Metadata) {
 		t.inner.HandleTCPConn(conn, m)
 		return
 	}
+	if !t.reg.admitFrom(m.SrcIP) {
+		_ = conn.Close()
+		return
+	}
 	ip := m.SrcIP.Unmap().String()
 	s, b := t.reg.admitIn(userOf(conn, m), m.InName, ip, true)
 	if s == nil {
@@ -80,6 +84,10 @@ func peekFirst(bc *N.BufferedConn) []byte {
 func (t *Tunnel) HandleUDPPacket(p C.UDPPacket, m *C.Metadata) {
 	if m.Type == C.INNER || m.InName == nodeapi.RelayListener {
 		t.inner.HandleUDPPacket(p, m)
+		return
+	}
+	if !t.reg.admitFrom(m.SrcIP) {
+		p.Drop()
 		return
 	}
 	ip := m.SrcIP.Unmap().String()
