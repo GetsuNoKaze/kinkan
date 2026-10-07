@@ -95,3 +95,62 @@ func TestHappOverHTTP(t *testing.T) {
 		t.Errorf("crypt off, no link: %d %s", resp.StatusCode, body)
 	}
 }
+
+// Happ's routing made by the panel: the routes of Settings → Routing reach Happ as its
+// routing profile, and follow them when they change.
+func TestHappAutoRouting(t *testing.T) {
+	k := newKeyHarness(t)
+	ctx := t.Context()
+	patch := func(body map[string]any) {
+		t.Helper()
+		if resp, raw := k.do(http.MethodPatch, k.api+"/settings", body, k.csrf); resp.StatusCode != http.StatusOK {
+			t.Fatalf("%v: %d %s", body, resp.StatusCode, raw)
+		}
+	}
+	patch(map[string]any{"happ_routing": "auto", "sub_routing": "ru_direct", "sub_routes": map[string]any{"services": map[string]string{"youtube": "vpn", "ads": "block"}}})
+	clock := func() time.Time { return k.now }
+	tariffs, _ := k.st.Q.ListTariffs(ctx)
+	u, err := domain.NewUsers(k.st, domain.NewPool(k.st, clock), noChanges{}, clock).Create(ctx, domain.CreateInput{Name: "a", TariffID: tariffs[1].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile := func() map[string]any {
+		t.Helper()
+		k.now = k.now.Add(time.Minute) // past the settings cache
+		resp, _ := k.do(http.MethodGet, "/"+subPath+"/"+u.SubToken, nil, map[string]string{"User-Agent": "Happ/3.6.0/Android/1"})
+		link := resp.Header.Get("routing")
+		payload, ok := strings.CutPrefix(link, "happ://routing/onadd/")
+		raw, err := base64.StdEncoding.DecodeString(payload)
+		var p map[string]any
+		if resp.StatusCode != http.StatusOK || !ok || err != nil || json.Unmarshal(raw, &p) != nil {
+			t.Fatalf("routing header: %d %q", resp.StatusCode, link)
+		}
+		return p
+	}
+	p := profile()
+	if p["GlobalProxy"] != "true" || !strings.Contains(strings.Join(anyStrings(p["ProxySites"]), " "), "geosite:youtube") ||
+		!strings.Contains(strings.Join(anyStrings(p["BlockSites"]), " "), "geosite:category-ads-all") || !strings.Contains(strings.Join(anyStrings(p["DirectSites"]), " "), "geosite:category-ru") {
+		t.Fatalf("auto routing: %v", p)
+	}
+	patch(map[string]any{"sub_routing": "blocked"})
+	if p := profile(); p["GlobalProxy"] != "false" || !strings.Contains(strings.Join(anyStrings(p["ProxySites"]), " "), "geosite:ru-blocked") {
+		t.Fatalf("blocked mode: %v", p)
+	}
+	// INCY reads the same profile in its own scheme, and none of Happ's other headers.
+	patch(map[string]any{"happ_provider_id": "prov-1"})
+	resp, _ := k.do(http.MethodGet, "/"+subPath+"/"+u.SubToken, nil, map[string]string{"User-Agent": "INCY/2.0.8"})
+	if link := resp.Header.Get("routing"); !strings.HasPrefix(link, "incy://routing/onadd/") || resp.Header.Get("providerid") != "" {
+		t.Fatalf("INCY: %q %v", link, resp.Header)
+	}
+	if resp, _ := k.do(http.MethodGet, "/"+subPath+"/"+u.SubToken, nil, map[string]string{"User-Agent": "v2RayTun/5.1.0"}); resp.Header.Get("routing") != "" {
+		t.Fatal("v2RayTun takes no routing header")
+	}
+}
+
+func anyStrings(v any) []string {
+	var out []string
+	for _, x := range v.([]any) {
+		out = append(out, x.(string))
+	}
+	return out
+}

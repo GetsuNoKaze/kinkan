@@ -56,7 +56,7 @@ type SettingsView struct {
 	Certificate   acme.Status `json:"certificate"`
 
 	// Happ: see subs.Happ.
-	HappRouting      string `json:"happ_routing" doc:"Профиль маршрутизации Happ: ссылка happ://routing/onadd/… (добавить и включить), happ://routing/add/… или happ://routing/off; уходит только в Happ заголовком routing"`
+	HappRouting      string `json:"happ_routing" doc:"Профиль маршрутизации Happ: ссылка happ://routing/onadd/… (добавить и включить), happ://routing/add/… или happ://routing/off; auto — панель собирает его сама из маршрутизации Clash-профиля (Настройки → Маршрутизация); уходит только в Happ заголовком routing"`
 	HappProviderID   string `json:"happ_provider_id" doc:"Provider ID с happ-proxy.com; без него Happ не принимает hide-settings"`
 	HappHideSettings bool   `json:"happ_hide_settings" doc:"Скрыть в Happ настройки серверов подписки (нужен Provider ID)"`
 	HappCrypt        string `json:"happ_crypt" enum:"off,api,local" doc:"Шифрованная ссылка для кнопки Happ: off — обычная happ://add/, api — через сервис Happ (адрес подписки уходит на crypto.happ.su), local — панель шифрует сама"`
@@ -74,7 +74,7 @@ type patchSettingsInput struct {
 		AppBranding   *bool        `json:"app_branding,omitempty"`
 		BrandAccent   *string      `json:"brand_accent,omitempty" maxLength:"7" doc:"#RRGGBB или пусто"`
 		BrandLogoURL  *string      `json:"brand_logo_url,omitempty" maxLength:"500" doc:"https://… или пусто"`
-		HappRouting   *string      `json:"happ_routing,omitempty" maxLength:"65536" doc:"happ://routing/…; пусто — не отдавать"`
+		HappRouting   *string      `json:"happ_routing,omitempty" maxLength:"65536" doc:"happ://routing/…, auto — собрать из маршрутизации; пусто — не отдавать"`
 		HappProvider  *string      `json:"happ_provider_id,omitempty" maxLength:"64"`
 		HappHide      *bool        `json:"happ_hide_settings,omitempty"`
 		HappCrypt     *string      `json:"happ_crypt,omitempty" enum:"off,api,local"`

@@ -1127,7 +1127,7 @@
     "routesDnsProxyHint": "How the app finds the VPN servers themselves, one per line (proxy-server-nameserver).",
     "routesDnsPolicy": "DNS of your own for domains",
     "routesDnsPolicyHint": "A line per \"domains: servers separated by commas\", e.g. +.cn: https://dns.alidns.com/dns-query (nameserver-policy).",
-    "routesNote": "Happ, v2RayTun, Hiddify and other apps on Xray and sing-box get links without these rules for now.",
+    "routesNote": "Happ and INCY get these rules as their routing profile when Subscription → Happ is set to From the routing settings: sites and IPs, no groups and no apps. v2RayTun, Hiddify and other apps on Xray and sing-box get links without rules for now.",
     "routesPreview": "What the app gets",
     "routesPreviewSub": "The Clash profile of a user with every connection, with these settings, before they are saved. Its keys are placeholders.",
     "routesPreviewShow": "Show the profile",
@@ -1228,6 +1228,15 @@
       "local": "The panel encrypts it and the address goes nowhere. Happ does not publish the format: if it changes, switch to \"By Happ\"."
     },
     "happRouting": "Routing profile",
+    "happRoutingOff": "None",
+    "happRoutingAuto": "From the routing settings",
+    "happRoutingLink": "Own link",
+    "happRoutingLinkField": "Profile link",
+    "happRoutingModeHint": {
+      "off": "Happ and INCY route as their users set them up.",
+      "auto": "For Happ and INCY. The panel makes the profile of Settings → Routing (or the own YAML) and changes it with them: what goes direct, through the VPN, or nowhere. A service on one server simply goes through the VPN in Happ, and Happ has no rules by app.",
+      "link": "A profile made in Happ, as it is."
+    },
     "happRoutingHint": "Build a profile in Happ (Routing → Share) and paste the link. onadd adds and turns it on, add only adds it. Happ applies it after reconnecting.",
     "happProvider": "Provider ID",
     "happProviderHint": "From happ-proxy.com (top right of the profile). Happ needs it to accept hidden settings.",
