@@ -291,6 +291,22 @@ func (c *clientBuilder) transport() {
 				opts[k.mihomo], extra[k.xray] = v, v
 			}
 		}
+		// The admin's own reuse settings replace the panel's: they are one setting, and
+		// max-connections cannot go with the default max-concurrency.
+		if cl := xhttpClient(c.t); cl != nil {
+			if own, _ := cl["xmux"].(map[string]any); len(own) > 0 {
+				reuse, link := map[string]any{}, map[string]any{}
+				for _, k := range xmuxKeys {
+					if v := scalar(own[k.mihomo]); v != "" {
+						reuse[k.mihomo], link[k.xray] = v, v
+					}
+				}
+				opts["reuse-settings"], extra["xmux"] = reuse, link
+			}
+			if v := scalar(cl["sc-min-posts-interval-ms"]); v != "" {
+				opts["sc-min-posts-interval-ms"], extra["scMinPostsIntervalMs"] = v, v
+			}
+		}
 		if len(extra) > 0 {
 			b, _ := json.Marshal(extra)
 			c.q.Set("extra", string(b))

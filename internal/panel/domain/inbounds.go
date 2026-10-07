@@ -98,7 +98,8 @@ type InboundPatch struct {
 	ServerName  *string // the name clients send with Dest; "" takes the host of Dest
 	Fingerprint *string
 	Obfs        *string
-	Client      *ClientEndpoint // replaces all three
+	XHTTP       *proto.XHTTPTuning // the whole XHTTP tuning, as the form shows it
+	Client      *ClientEndpoint    // replaces all three
 	DisplayName *string
 	// What only the node uses.
 	Listen     *string
@@ -116,7 +117,7 @@ type InboundPatch struct {
 
 // EditsTemplate: the patch changes the listener's template.
 func (p InboundPatch) EditsTemplate() bool {
-	return p.Config != nil || p.Dest != nil || p.Fingerprint != nil || p.Obfs != nil || p.Client != nil
+	return p.Config != nil || p.Dest != nil || p.Fingerprint != nil || p.Obfs != nil || p.XHTTP != nil || p.Client != nil
 }
 
 // ForClients: the patch changes what clients get.
@@ -385,6 +386,9 @@ func editTemplate(config string, p InboundPatch) (string, error) {
 	}
 	if p.Obfs != nil {
 		edits = append(edits, templateEdit{"obfs", func(t proto.Template) error { return proto.SetObfs(t, *p.Obfs, secure.Token(24)) }})
+	}
+	if p.XHTTP != nil {
+		edits = append(edits, templateEdit{"xhttp", func(t proto.Template) error { return proto.SetXHTTP(t, *p.XHTTP) }})
 	}
 	if c := p.Client; c != nil {
 		edits = append(edits, templateEdit{"client", func(t proto.Template) error {

@@ -308,6 +308,7 @@ html[data-theme="forest"] {
   .chip-btn { height: 32px; padding: 0 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--hairline); font-size: 13px; font-weight: 500; color: var(--ink-700); transition: background-color 0.2s, border-color 0.2s; }
   .chip-btn:hover:not(:disabled) { background: var(--surface-solid); border-color: var(--mikan-200); }
   .chip-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .chip-btn[aria-pressed="true"] { background: var(--mikan-50); border-color: var(--mikan-400); color: var(--ink-900); }
   .link-field { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 4px 0 12px; border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--hairline); }
   .link-field .mono { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-700); }
   .qr { padding: 8px; border-radius: 16px; background: #fff; border: 1px solid var(--hairline); }
