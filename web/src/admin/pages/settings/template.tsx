@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { lazy, Suspense, useState, type FormEvent } from "react";
 import { ApiError, errorText, type Schemas } from "../../../api/client";
 import { useNodes } from "../../../api/hooks";
+import { FormActions } from "../../../components/layout";
 import { Button, Pill, Skeleton } from "../../../components/ui";
 import { t } from "../../../i18n";
 import { useSaveSettings } from "./shared";
@@ -163,15 +164,7 @@ export function TemplateCard({ s, text, setText, starter }: { s: Schemas["Settin
           </div>
           <p className="mt-2">{t("settings.templateHowRest")}</p>
         </details>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button type="submit" variant="primary" loading={save.isPending && save.variables?.sub_template === text} disabled={!dirty || !text.trim()}>
-            {t("common.save")}
-          </Button>
-          {dirty && live ? (
-            <Button variant="ghost" onClick={() => setText(() => s.sub_template)}>
-              {t("telegram.discard")}
-            </Button>
-          ) : null}
+        <FormActions dirty={dirty} saving={save.isPending && save.variables?.sub_template === text} disabled={!dirty || !text.trim()} onReset={live ? () => setText(() => s.sub_template) : undefined}>
           {live ? (
             <Button
               variant="ghost"
@@ -185,7 +178,7 @@ export function TemplateCard({ s, text, setText, starter }: { s: Schemas["Settin
               {sure ? t("settings.templateOffSure") : t("settings.templateTurnOff")}
             </Button>
           ) : null}
-        </div>
+        </FormActions>
       </form>
     </section>
   );

@@ -1,7 +1,8 @@
 import type { FormEvent } from "react";
 import type { Schemas } from "../../../api/client";
-import { Button, Field, Segmented } from "../../../components/ui";
-import { Switch } from "../../../components/switch";
+import { FormActions } from "../../../components/layout";
+import { Field, Segmented } from "../../../components/ui";
+import { SwitchRow } from "../../../components/switch";
 import { t } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
 import { fieldErrors } from "../../../lib/fields";
@@ -14,7 +15,7 @@ type RoutingMode = "off" | "auto" | "link";
  * crypt link that keeps the subscription address out of sight. */
 export function HappCard({ s }: { s: Schemas["SettingsView"] }) {
   const save = useSaveSettings();
-  const { draft: form, setDraft: setForm } = useDraft({
+  const { draft: form, setDraft: setForm, dirty, reset } = useDraft({
     happ_routing: s.happ_routing === "auto" ? "" : s.happ_routing,
     // "auto": the panel makes the routing profile of Settings → Routing.
     mode: (s.happ_routing === "auto" ? "auto" : s.happ_routing ? "link" : "off") as RoutingMode,
@@ -94,29 +95,22 @@ export function HappCard({ s }: { s: Schemas["SettingsView"] }) {
           />
         </Field>
 
-        <div className="flex items-start justify-between gap-4 py-3">
-          <div className="min-w-0">
-            <div className="text-[13px] font-medium">{t("settings.happHide")}</div>
-            <div className={canHide ? "mt-1 text-xs text-[var(--ink-500)]" : "mt-1 text-xs text-[var(--honey-600)]"}>
-              {canHide ? t("settings.happHideSub") : t("settings.happHideNeedsProvider")}
-            </div>
-            {errors.happ_hide_settings ? (
-              <div className="mt-1 text-xs text-[var(--berry-600)]" role="alert">
-                {errors.happ_hide_settings}
-              </div>
-            ) : null}
-          </div>
-          <Switch
-            checked={canHide && s.happ_hide_settings}
-            label={t("settings.happHide")}
-            disabled={!canHide || save.isPending}
-            onChange={(v) => save.mutate({ happ_hide_settings: v })}
-          />
-        </div>
+        <SwitchRow
+          className="border-t border-[var(--hairline)]"
+          label={t("settings.happHide")}
+          sub={canHide ? t("settings.happHideSub") : t("settings.happHideNeedsProvider")}
+          warn={!canHide}
+          checked={canHide && s.happ_hide_settings}
+          disabled={!canHide || save.isPending}
+          onChange={(v) => save.mutate({ happ_hide_settings: v })}
+        />
+        {errors.happ_hide_settings ? (
+          <p className="text-xs text-[var(--berry-600)]" role="alert">
+            {errors.happ_hide_settings}
+          </p>
+        ) : null}
 
-        <Button type="submit" variant="primary" loading={save.isPending}>
-          {t("common.save")}
-        </Button>
+        <FormActions dirty={dirty} saving={save.isPending && save.variables?.happ_hide_settings === undefined} onReset={reset} />
       </form>
     </section>
   );

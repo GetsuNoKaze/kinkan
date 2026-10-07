@@ -1,6 +1,7 @@
 import { useRef, type FormEvent } from "react";
 import { ApiError, type Schemas } from "../../../api/client";
-import { Button, Pill } from "../../../components/ui";
+import { FormActions } from "../../../components/layout";
+import { Pill } from "../../../components/ui";
 import { t } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
 import { useSaveSettings } from "./shared";
@@ -105,16 +106,7 @@ export function ClashRulesCard({ s }: { s: Schemas["SettingsView"] }) {
             <p className="mt-2">{t("settings.rulesTypesText")}</p>
           </details>
         </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button type="submit" variant="primary" loading={save.isPending && save.variables?.sub_rules !== undefined} disabled={!changed}>
-            {t("common.save")}
-          </Button>
-          {changed ? (
-            <Button variant="ghost" onClick={reset}>
-              {t("telegram.discard")}
-            </Button>
-          ) : null}
-        </div>
+        <FormActions dirty={changed} saving={save.isPending && save.variables?.sub_rules !== undefined} onReset={reset} />
       </form>
     </section>
   );

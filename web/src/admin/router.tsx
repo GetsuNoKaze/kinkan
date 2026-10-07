@@ -4,7 +4,7 @@ import { ApiError, basePath, setCsrf } from "../api/client";
 import { meQuery } from "../api/hooks";
 import { useLocale } from "../i18n";
 import { NotFoundPage, PageLoading, RouteError } from "./route-states";
-import { SETTINGS_TABS, TARIFF_TABS, TELEGRAM_TABS, USER_SOURCES, USER_STATES, type SettingsSearch, type TariffsSearch, type TelegramSearch, type UsersSearch } from "./search";
+import { SETTINGS_PARTS, SETTINGS_TABS, TARIFF_TABS, TELEGRAM_TABS, USER_SOURCES, USER_STATES, type SettingsSearch, type TariffsSearch, type TelegramSearch, type UsersSearch } from "./search";
 import { Shell } from "./shell";
 
 /**
@@ -79,9 +79,14 @@ export function createAppRouter(queryClient: QueryClient) {
     getParentRoute: () => app,
     path: "/settings",
     component: page(() => import("./pages/settings"), "SettingsPage"),
-    validateSearch: (s: Record<string, unknown>): SettingsSearch => ({
-      tab: SETTINGS_TABS.includes(s.tab as SettingsSearch["tab"]) ? (s.tab as SettingsSearch["tab"]) : "general",
-    }),
+    validateSearch: (s: Record<string, unknown>): SettingsSearch => {
+      // Sections that moved keep their old links working: the Clash rules are a part of the
+      // routing now.
+      if (s.tab === "rules") return { tab: "routing", part: "rules" };
+      const tab = SETTINGS_TABS.includes(s.tab as SettingsSearch["tab"]) ? (s.tab as SettingsSearch["tab"]) : "general";
+      const parts: readonly string[] | undefined = (SETTINGS_PARTS as Record<string, readonly string[]>)[tab];
+      return { tab, part: parts && typeof s.part === "string" && parts.includes(s.part) ? s.part : undefined };
+    },
   });
   const telegram = createRoute({
     getParentRoute: () => app,

@@ -22,8 +22,13 @@ export type UsersSearch = {
   hidden?: Exclude<(typeof USER_HIDDEN)[number], "hide">;
 };
 
-export const SETTINGS_TABS = ["general", "subscription", "page", "routing", "rules", "security", "import"] as const;
-export type SettingsSearch = { tab: (typeof SETTINGS_TABS)[number] };
+export const SETTINGS_TABS = ["general", "subscription", "page", "routing", "security", "system", "import"] as const;
+/** The parts of the sections that have them: the subscription page's editor and the routing. */
+export const SETTINGS_PARTS = {
+  page: ["look", "brand", "blocks", "apps", "docs", "css"],
+  routing: ["simple", "yaml", "rules", "torrent"],
+} as const;
+export type SettingsSearch = { tab: (typeof SETTINGS_TABS)[number]; part?: string };
 
 export const TARIFF_TABS = ["tariffs", "pools", "packages"] as const;
 export type TariffsSearch = { tab: (typeof TARIFF_TABS)[number] };
