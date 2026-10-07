@@ -503,6 +503,7 @@ html[data-theme="forest"] {
 }
 @media (max-width: 760px) {
   .page-title { font-size: 22px; line-height: 28px; }
+  .topbar { flex-wrap: wrap; }
   .kpi-value { font-size: 26px; line-height: 32px; }
   .search-field { min-width: 0; flex: 1; }
   .tabs button { padding: 0 8px; }
