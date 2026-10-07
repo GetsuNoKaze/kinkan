@@ -104,6 +104,9 @@ type Bytes struct{ Up, Down int64 }
 type TrafficBatch struct {
 	Main  map[int64]Bytes
 	Pools map[[2]int64]Bytes // {user, pool}
+	// Node is the node that carried the batch: what the users' statistics count is counted
+	// to it too, so the nodes' traffic adds up to the users'. 0: no node (not counted).
+	Node int64
 }
 
 // CountTraffic counts a batch on q's transaction in a few set-based statements: the
@@ -222,7 +225,22 @@ func CountTraffic(ctx context.Context, q *db.Queries, b TrafficBatch, now time.T
 	if err := q.AddTrafficHourlyBatch(ctx, db.AddTrafficHourlyBatchParams{UserIds: stats.UserIds, Hour: now.Unix() / 3600, Up: stats.Up, Down: stats.Down}); err != nil {
 		return err
 	}
-	return q.AddTrafficDailyBatch(ctx, db.AddTrafficDailyBatchParams{UserIds: stats.UserIds, Day: now.Unix() / 86400, Up: stats.Up, Down: stats.Down})
+	if err := q.AddTrafficDailyBatch(ctx, db.AddTrafficDailyBatchParams{UserIds: stats.UserIds, Day: now.Unix() / 86400, Up: stats.Up, Down: stats.Down}); err != nil {
+		return err
+	}
+	if b.Node == 0 {
+		return nil
+	}
+	// The same bytes the users' statistics just took (users and pools deleted meanwhile
+	// are not in them), so the sum over nodes equals the sum over users.
+	var up, down int64
+	for i := range stats.UserIds {
+		up, down = up+stats.Up[i], down+stats.Down[i]
+	}
+	if up == 0 && down == 0 {
+		return nil
+	}
+	return q.AddNodeTraffic(ctx, db.AddNodeTrafficParams{NodeID: b.Node, Hour: now.Unix() / 3600, Day: now.Unix() / 86400, Up: up, Down: down})
 }
 
 // spendGrants takes what went past the base quotas from the active grants of each target
