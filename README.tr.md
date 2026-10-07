@@ -12,7 +12,7 @@
 [![Sürüm](https://img.shields.io/github/v/release/Miroshka000/mikan?color=f07a2e&label=sürüm&style=flat-square)](https://github.com/Miroshka000/mikan/releases)
 [![İmaj](https://img.shields.io/badge/ghcr.io-miroshka000%2Fmikan-2b8c9e?style=flat-square&logo=docker&logoColor=white)](https://github.com/Miroshka000/mikan/pkgs/container/mikan)
 [![Lisans](https://img.shields.io/badge/lisans-GPL--3.0-2f9e6b?style=flat-square)](LICENSE)
-[![mihomo](https://img.shields.io/badge/çekirdek-mihomo%201.19.31-9e8eff?style=flat-square)](https://github.com/MetaCubeX/mihomo)
+[![mihomo](https://img.shields.io/badge/çekirdek-mihomo%201.19.32-9e8eff?style=flat-square)](https://github.com/MetaCubeX/mihomo)
 
 [English](README.md) · [Русский](README.ru.md) · [简体中文](README.zh-CN.md) · [فارسی](README.fa.md) · **Türkçe** · [Español](README.es.md)
 

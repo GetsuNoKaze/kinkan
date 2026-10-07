@@ -1177,4 +1177,4 @@ func (h *Handler) sample(ctx context.Context) (Profile, Config, error) {
 }
 
 // previewCore is the mihomo the nodes run (go.mod), the newest an app may have.
-var previewCore = Version{1, 19, 31}
+var previewCore = Version{1, 19, 32}

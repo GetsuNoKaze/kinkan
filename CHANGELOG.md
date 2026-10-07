@@ -15,6 +15,8 @@ the signed manifest, and the panel shows the one in its language.
 - A new domain gets its certificate at once. A site of your own: files in /opt/mikan/data/panel/www are served on the paths the panel does not use.
 - Blocking detection needs devices from two networks before it moves a port.
 - With XHTTP chosen in a Clash app, UDP (calls, QUIC) no longer leaves past the tunnel. XHTTP padding and session settings now reach the apps; REALITY over WebSocket is refused.
+- **sing-box apps** (SFA, SFI, SFM, SFT) get a whole sing-box config with the panel's routing and DNS. **Happ and INCY** can take a routing profile the panel builds from the Clash routing ("auto" in the Happ settings). Hiddify 4 gets AnyTLS.
+- The nodes run mihomo 1.19.32.
 
 ### ru
 - **Маршрутизация для Clash-приложений** («Настройки → Маршрутизация»): сервисы (YouTube, Telegram, Discord, нейросети, игры и другие) через VPN, напрямую, в блок или через выбранный сервер; российские банки, госуслуги и маркетплейсы мимо туннеля; свои DNS; режим «только заблокированное», где через VPN идёт только то, что заблокировано. Или свой профиль Clash в YAML: серверы панель подставит сама. Профили теперь в YAML.
@@ -27,6 +29,8 @@ the signed manifest, and the panel shows the one in its language.
 - Новый домен получает сертификат сразу. Свой сайт: файлы из /opt/mikan/data/panel/www отдаются на путях, которые не заняты панелью.
 - Обнаружение блокировок переносит порт, только когда не доходят устройства хотя бы из двух сетей.
 - С выбранным XHTTP в Clash-приложении UDP (звонки, QUIC) больше не уходит мимо туннеля. Настройки паддинга и сессий XHTTP теперь доходят до приложений; REALITY поверх WebSocket не принимается.
+- **Приложения sing-box** (SFA, SFI, SFM, SFT) получают целый конфиг sing-box с маршрутизацией и DNS панели. **Happ и INCY** могут брать профиль маршрутизации, который панель собирает из маршрутизации Clash («auto» в настройках Happ). Hiddify 4 получает AnyTLS.
+- Ноды работают на mihomo 1.19.32.
 
 ## 0.5.0.2
 ### en
