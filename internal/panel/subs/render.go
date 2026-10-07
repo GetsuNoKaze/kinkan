@@ -259,6 +259,11 @@ func mihomoConfig(p Profile, g Groups, r Routing) (map[string]any, []proxy, erro
 		// Groups with no proxies in them are a profile mihomo may refuse whole.
 		return nil, nil, ErrNoProxies
 	}
+	return mihomoConfigOf(p, g, r, ps), ps, nil
+}
+
+// mihomoConfigOf is the profile of ps.
+func mihomoConfigOf(p Profile, g Groups, r Routing, ps []proxy) map[string]any {
 	g = g.WithDefaults("")
 	proxies := make([]map[string]any, len(ps))
 	names := make([]string, len(ps))
@@ -336,7 +341,7 @@ func mihomoConfig(p Profile, g Groups, r Routing) (map[string]any, []proxy, erro
 		last = []string{"MATCH,DIRECT"}
 	}
 	cfg["rules"] = append(rules, last...)
-	return cfg, ps, nil
+	return cfg
 }
 
 func urlTest(name string, proxies []string) map[string]any {

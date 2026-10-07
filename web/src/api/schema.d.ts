@@ -3014,7 +3014,7 @@ export interface components {
             happ_crypt?: "off" | "api" | "local";
             happ_hide_settings?: boolean;
             happ_provider_id?: string;
-            /** @description happ://routing/…; пусто — не отдавать */
+            /** @description happ://routing/…, auto — собрать из маршрутизации; пусто — не отдавать */
             happ_routing?: string;
             public_host?: string;
             /** Format: int64 */
@@ -3542,7 +3542,7 @@ export interface components {
             happ_hide_settings: boolean;
             /** @description Provider ID с happ-proxy.com; без него Happ не принимает hide-settings */
             happ_provider_id: string;
-            /** @description Профиль маршрутизации Happ: ссылка happ://routing/onadd/… (добавить и включить), happ://routing/add/… или happ://routing/off; уходит только в Happ заголовком routing */
+            /** @description Профиль маршрутизации Happ: ссылка happ://routing/onadd/… (добавить и включить), happ://routing/add/… или happ://routing/off; auto — панель собирает его сама из маршрутизации Clash-профиля (Настройки → Маршрутизация); уходит только в Happ заголовком routing */
             happ_routing: string;
             /** Format: int64 */
             panel_port: number;

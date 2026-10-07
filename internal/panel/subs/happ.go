@@ -12,7 +12,8 @@ import (
 // per its provider docs (happ.su/main/dev-docs).
 type Happ struct {
 	// Routing is a happ://routing/... link: Happ adds the routing profile with the
-	// subscription ("onadd" also turns it on). Sent to Happ only.
+	// subscription ("onadd" also turns it on). Sent to Happ only. HappRoutingAuto: the
+	// panel makes it of the Clash profile's rules (happroute.go).
 	Routing string
 	// ProviderID ties the subscription to the admin's account at happ-proxy.com. Happ takes
 	// the provider headers (HideSettings) only with it.
@@ -37,10 +38,10 @@ var happProvider = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 // "-" and "_"; anything else would not survive a header.
 func ValidHappProviderID(s string) bool { return happProvider.MatchString(s) }
 
-// ValidHappRouting accepts happ://routing/off and the add/onadd links whose payload is the
-// base64 of a JSON profile: what Happ itself exports.
+// ValidHappRouting accepts happ://routing/off, HappRoutingAuto, and the add/onadd links
+// whose payload is the base64 of a JSON profile: what Happ itself exports.
 func ValidHappRouting(s string) bool {
-	if s == "happ://routing/off" {
+	if s == "happ://routing/off" || s == HappRoutingAuto {
 		return true
 	}
 	if len(s) > HappRoutingMax || strings.ContainsAny(s, " \r\n\t") {

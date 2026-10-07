@@ -240,7 +240,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.userInfoHeaders(w, u, grants.Main(u.ID), cfg, vars)
 	h.operatorHeaders(w, r, u, cfg)
 	if IsHapp(r.UserAgent()) {
-		happHeaders(w.Header(), cfg.Happ)
+		happ := cfg.Happ
+		if happ.Routing == HappRoutingAuto {
+			happ.Routing = happAutoRouting(cfg)
+		}
+		happHeaders(w.Header(), happ)
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method == http.MethodHead {
