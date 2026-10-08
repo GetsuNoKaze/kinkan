@@ -165,6 +165,14 @@ export function UpdatesCard() {
     },
     onError: fail,
   });
+  const goals = useMutation({
+    mutationFn: (v: boolean) => unwrap(api.PATCH("/api/v1/updates", { body: { show_goals: v } })),
+    onSuccess: (d) => {
+      put(d);
+      toast.ok(t("settings.saved"));
+    },
+    onError: fail,
+  });
   const request = useMutation({
     mutationFn: () => unwrap(api.POST("/api/v1/updates/request")),
     onSuccess: (d) => {
@@ -255,6 +263,9 @@ export function UpdatesCard() {
         </li>
         <li>
           <SwitchRow label={t("settings.updatesBeta")} sub={t("settings.updatesBetaSub")} checked={v.channel === "beta"} disabled={channel.isPending} onChange={(on) => channel.mutate(on)} />
+        </li>
+        <li>
+          <SwitchRow label={t("settings.updatesGoals")} sub={t("settings.updatesGoalsSub")} checked={v.show_goals} disabled={goals.isPending} onChange={(on) => goals.mutate(on)} />
         </li>
       </ul>
       <Confirm

@@ -51,6 +51,9 @@ const (
 	// KeyNodesFollow lets the panel update its remote nodes to its own version, one at a
 	// time, after it updated itself; on unless switched off (internal/panel/nodeupdate).
 	KeyNodesFollow = "nodes_follow_panel"
+	// KeyShowGoals shows the goals the project collects money for (release.Goals) on the
+	// updates card; on unless switched off.
+	KeyShowGoals = "show_goals"
 	// Branding and support: the bot's and the subscription page's name and the support link.
 	KeyBrand      = "brand"
 	KeySupportURL = "support_url"
@@ -102,6 +105,7 @@ var (
 	RequireHWID   = Switch{KeyRequireHWID, false}
 	AutoUpdate    = Switch{KeyAutoUpdate, false}
 	NodesFollow   = Switch{KeyNodesFollow, true}
+	ShowGoals     = Switch{KeyShowGoals, true}
 	AppBranding   = Switch{KeyAppBranding, false}
 	HappHide      = Switch{KeyHappHide, false}
 )

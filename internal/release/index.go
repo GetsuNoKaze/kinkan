@@ -63,6 +63,8 @@ type Index struct {
 	Schema    int       `json:"schema"`
 	Published time.Time `json:"published"`
 	Releases  []Entry   `json:"releases"`
+	// Goals: see goals.go; empty when the index has none.
+	Goals Goals `json:"goals"`
 }
 
 type Entry struct {
@@ -107,6 +109,7 @@ func DecodeIndex(data []byte) (Index, error) {
 	var ix Index
 	_ = json.Unmarshal(doc["schema"], &ix.Schema)
 	_ = json.Unmarshal(doc["published"], &ix.Published)
+	ix.Goals = decodeGoals(doc["goals"])
 	for _, r := range releases {
 		var fields map[string]json.RawMessage
 		if json.Unmarshal(r, &fields) != nil {

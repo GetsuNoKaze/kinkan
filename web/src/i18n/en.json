@@ -1252,6 +1252,8 @@
     "updatesUnreachable": "{v} is out, but this version cannot update to it directly.",
     "updatesBeta": "Beta versions",
     "updatesBetaSub": "New versions before everyone else. They can have bugs.",
+    "updatesGoals": "Project goals",
+    "updatesGoalsSub": "Show here which features money is being collected for.",
     "updatesNodes": "Update the other servers too",
     "updatesNodesSub": "One at a time, after the panel. If one fails to update, you get an alert.",
     "lang": "Default language",
@@ -1708,6 +1710,17 @@
         "location2": "Netherlands"
       }
     }
+  },
+  "goals": {
+    "title": "What we are working on",
+    "sub": "Features the community collects money for. Once a sum is collected, the work starts.",
+    "raised": "{raised} of {target}",
+    "open": "Collecting",
+    "working": "Collected, in work",
+    "give": "Support",
+    "any": "Support without a goal",
+    "all": "All goals",
+    "progress": "{title}: {raised} of {target} raised"
   },
   "sub": {
     "loadFailed": "Could not load the subscription",
