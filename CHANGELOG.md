@@ -6,9 +6,15 @@ the signed manifest, and the panel shows the one in its language.
 ## 0.5.0.4
 ### en
 - With a domain, Hysteria2, TUIC, AnyTLS and TrustTunnel on the panel's own node failed their handshakes after the update to 0.5.0.3: the links no longer pinned a certificate, while the node could keep serving the self-signed one. The node now starts with the panel's public certificate and gets a new one as soon as it is issued, renewed or uploaded.
+- **Lighter on the server**: PostgreSQL is asked far less often while nobody touches the panel. Traffic is stored every 10 seconds instead of every 2 (nothing is lost: the node holds what is not stored yet), "online" and the devices' last seen every 2 minutes, and the torrent blocker no longer rereads every user and slot every 5 seconds. The infrastructure alerts and the settings reload read through a short cache.
+- **Lighter in the browser**: an open overview asks the server about twice as rarely, the menu no longer polls the overview's figures on every page, the "Needs attention" card is one request instead of three, and the backdrop stops drifting when the window is not in focus or nobody has touched it for a minute.
+- The node card's CPU is the whole server's (on the panel's own server the panel and its database count too): it is now called "Server CPU", with the node's own share under it.
 
 ### ru
 - С доменом Hysteria2, TUIC, AnyTLS и TrustTunnel на своей ноде панели после обновления до 0.5.0.3 обрывали рукопожатие: ссылки больше не закрепляли сертификат, а нода могла остаться на самоподписанном. Теперь нода сразу получает публичный сертификат панели, а новый получает, как только он выдан, продлён или загружен.
+- **Меньше нагрузки на сервер**: пока в панели никто ничего не делает, PostgreSQL почти не дёргается. Трафик сохраняется раз в 10 секунд вместо 2 (ничего не теряется: нода держит то, что ещё не сохранено), «в сети» и последнее появление устройств раз в 2 минуты, а блокировка торрентов больше не перечитывает всех пользователей и слоты каждые 5 секунд. Уведомления об инфраструктуре и перечитка настроек идут через короткий кэш.
+- **Меньше нагрузки в браузере**: открытый обзор спрашивает сервер примерно вдвое реже, меню больше не опрашивает цифры обзора на каждой странице, карточка «Требует внимания» делает один запрос вместо трёх, а фон перестаёт двигаться, когда окно не в фокусе или его минуту не трогали.
+- Процессор на карточке ноды — это весь сервер (на сервере панели туда входят сама панель и её база): теперь он так и называется, «Процессор сервера», а под ним доля самой ноды.
 
 ## 0.5.0.3
 ### en
