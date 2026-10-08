@@ -39,11 +39,6 @@ jobs:
           node-version: 24
           cache: pnpm
           cache-dependency-path: site/pnpm-lock.yaml
-      # The donations counted so far (the donations workflow), added to the goals' sums.
-      - name: donations
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release download updates -p donations.json -D site/src/data || true
       - name: build
         working-directory: site
         run: |

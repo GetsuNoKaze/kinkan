@@ -39,9 +39,6 @@ type Goal struct {
 	Version string `json:"version,omitempty"`
 	// URL is where to give money for this goal; empty: Goals.Donate.
 	URL string `json:"url,omitempty"`
-	// Tribute is the goal's donation_request_id in Tribute's webhooks, once known; until
-	// then a donation is matched to the goal by its title.
-	Tribute int64 `json:"tribute,omitempty"`
 }
 
 // The states of a goal.
