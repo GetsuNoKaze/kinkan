@@ -156,6 +156,7 @@ func (h *handlers) renderMetrics(ctx context.Context, now time.Time) ([]byte, er
 		}{
 			{"mikan_node_connections", "Open connections on the node.", func(hv nodesync.HealthView) float64 { return float64(hv.Health.Conns) }},
 			{"mikan_node_cpu_percent", "CPU use of the node's server.", func(hv nodesync.HealthView) float64 { return hv.Health.System.CPUPercent }},
+			{"mikan_node_process_cpu_percent", "CPU use of the node process itself, on the server's scale.", func(hv nodesync.HealthView) float64 { return hv.Health.System.ProcCPUPercent }},
 			{"mikan_node_memory_used_bytes", "Memory used on the node's server.", func(hv nodesync.HealthView) float64 { return float64(hv.Health.System.MemUsed) }},
 			{"mikan_node_memory_total_bytes", "Memory of the node's server.", func(hv nodesync.HealthView) float64 { return float64(hv.Health.System.MemTotal) }},
 			{"mikan_node_receive_bytes_per_second", "Network in on the node's server.", func(hv nodesync.HealthView) float64 { return float64(hv.Health.System.NetRxBps) }},

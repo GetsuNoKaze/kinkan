@@ -184,7 +184,7 @@ func (h *handlers) userSlots(ctx context.Context, ids []int64) (map[int64][]stri
 }
 
 type listUsersInput struct {
-	State  string `query:"state" enum:"all,active,expiring,limited,expired,disabled" default:"all"`
+	State  string `query:"state" enum:"all,active,expiring,limited,expired,disabled,attention" default:"all" doc:"attention — исчерпан лимит, истекают и истекли, в этом порядке: одним запросом для обзора"`
 	Query  string `query:"q" maxLength:"100"`
 	Folder string `query:"folder" maxLength:"20" default:"all" doc:"all — любая; none — вне папок; число — id папки"`
 	Source string `query:"source" enum:"all,admin,bot,trial,import" default:"all" doc:"Откуда пользователь, см. source у пользователя"`
@@ -377,6 +377,22 @@ func hiddenMatches(mode string, u db.User) bool {
 	return u.Hidden == 0
 }
 
+// stateAttention lists what the overview asks the admin to look at: users out of traffic,
+// then those about to expire, then the expired; one pass over the users instead of three.
+const stateAttention = "attention"
+
+func attentionRank(state string) int {
+	switch state {
+	case domain.StateLimited:
+		return 0
+	case domain.StateExpiring:
+		return 1
+	case domain.StateExpired:
+		return 2
+	}
+	return -1
+}
+
 func (h *handlers) listUsers(ctx context.Context, in *listUsersInput) (*listUsersOutput, error) {
 	// The filters stay in Go: the search lowercases as Go does (PostgreSQL's lower() follows
 	// the database's locale, and a C locale leaves Cyrillic as it is), and the states are
@@ -444,13 +460,22 @@ func (h *handlers) listUsers(ctx context.Context, in *listUsersInput) (*listUser
 		case domain.StateDisabled:
 			c.Disabled++
 		}
-		if in.State != "all" && !(st == in.State || (in.State == domain.StateActive && st == domain.StateExpiring)) {
+		if in.State == stateAttention {
+			if attentionRank(st) < 0 {
+				continue
+			}
+		} else if in.State != "all" && !(st == in.State || (in.State == domain.StateActive && st == domain.StateExpiring)) {
 			continue
 		}
 		if q != "" && !strings.Contains(strings.ToLower(u.Name+" "+u.Contact+" "+u.Note+" "+u.Tags), q) {
 			continue
 		}
 		matched = append(matched, u)
+	}
+	if in.State == stateAttention {
+		slices.SortStableFunc(matched, func(a, b db.User) int {
+			return attentionRank(domain.State(a, grants.Main(a.ID), now)) - attentionRank(domain.State(b, grants.Main(b.ID), now))
+		})
 	}
 	out.Body.Total = len(matched)
 	end := min(in.Offset+in.Limit, len(matched))

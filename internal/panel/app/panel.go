@@ -47,8 +47,10 @@ import (
 type Panel struct {
 	Handler  http.Handler
 	Settings *settings.Settings
-	Nodes    *nodesync.Manager
-	Tuner    *autotune.Tuner // nil without nodes
+	// reload is what Run reads the paths and the language with every five seconds.
+	reload *settings.Settings
+	Nodes  *nodesync.Manager
+	Tuner  *autotune.Tuner // nil without nodes
 	// NodeUpdates updates the remote nodes to the panel's version; nil without nodes.
 	NodeUpdates *nodeupdate.Service
 	Telegram    *tgbot.Bot
@@ -122,6 +124,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	set := settings.New(st.Q)
 	p := &Panel{
 		Settings:  set,
+		reload:    settings.Cached(st.Q, loopSettingsTTL),
 		sessions:  auth.NewSessions(st.Q, o.Now, o.Log),
 		ipLimit:   auth.NewLimiter(10, 10*time.Minute, 15*time.Minute, 24*time.Hour),
 		userLimit: auth.NewLimiter(30, 10*time.Minute, 15*time.Minute, 24*time.Hour),
@@ -215,7 +218,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	if o.Certs != nil {
 		certStatus = o.Certs.Status
 	}
-	p.Alerts = infraalerts.New(st, set, p.Nodes, p.Tuner, certStatus, p.Updates, p.Telegram, o.Log, o.Now)
+	p.Alerts = infraalerts.New(st, settings.Cached(st.Q, loopSettingsTTL), p.Nodes, p.Tuner, certStatus, p.Updates, p.Telegram, o.Log, o.Now)
 	if p.NodeUpdates != nil {
 		p.Alerts.WatchNodeUpdates(p.NodeUpdates)
 	}
@@ -397,13 +400,18 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 // SubOnly is what the subscription port serves: the subscription path alone.
 func (p *Panel) SubOnly() http.Handler { return p.server.SubOnly() }
 
+// loopSettingsTTL is how long the loops that read settings every few seconds (Run's reload,
+// the infrastructure alerts) keep a value: what this process writes is seen at once, what
+// the CLI writes within this.
+const loopSettingsTTL = 15 * time.Second
+
 // Apply loads the secret paths into the router and the default language into the pages.
 func (p *Panel) Apply(ctx context.Context) (settings.Paths, error) {
-	paths, err := p.Settings.Paths(ctx)
+	paths, err := p.reload.Paths(ctx)
 	if err != nil {
 		return paths, err
 	}
-	lang, err := p.Settings.Lang(ctx)
+	lang, err := p.reload.Lang(ctx)
 	if err != nil {
 		return paths, err
 	}

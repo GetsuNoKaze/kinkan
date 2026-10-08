@@ -93,6 +93,7 @@ type Monitor struct {
 	log         *slog.Logger
 	now         func() time.Time
 	roundMu     sync.Mutex
+	world       *world // under roundMu
 	dispatchMu  sync.Mutex
 	dispatching bool
 }
@@ -119,6 +120,68 @@ func (m *Monitor) Run(ctx context.Context) {
 			m.round(ctx)
 		}
 	}
+}
+
+// worldTTL is how often the round, every five seconds, reads the nodes, the inbounds and the
+// nodes' WARP and relay rows: they change only when the admin edits them.
+const worldTTL = 15 * time.Second
+
+type world struct {
+	at       time.Time
+	nodes    []db.Node
+	inbounds []db.Inbound
+	warp     map[int64]db.NodeWarp
+	relay    map[int64]db.NodeRelay
+}
+
+// loadWorld returns the nodes and the inbounds, read again once worldTTL has passed.
+func (m *Monitor) loadWorld(ctx context.Context) (*world, error) {
+	now := m.now()
+	if w := m.world; w != nil && now.Sub(w.at) < worldTTL && !now.Before(w.at) {
+		return w, nil
+	}
+	nodes, err := m.store.Q.ListNodes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list nodes: %w", err)
+	}
+	inbounds, err := m.store.Q.ListInbounds(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list inbounds: %w", err)
+	}
+	m.world = &world{at: now, nodes: nodes, inbounds: inbounds, warp: map[int64]db.NodeWarp{}, relay: map[int64]db.NodeRelay{}}
+	return m.world, nil
+}
+
+// nodeWarp and nodeRelay read a node's row once per world; an absent row is kept as the
+// zero row, an error is not kept.
+func (m *Monitor) nodeWarp(ctx context.Context, id int64) (db.NodeWarp, error) {
+	if m.world == nil { // outside a round
+		return m.store.Q.GetNodeWarp(ctx, id)
+	}
+	if w, ok := m.world.warp[id]; ok {
+		return w, nil
+	}
+	w, err := m.store.Q.GetNodeWarp(ctx, id)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return w, err
+	}
+	m.world.warp[id] = w
+	return w, nil
+}
+
+func (m *Monitor) nodeRelay(ctx context.Context, id int64) (db.NodeRelay, error) {
+	if m.world == nil {
+		return m.store.Q.GetNodeRelay(ctx, id)
+	}
+	if r, ok := m.world.relay[id]; ok {
+		return r, nil
+	}
+	r, err := m.store.Q.GetNodeRelay(ctx, id)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return r, err
+	}
+	m.world.relay[id] = r
+	return r, nil
 }
 
 func (m *Monitor) load(ctx context.Context) (persistentState, error) {
@@ -231,18 +294,14 @@ func (m *Monitor) round(ctx context.Context) {
 	cfg := m.config(ctx)
 	lang := "ru"
 	if m.bot != nil {
-		lang = m.bot.Config(ctx).Lang
+		lang = m.bot.PolledConfig(ctx).Lang
 	}
-	nodes, err := m.store.Q.ListNodes(ctx)
+	w, err := m.loadWorld(ctx)
 	if err != nil {
-		m.logError("infrastructure alerts: list nodes", err)
+		m.logError("infrastructure alerts", err)
 		return
 	}
-	inbounds, err := m.store.Q.ListInbounds(ctx)
-	if err != nil {
-		m.logError("infrastructure alerts: list inbounds", err)
-		return
-	}
+	nodes, inbounds := w.nodes, w.inbounds
 	byNode := map[int64][]db.Inbound{}
 	for _, in := range inbounds {
 		byNode[in.NodeID] = append(byNode[in.NodeID], in)
@@ -365,7 +424,7 @@ func (m *Monitor) round(ctx context.Context) {
 			delete(st.Stuck, key)
 		}
 	}
-	enabled := m.bot != nil && m.bot.InfrastructureEnabled(ctx) // read once per round
+	enabled := m.bot != nil && m.bot.PolledInfrastructure(ctx) // read once per round
 	if !enabled {
 		st.Pending = nil
 	}
@@ -613,7 +672,7 @@ func (m *Monitor) probeWarp(ctx context.Context, st *persistentState, cfg Alerts
 		if n.Enabled == 0 || levels[n.ID] == Unavailable {
 			continue
 		}
-		w, err := m.store.Q.GetNodeWarp(ctx, n.ID)
+		w, err := m.nodeWarp(ctx, n.ID)
 		if err != nil || w.Enabled == 0 {
 			continue
 		}
@@ -652,7 +711,7 @@ func (m *Monitor) probeExits(ctx context.Context, st *persistentState, cfg Alert
 				exits[in.ExitNodeID.Int64] = true
 			}
 		}
-		relay, err := m.store.Q.GetNodeRelay(ctx, n.ID)
+		relay, err := m.nodeRelay(ctx, n.ID)
 		if err == nil && relay.Outbound == "node" && relay.ExitNodeID.Valid {
 			exits[relay.ExitNodeID.Int64] = true
 		}

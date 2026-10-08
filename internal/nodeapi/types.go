@@ -242,12 +242,16 @@ func clip(s string, n int) string {
 }
 
 type System struct {
-	CPUPercent float64 `json:"cpu_percent"`
-	MemTotal   uint64  `json:"mem_total"`
-	MemUsed    uint64  `json:"mem_used"`
-	ProcRSS    uint64  `json:"proc_rss"`
-	NetRxBps   uint64  `json:"net_rx_bps"`
-	NetTxBps   uint64  `json:"net_tx_bps"`
+	// CPUPercent is the whole server's: with network_mode: host the panel, its database and
+	// anything else on the host count too. ProcCPUPercent is the node process's own share
+	// on the same scale (all cores = 100); nodes before 0.5.0.4 send none.
+	CPUPercent     float64 `json:"cpu_percent"`
+	ProcCPUPercent float64 `json:"proc_cpu_percent,omitempty"`
+	MemTotal       uint64  `json:"mem_total"`
+	MemUsed        uint64  `json:"mem_used"`
+	ProcRSS        uint64  `json:"proc_rss"`
+	NetRxBps       uint64  `json:"net_rx_bps"`
+	NetTxBps       uint64  `json:"net_tx_bps"`
 }
 
 type ListenerStatus struct {
