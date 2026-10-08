@@ -3,6 +3,7 @@ import { CalendarPlus, MoreHorizontal, Power, RefreshCw, RotateCcw, Trash2 } fro
 import { useState } from "react";
 import { errorText, type User } from "../../api/client";
 import { onePeriod, userActions, useUser, useUserMutation } from "../../api/hooks";
+import { Disclosure } from "../../components/layout";
 import { Confirm, Drawer } from "../../components/overlay";
 import { useToast } from "../../components/toast";
 import { QueryBoundary } from "../../components/query";
@@ -14,6 +15,7 @@ import { PoolsSection, TariffSection, TrafficSection } from "./user/traffic";
 import { ExpirySection } from "./user/expiry";
 import { NoteSection, ProtocolsSection, SubscriptionSection, TelegramSection } from "./user/access";
 import { DevicesSection } from "./user/devices";
+import { OrganiseSection } from "./user/organise";
 import { TorrentSection } from "./user/torrent";
 
 export function UserDrawer({ id, onClose }: { id?: number; onClose: () => void }) {
@@ -21,6 +23,7 @@ export function UserDrawer({ id, onClose }: { id?: number; onClose: () => void }
   const u = user.data;
   return (
     <Drawer
+      wide
       open={!!id}
       onOpenChange={(v) => !v && onClose()}
       title={u?.name ?? t("userDrawer.fallbackTitle")}
@@ -31,6 +34,7 @@ export function UserDrawer({ id, onClose }: { id?: number; onClose: () => void }
             <StatePill state={u.state} />
             <span>{t("userDrawer.created", { date: dateShort(u.created_at) })}</span>
             <span className="mono">#{u.id}</span>
+            {u.hidden ? <span>{t("users.hiddenBadge")}</span> : null}
             {u.online ? <span className="text-[var(--leaf-700)]">{t("userDrawer.online")}</span> : u.online_at ? <span>{t("userDrawer.seen", { ago: ago(u.online_at) })}</span> : null}
           </>
         ) : undefined
@@ -104,17 +108,21 @@ function UserBody({ u, onDeleted }: { u: User; onDeleted: () => void }) {
         </Menu.Root>
       </div>
 
-      <TariffSection u={u} />
-      <TrafficSection u={u} />
-      <PoolsSection u={u} />
-      <GrantsSection u={u} />
-      <ExpirySection u={u} />
+      {/* What a card is opened for comes first: the link to send, the term, the traffic. */}
       <SubscriptionSection u={u} onReissue={() => setConfirm("reissue")} />
-      <TelegramSection u={u} />
+      <ExpirySection u={u} />
+      <TrafficSection u={u} />
       <DevicesSection u={u} />
-      <TorrentSection u={u} />
-      <ProtocolsSection u={u} />
+      <TariffSection u={u} />
       <NoteSection u={u} />
+      <Disclosure title={t("userDrawer.advanced")} sub={t("userDrawer.advancedSub")}>
+        <PoolsSection u={u} />
+        <GrantsSection u={u} />
+        <ProtocolsSection u={u} />
+        <TorrentSection u={u} />
+        <TelegramSection u={u} />
+        <OrganiseSection u={u} />
+      </Disclosure>
 
       <Confirm
         open={confirm === "reissue"}

@@ -284,7 +284,7 @@ func applyOne(ctx context.Context, st *store.Store, users *domain.Users, now tim
 		} else if taken {
 			return errTaken
 		}
-		u, err := users.CreateOn(ctx, q, domain.CreateInput{Name: in.Name, Contact: in.Contact, Note: in.Note, TariffID: tariffID}, p)
+		u, err := users.CreateOn(ctx, q, domain.CreateInput{Name: in.Name, Contact: in.Contact, Note: in.Note, TariffID: tariffID, Source: domain.UserFromImport}, p)
 		if err != nil {
 			return err
 		}

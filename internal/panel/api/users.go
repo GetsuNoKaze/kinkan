@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"net/http"
 	"slices"
@@ -52,6 +53,9 @@ type UserView struct {
 	BoundDevices  int64         `json:"bound_devices" doc:"Привязанные устройства: с привязкой это занятые места"`
 	OnlineAt      *time.Time    `json:"online_at"`
 	TorrentBan    *time.Time    `json:"torrent_ban" doc:"До какого времени действует бан блокировщика торрентов; null — бана нет"`
+	Source        string        `json:"source" enum:"admin,bot,trial,import" doc:"Откуда пользователь: admin — создан в панели или по ключу API, bot — куплен в боте, trial — пробный период бота, import — перенесён из другой панели. Заполняется при создании, не меняется"`
+	FolderID      *int64        `json:"folder_id" doc:"Папка пользователя; null — вне папок"`
+	Hidden        bool          `json:"hidden" doc:"Скрыт из списка пользователей. Только прячет строку: подписка, оплата и ноды работают как у всех, счётчики обзора не меняются"`
 	CreatedAt     time.Time     `json:"created_at"`
 }
 
@@ -120,6 +124,7 @@ func (h *handlers) viewUser(u db.User, slots []string, bound int64, grants domai
 		BillingDay: ptrInt(u.BillingDay.Int64, u.BillingDay.Valid),
 		Inbounds:   domain.DecodeInbounds(u.Inbounds), OnlineAt: ptrTime(u.OnlineAt.Int64, u.OnlineAt.Valid),
 		CreatedAt: time.Unix(u.CreatedAt, 0).UTC(), OnlineIPs: []string{}, BoundDevices: bound,
+		Source: u.Source, FolderID: ptrInt(u.FolderID.Int64, u.FolderID.Valid), Hidden: u.Hidden != 0,
 	}
 	if v.Inbounds == nil {
 		v.Inbounds = []int64{}
@@ -181,6 +186,9 @@ func (h *handlers) userSlots(ctx context.Context, ids []int64) (map[int64][]stri
 type listUsersInput struct {
 	State  string `query:"state" enum:"all,active,expiring,limited,expired,disabled" default:"all"`
 	Query  string `query:"q" maxLength:"100"`
+	Folder string `query:"folder" maxLength:"20" default:"all" doc:"all — любая; none — вне папок; число — id папки"`
+	Source string `query:"source" enum:"all,admin,bot,trial,import" default:"all" doc:"Откуда пользователь, см. source у пользователя"`
+	Hidden string `query:"hidden" enum:"hide,show,only" default:"show" doc:"show — вместе со скрытыми (по умолчанию: скрытие касается только списка в панели); hide — без скрытых; only — только скрытые"`
 	Limit  int    `query:"limit" minimum:"1" maximum:"500" default:"100"`
 	Offset int    `query:"offset" minimum:"0" default:"0"`
 }
@@ -198,7 +206,13 @@ type listUsersOutput struct {
 	Body struct {
 		Items  []UserView `json:"items"`
 		Total  int        `json:"total" doc:"Сколько подходит под фильтр"`
-		Counts UserCounts `json:"counts"`
+		Counts UserCounts `json:"counts" doc:"Пользователи по состояниям среди подходящих под папку, источник и скрытых; состояние и поиск не учитываются"`
+		// Each facet is counted with the other filters applied and its own left out, so a
+		// chip says how many users it would show.
+		FolderCounts map[string]int `json:"folder_counts" doc:"Пользователи по папкам (ключ — id папки, none — вне папок) среди подходящих под источник и скрытых"`
+		SourceCounts map[string]int `json:"source_counts" doc:"Пользователи по источникам (admin, bot, trial, import) среди подходящих под папку и скрытых"`
+		UsersTotal   int            `json:"users_total" doc:"Все пользователи панели, как бы ни был задан фильтр"`
+		HiddenTotal  int            `json:"hidden_total" doc:"Сколько из них скрыто"`
 	}
 }
 
@@ -235,6 +249,8 @@ type patchUserInput struct {
 		BillingDay       *int64     `json:"billing_day,omitempty" minimum:"0" maximum:"31" doc:"День оплаты 1–31; 0 — убрать"`
 		Inbounds         *[]int64   `json:"inbounds,omitempty"`
 		TariffID         *int64     `json:"tariff_id,omitempty" minimum:"1" doc:"Применить тариф: лимиты из тарифа, срок — от сегодня"`
+		Hidden           *bool      `json:"hidden,omitempty" doc:"Скрыть пользователя из списка или вернуть в него; доступ он не теряет"`
+		FolderID         *int64     `json:"folder_id,omitempty" minimum:"0" doc:"Положить в папку; 0 — убрать из папки"`
 	}
 }
 
@@ -249,8 +265,9 @@ type extendInput struct {
 type bulkInput struct {
 	Body struct {
 		IDs    []int64 `json:"ids" minItems:"1" maxItems:"1000"`
-		Action string  `json:"action" enum:"extend,reset,disable,enable,delete"`
+		Action string  `json:"action" enum:"extend,reset,disable,enable,delete,hide,unhide,move" doc:"hide и unhide прячут пользователей из списка и возвращают, move кладёт в папку: ни то ни другое не меняет доступ"`
 		Days   int64   `json:"days,omitempty" minimum:"0" maximum:"3650" doc:"Для extend; не задано — на один период: до следующего дня оплаты или на 30 дней"`
+		Folder int64   `json:"folder_id,omitempty" minimum:"0" doc:"Для move: папка; 0 или не задано — убрать из папок"`
 	}
 }
 
@@ -319,6 +336,47 @@ func mapDomainErr(err error) error {
 	return err
 }
 
+// folderFilter is the list's folder parameter: any folder, none, or one folder.
+type folderFilter struct {
+	any bool
+	id  sql.NullInt64 // invalid: no folder
+}
+
+func parseFolderFilter(s string) (folderFilter, error) {
+	switch s {
+	case "", "all":
+		return folderFilter{any: true}, nil
+	case "none":
+		return folderFilter{}, nil
+	}
+	id, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || id < 1 {
+		return folderFilter{}, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "query.folder", Message: "bad_folder", Value: s})
+	}
+	return folderFilter{id: sql.NullInt64{Int64: id, Valid: true}}, nil
+}
+
+func (f folderFilter) matches(u db.User) bool { return f.any || f.id == u.FolderID }
+
+// folderKey is the key of a user's folder in folder_counts.
+func folderKey(u db.User) string {
+	if !u.FolderID.Valid {
+		return "none"
+	}
+	return strconv.FormatInt(u.FolderID.Int64, 10)
+}
+
+// hiddenMatches: "hide" lists the users that are not hidden, "show" all, "only" the hidden.
+func hiddenMatches(mode string, u db.User) bool {
+	switch mode {
+	case "show":
+		return true
+	case "only":
+		return u.Hidden != 0
+	}
+	return u.Hidden == 0
+}
+
 func (h *handlers) listUsers(ctx context.Context, in *listUsersInput) (*listUsersOutput, error) {
 	// The filters stay in Go: the search lowercases as Go does (PostgreSQL's lower() follows
 	// the database's locale, and a C locale leaves Cyrillic as it is), and the states are
@@ -332,12 +390,46 @@ func (h *handlers) listUsers(ctx context.Context, in *listUsersInput) (*listUser
 	if err != nil {
 		return nil, err
 	}
+	folder, err := parseFolderFilter(in.Folder)
+	if err != nil {
+		return nil, err
+	}
 	q := strings.ToLower(strings.TrimSpace(in.Query))
 	out := &listUsersOutput{}
+	b := &out.Body
+	b.FolderCounts = map[string]int{"none": 0}
+	b.SourceCounts = map[string]int{}
+	for _, o := range domain.UserOrigins {
+		b.SourceCounts[o] = 0
+	}
+	folders, err := h.d.Store.Q.ListFolders(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range folders {
+		b.FolderCounts[strconv.FormatInt(f.ID, 10)] = 0
+	}
 	var matched []db.User
 	for _, u := range users {
+		b.UsersTotal++
+		if u.Hidden != 0 {
+			b.HiddenTotal++
+		}
+		// Each part of the filter on its own; a count leaves out only its own part.
+		okHidden := hiddenMatches(in.Hidden, u)
+		okFolder := folder.matches(u)
+		okSource := in.Source == "all" || in.Source == u.Source
+		if okHidden && okSource {
+			b.FolderCounts[folderKey(u)]++
+		}
+		if okHidden && okFolder {
+			b.SourceCounts[u.Source]++
+		}
+		if !okHidden || !okFolder || !okSource {
+			continue
+		}
 		st := domain.State(u, grants.Main(u.ID), now)
-		c := &out.Body.Counts
+		c := &b.Counts
 		c.All++
 		switch st {
 		case domain.StateActive:
@@ -409,7 +501,7 @@ func (h *handlers) userResult(ctx context.Context, u db.User, err error) (*userO
 }
 
 func (h *handlers) createUser(ctx context.Context, in *createUserInput) (*userOutput, error) {
-	u, err := h.d.Users.Create(ctx, domain.CreateInput{Name: in.Body.Name, Contact: in.Body.Contact, Note: in.Body.Note, Tags: in.Body.Tags, TariffID: in.Body.TariffID})
+	u, err := h.d.Users.Create(ctx, domain.CreateInput{Name: in.Body.Name, Contact: in.Body.Contact, Note: in.Body.Note, Tags: in.Body.Tags, TariffID: in.Body.TariffID, Source: domain.UserFromAdmin})
 	if errors.Is(err, domain.ErrNotFound) {
 		return nil, huma.Error422UnprocessableEntity("tariff_not_found", &huma.ErrorDetail{Location: "body.tariff_id", Message: "tariff_not_found"})
 	}
@@ -440,7 +532,14 @@ func (h *handlers) updateUser(ctx context.Context, in *patchUserInput) (*userOut
 		Name: b.Name, Contact: b.Contact, Note: b.Note, Tags: b.Tags, Disabled: b.Disabled,
 		TrafficLimit: b.TrafficLimit, ClearTrafficLimit: b.TrafficUnlimited,
 		DeviceLimit: b.DeviceLimit, ClearDeviceLimit: b.DevicesUnlimited,
-		ExpiresAt: b.ExpiresAt, ClearExpiry: b.NeverExpires, Inbounds: b.Inbounds, TariffID: b.TariffID,
+		ExpiresAt: b.ExpiresAt, ClearExpiry: b.NeverExpires, Inbounds: b.Inbounds, TariffID: b.TariffID, Hidden: b.Hidden,
+	}
+	if b.FolderID != nil {
+		if *b.FolderID == 0 {
+			p.ClearFolder = true
+		} else {
+			p.FolderID = b.FolderID
+		}
 	}
 	if b.BillingDay != nil {
 		if *b.BillingDay == 0 {
@@ -554,13 +653,20 @@ func (h *handlers) reissueUser(ctx context.Context, in *userIDInput) (*userOutpu
 
 func (h *handlers) bulkUsers(ctx context.Context, in *bulkInput) (*bulkOutput, error) {
 	// One transaction for the list: it is applied whole or not at all.
-	n, err := h.d.Users.Bulk(ctx, in.Body.IDs, in.Body.Action, in.Body.Days)
+	opt := domain.BulkOpt{Days: in.Body.Days}
+	details := map[string]any{"requested": len(in.Body.IDs)}
+	if in.Body.Action == domain.BulkMove && in.Body.Folder > 0 {
+		opt.Folder = &in.Body.Folder
+		details["folder"] = in.Body.Folder
+	}
+	n, err := h.d.Users.Bulk(ctx, in.Body.IDs, in.Body.Action, opt)
 	if err != nil {
 		return nil, mapDomainErr(err)
 	}
 	out := &bulkOutput{}
 	out.Body.Affected = n
-	h.audit(ctx, sessionOf(ctx).AdminID, "user.bulk_"+in.Body.Action, "user", "", map[string]any{"count": n, "requested": len(in.Body.IDs)})
+	details["count"] = n
+	h.audit(ctx, sessionOf(ctx).AdminID, "user.bulk_"+in.Body.Action, "user", "", details)
 	return out, nil
 }
 
@@ -568,12 +674,11 @@ func (h *handlers) userTraffic(ctx context.Context, in *trafficInput) (*trafficO
 	if _, err := h.d.Users.Get(ctx, in.ID); err != nil {
 		return nil, mapDomainErr(err)
 	}
-	now := h.d.Now()
 	out := &trafficOutput{}
 	out.Body.Points = []TrafficPoint{}
-	if in.Range == "30d" {
-		from := now.Add(-30*24*time.Hour).Unix() / 86400
-		rows, err := h.d.Store.Q.UserTrafficDaily(ctx, db.UserTrafficDailyParams{UserID: in.ID, Day: from})
+	daily, since := trafficSince(h.d.Now(), in.Range)
+	if daily {
+		rows, err := h.d.Store.Q.UserTrafficDaily(ctx, db.UserTrafficDailyParams{UserID: in.ID, Day: since})
 		if err != nil {
 			return nil, err
 		}
@@ -582,11 +687,7 @@ func (h *handlers) userTraffic(ctx context.Context, in *trafficInput) (*trafficO
 		}
 		return out, nil
 	}
-	span := 24 * time.Hour
-	if in.Range == "7d" {
-		span = 7 * 24 * time.Hour
-	}
-	rows, err := h.d.Store.Q.UserTrafficHourly(ctx, db.UserTrafficHourlyParams{UserID: in.ID, Hour: now.Add(-span).Unix() / 3600})
+	rows, err := h.d.Store.Q.UserTrafficHourly(ctx, db.UserTrafficHourlyParams{UserID: in.ID, Hour: since})
 	if err != nil {
 		return nil, err
 	}

@@ -24,6 +24,7 @@ import (
 	"mikan/internal/panel/server"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/panel/subpage"
 	"mikan/internal/proto"
 )
 
@@ -38,6 +39,7 @@ type Config struct {
 	Announce    string
 	AnnounceURL string
 	App         AppBrand // the brand in apps that read operator headers
+	Happ        Happ     // Happ's provider headers and the crypt link of the page
 	// SubBase is https://host:port/<sub path> as the panel hands links out; "" without an
 	// address, and the request's own address is taken.
 	SubBase string
@@ -48,6 +50,10 @@ type Config struct {
 	Groups  Groups
 	Routing Routing
 	Rules   []string // the admin's own Clash rules, checked (ServedRules)
+	Routes  Routes   // services, direct apps and DNS (settings.KeyRoutes)
+	// Template is the admin's own Clash profile (settings.KeyTemplate, see Template); it
+	// takes the place of Groups, Routing, Rules and Routes for mihomo apps. "": none.
+	Template string
 	// Fingerprint is the default uTLS profile for inbounds that set none.
 	Fingerprint string
 	// Binding gives every device that sends its id keys of its own (domain.Devices);
@@ -76,6 +82,8 @@ type Handler struct {
 	tg         Telegram         // nil: no bot
 	shop       *billing.Service // nil: nothing on sale
 	promos     *promo.Service
+	pages      *subpage.Service // nil: the page as built, nothing of the admin's
+	happ       *HappLinks       // Happ crypt links, kept per subscription
 	log        *slog.Logger
 	logged     sync.Map // what has been logged lately → when, so a standing fault is one line an hour
 	promoLimit promoLimiter
@@ -112,8 +120,24 @@ func (h *Handler) warn(key, msg string, args ...any) {
 func (h *Handler) SetShop(s *billing.Service) { h.shop = s }
 func (h *Handler) SetPromo(s *promo.Service)  { h.promos = s }
 
+// SetPages gives the page what the admin made of it: its look, blocks, instructions, images.
+func (h *Handler) SetPages(s *subpage.Service) { h.pages = s }
+
 func NewHandler(st *store.Store, cfg func(ctx context.Context) (Config, error), page http.Handler, now func() time.Time, devices Binder, trustProxy bool) *Handler {
-	return &Handler{st: st, cfg: cfg, page: page, now: now, devices: devices, trustProxy: trustProxy, log: slog.New(slog.DiscardHandler)}
+	return &Handler{st: st, cfg: cfg, page: page, now: now, devices: devices, trustProxy: trustProxy, log: slog.New(slog.DiscardHandler), happ: NewHappLinks()}
+}
+
+// SetHappLinks replaces the maker of Happ crypt links (tests: a fake service).
+func (h *Handler) SetHappLinks(l *HappLinks) { h.happ = l }
+
+// HappLink is the Happ crypt link of u's subscription, "" when the crypt link is off or
+// the panel has no address for subscriptions yet.
+func (h *Handler) HappLink(ctx context.Context, u db.User) (string, error) {
+	cfg, err := h.cfg(ctx)
+	if err != nil || cfg.Happ.Crypt == "" || cfg.SubBase == "" {
+		return "", err
+	}
+	return h.happ.Link(ctx, cfg.Happ.Crypt, cfg.SubBase+"/"+u.SubToken)
 }
 
 // clientIP is the device's address as the nodes see it too: clients reach the panel
@@ -125,7 +149,9 @@ func (h *Handler) clientIP(r *http.Request) string {
 var unbindPath = regexp.MustCompile(`^devices/([0-9]{1,18})/unbind$`)
 
 // ServeHTTP handles "/<token>", "/<token>/info", "POST /<token>/devices/<id>/unbind" (the
-// subscription page) and the page assets under the sub prefix.
+// subscription page), the page assets under the sub prefix, the admin's images
+// ("/brand/<name>") and instructions ("/<token>/docs/<id>": for subscribers only, not for
+// whoever counts ids).
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 	token, rest, _ := strings.Cut(p, "/")
@@ -148,7 +174,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case (strings.HasPrefix(p, "assets/") || p == "favicon.png" || p == "apple-touch-icon.png") && h.page != nil:
 		h.page.ServeHTTP(w, r)
 		return
-	case rest != "" && rest != "info":
+	case token == "brand" && h.pages != nil:
+		h.image(w, r, rest)
+		return
+	case rest != "" && rest != "info" && !strings.HasPrefix(rest, "docs/"):
 		server.NotFound(w)
 		return
 	}
@@ -166,6 +195,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.unbind(w, r, u, id)
 		return
 	}
+	if id, ok := strings.CutPrefix(rest, "docs/"); ok {
+		if h.pages == nil {
+			server.NotFound(w)
+			return
+		}
+		h.doc(w, r, id)
+		return
+	}
 	cfg, err := h.cfg(r.Context())
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -181,8 +218,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	format := Format(r.Header.Get("User-Agent"), r.Header.Get("Accept"), r.URL.Query().Get("format"))
-	if format == "html" && h.page != nil {
-		h.page.ServeHTTP(w, r)
+	// A messenger that builds a preview of a pasted link gets the page, which has the
+	// preview's title and picture and nothing of the user's.
+	if (format == "html" || LinkPreview(r.Header.Get("User-Agent")) && r.URL.Query().Get("format") == "") && h.page != nil {
+		h.servePage(w, r, cfg)
 		return
 	}
 	grants, err := domain.UserGrantsLeft(r.Context(), h.st.Q, u.ID, h.now())
@@ -200,6 +239,22 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	h.userInfoHeaders(w, u, grants.Main(u.ID), cfg, vars)
 	h.operatorHeaders(w, r, u, cfg)
+	switch ua := r.UserAgent(); {
+	case IsINCY(ua):
+		// INCY reads Happ's routing profile from the same header (docs.incy.cc/en/routing),
+		// and none of Happ's provider headers.
+		if routing := cfg.Happ.Routing; routing == HappRoutingAuto {
+			w.Header().Set("routing", incyLink(happAutoRouting(cfg)))
+		} else if routing != "" {
+			w.Header().Set("routing", incyLink(routing))
+		}
+	case IsHapp(ua):
+		happ := cfg.Happ
+		if happ.Routing == HappRoutingAuto {
+			happ.Routing = happAutoRouting(cfg)
+		}
+		happHeaders(w.Header(), happ)
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method == http.MethodHead {
 		return // apps peek at the traffic headers; the keys go only with a real fetch
@@ -229,7 +284,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch format {
 	case "clash":
 		prof.Rules = RulesFor(cfg.Rules, app)
-		body, err := Mihomo(prof, cfg.Groups.WithDefaults(cfg.Lang), cfg.Routing)
+		prof.Routes, prof.App, prof.Lang = cfg.Routes, app, cfg.Lang
+		var body []byte
+		if cfg.Template != "" && prof.routable() {
+			body, err = Template(prof, cfg.Template)
+			var te *TemplateError
+			if errors.As(err, &te) {
+				// Saved templates are checked; one that went bad must not leave apps without a profile.
+				h.warn("template/"+te.Code, "subscription: the own Clash profile does not render, the built-in one goes out", "err", err)
+				body, err = Mihomo(prof, cfg.Groups.WithDefaults(cfg.Lang), cfg.Routing)
+			}
+		} else {
+			body, err = Mihomo(prof, cfg.Groups.WithDefaults(cfg.Lang), cfg.Routing)
+		}
 		if errors.Is(err, ErrNoProxies) {
 			h.stub(w, u, cfg, format, err)
 			return
@@ -241,6 +308,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
 		// Clash apps name the profile after the file: the same name as Profile-Title.
 		w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(fileName(profileTitle(cfg, vars)))+".yaml")
+		_, _ = w.Write(body)
+	case "singbox":
+		prof.Rules, prof.Routes, prof.Lang = cfg.Rules, cfg.Routes, cfg.Lang
+		body, err := SingBox(r.Context(), prof, cfg.Groups, cfg.Routing, cfg.Template)
+		if errors.Is(err, ErrNoProxies) {
+			h.stub(w, u, cfg, format, err)
+			return
+		}
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(fileName(profileTitle(cfg, vars)))+".json")
 		_, _ = w.Write(body)
 	default:
 		links, err := URIs(prof)
@@ -265,7 +346,8 @@ func (h *Handler) miniApp(w http.ResponseWriter, r *http.Request, rest string) {
 		hd := w.Header()
 		hd.Set("Content-Security-Policy", strings.Replace(hd.Get("Content-Security-Policy"), "frame-ancestors 'none'", "frame-ancestors https://web.telegram.org", 1))
 		hd.Del("X-Frame-Options")
-		h.page.ServeHTTP(w, r)
+		cfg, _ := h.cfg(r.Context())
+		h.servePage(w, r, cfg)
 	case r.Method == http.MethodPost && rest == "session" && sameOrigin(r):
 		var in struct {
 			InitData string `json:"init_data"`
@@ -788,6 +870,13 @@ type Info struct {
 	UnbindAfter *time.Time   `json:"unbind_after,omitempty" doc:"The subscriber may unbind again from then"`
 	// Pools: the user's traffic pools with a limit or with traffic used.
 	Pools []PoolInfo `json:"pools,omitempty"`
+	// The announcement the apps show, with the user's values in it; the page shows it when
+	// the admin turns its block on.
+	Announce    string `json:"announce,omitempty"`
+	AnnounceURL string `json:"announce_url,omitempty"`
+	// HappLink is the Happ button's crypt link: the app opens the subscription without
+	// showing its address. Absent: the plain happ://add/ link.
+	HappLink string `json:"happ_link,omitempty"`
 }
 
 // DeviceItem is a bound device as the subscription page lists it.
@@ -816,6 +905,16 @@ func (h *Handler) info(ctx context.Context, w http.ResponseWriter, u db.User, pr
 	}
 	if h.tg != nil {
 		out.Telegram = h.tg.LinkURL(ctx, u.ID)
+	}
+	if cfg.Announce != "" {
+		out.Announce, out.AnnounceURL = fillTitle(cfg.Announce, titleValues(u, grants.Main(u.ID), cfg, now)), cfg.AnnounceURL
+	}
+	if cfg.Happ.Crypt != "" && cfg.SubBase != "" {
+		if link, err := h.happ.Link(ctx, cfg.Happ.Crypt, cfg.SubBase+"/"+u.SubToken); err == nil {
+			out.HappLink = link
+		} else {
+			h.warn("happ_link", "subscription: no Happ crypt link", "err", err)
+		}
 	}
 	if cfg.Binding {
 		devs, err := h.st.Q.ListBoundDevices(ctx, u.ID)
@@ -921,13 +1020,23 @@ func (h *Handler) stub(w http.ResponseWriter, u db.User, cfg Config, format stri
 	}
 	if format == "clash" {
 		main := cfg.Groups.WithDefaults(cfg.Lang).Main
-		// JSON is YAML: the same as the real profile (see Mihomo).
-		body, _ := json.Marshal(map[string]any{
+		body, _ := marshalYAML(map[string]any{
 			"proxies":      []map[string]any{{"name": name, "type": "socks5", "server": "127.0.0.1", "port": 1}},
 			"proxy-groups": []map[string]any{{"name": main, "type": "select", "proxies": []string{name}}},
 			"rules":        []string{"MATCH," + main},
 		})
 		w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
+		_, _ = w.Write(body)
+		return
+	}
+	if format == "singbox" {
+		main := cfg.Groups.WithDefaults(cfg.Lang).Main
+		body, _ := json.MarshalIndent(map[string]any{
+			"outbounds": []map[string]any{{"type": "selector", "tag": main, "outbounds": []string{name}},
+				{"type": "socks", "tag": name, "server": "127.0.0.1", "server_port": 1}},
+			"route": map[string]any{"final": main},
+		}, "", "  ")
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_, _ = w.Write(body)
 		return
 	}
@@ -948,10 +1057,16 @@ func Format(userAgent, accept, query string) string {
 		return "clash"
 	case "uri", "v2ray", "base64":
 		return "uri"
+	case "singbox", "sing-box":
+		return "singbox"
 	case "html":
 		return "html"
 	}
-	switch DetectApp(userAgent).Family {
+	app := DetectApp(userAgent)
+	if app.Whole && app.Core.AtLeast(singboxSince) {
+		return "singbox"
+	}
+	switch app.Family {
 	case FamilyMihomo, FamilyStash:
 		return "clash"
 	case FamilyXray, FamilySingBox:
@@ -1007,3 +1122,69 @@ func (h *Handler) poolInfo(ctx context.Context, userID int64, grants domain.Gran
 	}
 	return out, nil
 }
+
+// PreviewRequest is what the admin panel shows a profile with, in place of the saved
+// settings.
+type PreviewRequest struct {
+	Routing  Routing
+	Routes   Routes
+	Template string // the own Clash profile; "": the built-in one with Routing and Routes
+	Starter  bool   // the built-in one as the start of an own (Starter)
+	// Rules and Groups in place of the saved ones, when set: the routing form has them too.
+	Rules  *string
+	Groups *Groups
+}
+
+// Preview is the Clash profile of a user given every inbound, as req sets it: what the
+// admin panel shows before it is saved. Its keys are placeholders.
+func (h *Handler) Preview(ctx context.Context, req PreviewRequest) ([]byte, error) {
+	prof, cfg, err := h.sample(ctx)
+	if err != nil {
+		return nil, err
+	}
+	prof.Routes = req.Routes
+	g := cfg.Groups
+	if req.Groups != nil {
+		g = *req.Groups
+	}
+	g = g.WithDefaults(cfg.Lang)
+	if req.Rules != nil {
+		prof.Rules = ServedRules(*req.Rules, g)
+	}
+	switch {
+	case req.Starter:
+		return Starter(prof, g, req.Routing)
+	case req.Template != "":
+		return Template(prof, req.Template)
+	}
+	return Mihomo(prof, g, req.Routing)
+}
+
+// CheckTemplate checks an own Clash profile against a user given every inbound.
+func (h *Handler) CheckTemplate(ctx context.Context, src string) error {
+	prof, _, err := h.sample(ctx)
+	if err != nil {
+		return err
+	}
+	return CheckTemplate(prof, src)
+}
+
+// sample is the profile of a user given every inbound, with placeholder keys.
+func (h *Handler) sample(ctx context.Context) (Profile, Config, error) {
+	cfg, err := h.cfg(ctx)
+	if err != nil {
+		return Profile{}, cfg, err
+	}
+	prof, err := h.profile(ctx, db.User{}, cfg, db.Slot{Name: "preview", Uuid: "00000000-0000-0000-0000-000000000000", Secret: "preview"})
+	if err != nil {
+		return Profile{}, cfg, err
+	}
+	prof.Rules, prof.Routes, prof.Lang = cfg.Rules, cfg.Routes, cfg.Lang
+	// A current mihomo: the preview shows every list, and a template started from it keeps
+	// the ones a younger core reads (an app that does not name its core still gets none).
+	prof.App = App{Family: FamilyMihomo, Core: previewCore}
+	return prof, cfg, nil
+}
+
+// previewCore is the mihomo the nodes run (go.mod), the newest an app may have.
+var previewCore = Version{1, 19, 32}

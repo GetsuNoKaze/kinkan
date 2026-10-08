@@ -169,9 +169,15 @@ func TestSQLiteImportKeepsDataAndIsRepeatable(t *testing.T) {
 			t.Errorf("fixture missed table %s", name)
 		}
 	}
-	u, err := s.Q.GetUser(ctx, 41)
-	if err != nil || u.SubToken != "existing-token" || u.TrafficLimit.Valid || u.UsedUp != 1<<40 || u.TotalUp != 1<<41 {
-		t.Fatalf("user changed: %+v %v", u, err)
+	// The import lands on the baseline schema, which the generated queries (written for
+	// the newest one) do not fit: the user is read by hand.
+	baselineUser := func() (token string, limit sql.NullInt64, usedUp, totalUp int64, err error) {
+		err = s.DB.QueryRowContext(ctx, "SELECT sub_token, traffic_limit, used_up, total_up FROM users WHERE id = 41").Scan(&token, &limit, &usedUp, &totalUp)
+		return
+	}
+	token, limit, usedUp, totalUp, err := baselineUser()
+	if err != nil || token != "existing-token" || limit.Valid || usedUp != 1<<40 || totalUp != 1<<41 {
+		t.Fatalf("user changed: %q %v %d %d %v", token, limit, usedUp, totalUp, err)
 	}
 	link, err := s.Q.GetTgLink(ctx, 41)
 	if err != nil || link.TgID != 9000000001 {
@@ -189,8 +195,7 @@ func TestSQLiteImportKeepsDataAndIsRepeatable(t *testing.T) {
 	if _, err := ImportSQLite(ctx, s.DB, dir); err != nil {
 		t.Fatal("recover committed import marker:", err)
 	}
-	u, _ = s.Q.GetUser(ctx, 41)
-	if u.UsedUp != (1<<40)+1 {
+	if _, _, usedUp, _, _ = baselineUser(); usedUp != (1<<40)+1 {
 		t.Fatal("repeated import overwrote PostgreSQL")
 	}
 	after, _ := os.ReadFile(filepath.Join(dir, "mikan.db"))
@@ -201,9 +206,10 @@ func TestSQLiteImportKeepsDataAndIsRepeatable(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The next generated ID must follow imported IDs, not collide with them.
-	created, err := s.Q.CreateUser(ctx, db.CreateUserParams{Name: "next", SubToken: "next", ResetStrategy: "none", PeriodStart: 1, CreatedAt: 1, UpdatedAt: 1, SlotID: sql.NullInt64{}})
-	if err != nil || created.ID <= 41 {
-		t.Fatalf("sequence not advanced: %d %v", created.ID, err)
+	var created int64
+	err = s.DB.QueryRowContext(ctx, "INSERT INTO users(name, sub_token, period_start, created_at, updated_at) VALUES('next', 'next', 1, 1, 1) RETURNING id").Scan(&created)
+	if err != nil || created <= 41 {
+		t.Fatalf("sequence not advanced: %d %v", created, err)
 	}
 }
 
@@ -348,8 +354,10 @@ func TestFailedSQLiteRestoreRollsBackAndCanRetry(t *testing.T) {
 	if _, err := ImportSQLiteRestore(ctx, s.DB, dir, filepath.Join(dir, "mikan.db")); err != nil {
 		t.Fatal(err)
 	}
-	if u, err := s.Q.GetUser(ctx, 41); err != nil || u.UsedUp != 500 {
-		t.Fatal("retry lost legacy user", u, err)
+	// Read by hand: the schema is the baseline, not the one the generated queries expect.
+	var usedUp int64
+	if err := s.DB.QueryRowContext(ctx, "SELECT used_up FROM users WHERE id = 41").Scan(&usedUp); err != nil || usedUp != 500 {
+		t.Fatal("retry lost legacy user", usedUp, err)
 	}
 	if _, err := s.Q.GetSetting(ctx, "new-payment"); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatal("explicit restore failed to replace data")

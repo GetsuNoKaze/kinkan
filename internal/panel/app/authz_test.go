@@ -91,6 +91,14 @@ func TestFullKeyCannotTakeOverThePanel(t *testing.T) {
 		"warp-register":      {http.MethodPost, "/nodes/1/warp/register", map[string]any{}},
 		"warp-import":        {http.MethodPost, "/nodes/1/warp/import", map[string]any{"config": "x"}},
 		"cascade":            {http.MethodPatch, "/nodes/1/cascade", map[string]any{"outbound": "direct"}},
+		// The subscription page every subscriber opens: its links, text, CSS and images.
+		"update-sub-page":       {http.MethodPut, "/sub-page", map[string]any{"config": map[string]any{}}},
+		"put-sub-page-image":    {http.MethodPut, "/sub-page/images/logo", map[string]any{"data": "iVBORw0KGgo="}},
+		"delete-sub-page-image": {http.MethodDelete, "/sub-page/images/logo", nil},
+		"create-sub-doc":        {http.MethodPost, "/sub-docs", map[string]any{"title": "Pay here", "emoji": "", "body": "", "platform": "", "published": true}},
+		"update-sub-doc":        {http.MethodPut, "/sub-docs/1", map[string]any{"title": "Pay here", "emoji": "", "body": "", "platform": "", "published": true}},
+		"delete-sub-doc":        {http.MethodDelete, "/sub-docs/1", nil},
+		"order-sub-docs":        {http.MethodPut, "/sub-docs/order", map[string]any{"ids": []int64{1}}},
 	} {
 		resp, body := k.asKey(k.full, c.method, c.path, c.body)
 		if resp.StatusCode != http.StatusForbidden || !strings.Contains(string(body), "session_only") {
@@ -105,6 +113,9 @@ func TestFullKeyCannotTakeOverThePanel(t *testing.T) {
 		// What every subscriber's app shows.
 		"sub_announce": {"sub_announce": "Pay here"}, "sub_announce_url": {"sub_announce_url": "https://evil.example"},
 		"app_branding": {"app_branding": true}, "brand_accent": {"brand_accent": "#000000"}, "brand_logo_url": {"brand_logo_url": "https://evil.example/l.png"},
+		// Where every client's traffic goes.
+		"sub_routing": {"sub_routing": "blocked"}, "sub_routes": {"sub_routes": map[string]any{"services": map[string]any{"youtube": "direct"}}},
+		"sub_template": {"sub_template": "rules: [MATCH,DIRECT]\n"},
 	} {
 		resp, out := k.asKey(k.full, http.MethodPatch, "/settings", body)
 		if resp.StatusCode != http.StatusForbidden || !strings.Contains(string(out), "session_only") || !strings.Contains(string(out), field) {
@@ -177,6 +188,18 @@ func TestReadKeyDoesNotGetSecrets(t *testing.T) {
 				t.Errorf("%s as %s: %d, the %s is missing: %s", name, who.name, resp.StatusCode, c.secretField, body)
 			}
 		}
+	}
+
+	// An own Clash profile may hold the admin's own proxies and secrets.
+	const tpl = "secret: controller-secret-1234\nrules: [MATCH,DIRECT]\n"
+	if err := settings.Set(ctx, settings.New(k.st.Q), settings.KeyTemplate, tpl); err != nil {
+		t.Fatal(err)
+	}
+	if _, body := k.asKey(k.read, http.MethodGet, "/settings", nil); strings.Contains(string(body), "controller-secret-1234") {
+		t.Errorf("a read key sees the own profile: %s", body)
+	}
+	if _, body := k.asKey(k.full, http.MethodGet, "/settings", nil); !strings.Contains(string(body), "controller-secret-1234") {
+		t.Errorf("a full key misses the own profile: %s", body)
 	}
 }
 

@@ -147,3 +147,14 @@ export function rubles(kopecks: number): string {
 export function money(amount: number, currency: string): string {
   return currency === "XTR" ? `⭐ ${num(amount)}` : rubles(amount);
 }
+
+/**
+ * An hour the server keeps in UTC, as this browser's local time; the UTC hour follows in
+ * brackets when the two differ, so nobody has to count the time zone.
+ */
+export function utcHourLabel(h: number): string {
+  const d = new Date(Date.UTC(2000, 0, 1, h));
+  const local = d.getHours();
+  const pad = (x: number) => String(x).padStart(2, "0");
+  return local === h ? `${pad(h)}:00` : `${pad(local)}:00 (UTC ${pad(h)}:00)`;
+}

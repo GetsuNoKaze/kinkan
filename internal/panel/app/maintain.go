@@ -22,6 +22,9 @@ func (p *Panel) maintain(ctx context.Context) {
 	if err := p.st.Q.PruneTrafficDaily(ctx, now.Add(-trafficDailyKeep).Unix()/86400); err != nil {
 		p.log.Error("prune daily traffic", "err", err)
 	}
+	if err := p.st.Q.PruneNodeTrafficDaily(ctx, now.Add(-trafficDailyKeep).Unix()/86400); err != nil {
+		p.log.Error("prune daily node traffic", "err", err)
+	}
 	if _, err := p.st.Q.PruneAudit(ctx, now.Add(-auditKeep).Unix()); err != nil {
 		p.log.Error("prune audit log", "err", err)
 	}

@@ -17,7 +17,9 @@ name: release
 #
 # The signing key reaches a job that runs this repository's code, so the code that runs is
 # the code of main: a tag on any other commit stops at the first job (guard), before any
-# job that builds, signs or publishes. Every action is pinned to a commit (the comment is
+# job that builds, signs or publishes. A pre-release may also come from dev (a beta to try
+# what is merged there before main): it goes to the beta channel only, and only servers
+# that chose beta take it. Every action is pinned to a commit (the comment is
 # the version it was); dependabot (.github/dependabot.yml) proposes the updates. Each job
 # has the permissions it needs and no more.
 on:
@@ -36,17 +38,22 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: the tagged commit is on main
+      - name: the tagged commit is on main (a pre-release on main or dev)
         run: |
           if ! [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "::error::Invalid release version: $GITHUB_REF_NAME"
             exit 1
           fi
-          git fetch --no-tags origin main
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "::error::$GITHUB_REF_NAME is on a commit that is not on main: a release is made from main only"
-            exit 1
-          fi
+          branches="main"
+          case "$GITHUB_REF_NAME" in *-*) branches="main dev" ;; esac
+          for b in $branches; do
+            git fetch --no-tags origin "$b"
+            if git merge-base --is-ancestor "$GITHUB_SHA" "origin/$b"; then
+              exit 0
+            fi
+          done
+          echo "::error::$GITHUB_REF_NAME is on a commit that is not on $branches: a release is made from main, a pre-release from main or dev"
+          exit 1
 
   test:
     needs: guard
@@ -175,7 +182,7 @@ jobs:
           workspaces: installer
           key: ${{ matrix.target }}
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
-      - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
+      - uses: taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0 # v2.87.24
         with:
           tool: cargo-zigbuild
       - name: build

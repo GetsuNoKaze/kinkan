@@ -4,6 +4,7 @@ import { ChevronRight, Copy, KeyRound, LogOut, ShieldCheck } from "lucide-react"
 import { useState } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../../api/client";
 import { meQuery, qk } from "../../../api/hooks";
+import { FormActions } from "../../../components/layout";
 import { Confirm } from "../../../components/overlay";
 import { QueryBoundary } from "../../../components/query";
 import { useToast } from "../../../components/toast";
@@ -158,12 +159,10 @@ export function PasswordCard() {
           <input id="p-new" type="password" className="input" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} minLength={12} />
         </Field>
         <label className="mb-4 flex items-start gap-2 text-[13px] text-[var(--ink-600)]">
-          <input type="checkbox" className="mt-0.5" checked={revokeKeys} onChange={(e) => setRevokeKeys(e.target.checked)} />
+          <input type="checkbox" className="check mt-0.5 shrink-0" checked={revokeKeys} onChange={(e) => setRevokeKeys(e.target.checked)} />
           <span>{t("settings.revokeKeys")}</span>
         </label>
-        <Button type="submit" variant="primary" loading={change.isPending} disabled={!current || next.length < 12}>
-          {t("settings.changePassword")}
-        </Button>
+        <FormActions saving={change.isPending} disabled={!current || next.length < 12} label={t("settings.changePassword")} />
       </form>
     </section>
   );
@@ -226,9 +225,11 @@ export function TwoFactorCard() {
               <span key={c}>{c}</span>
             ))}
           </div>
-          <Button className="mt-3" variant="primary" onClick={() => setCodes(null)}>
-            {t("settings.recoverySaved")}
-          </Button>
+          <div className="form-actions">
+            <Button variant="primary" onClick={() => setCodes(null)}>
+              {t("settings.recoverySaved")}
+            </Button>
+          </div>
         </div>
       ) : setup ? (
         <form
@@ -245,15 +246,15 @@ export function TwoFactorCard() {
               <Field label={t("settings.totpCode")} htmlFor="totp-code" error={enable.error instanceof ApiError ? (enable.error.fields.code ?? errorText(enable.error)) : undefined}>
                 <input id="totp-code" className="input mono max-w-[160px] tracking-[0.2em]" inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.trim())} autoComplete="one-time-code" />
               </Field>
-              <div className="flex gap-2">
-                <Button type="submit" variant="primary" loading={enable.isPending} disabled={code.length !== 6}>
-                  {t("common.enable")}
-                </Button>
-                <Button variant="ghost" onClick={() => setSetup(null)}>
-                  {t("common.cancel")}
-                </Button>
-              </div>
             </div>
+          </div>
+          <div className="form-actions">
+            <Button variant="ghost" onClick={() => setSetup(null)}>
+              {t("common.cancel")}
+            </Button>
+            <Button type="submit" variant="primary" loading={enable.isPending} disabled={code.length !== 6}>
+              {t("common.enable")}
+            </Button>
           </div>
         </form>
       ) : enabled ? (
@@ -270,12 +271,12 @@ export function TwoFactorCard() {
             <Field label={t("settings.totpCode")} htmlFor="off-code">
               <input id="off-code" className="input mono max-w-[160px]" inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.trim())} />
             </Field>
-            <div className="flex gap-2">
-              <Button type="submit" variant="danger-solid" loading={off.isPending} disabled={!pw || code.length !== 6}>
-                {t("settings.twoFactorDisable")}
-              </Button>
+            <div className="form-actions">
               <Button variant="ghost" onClick={() => setDisable(false)}>
                 {t("common.cancel")}
+              </Button>
+              <Button type="submit" variant="danger-solid" loading={off.isPending} disabled={!pw || code.length !== 6}>
+                {t("settings.twoFactorDisable")}
               </Button>
             </div>
           </form>
@@ -295,9 +296,7 @@ export function TwoFactorCard() {
           <Field label={t("login.password")} htmlFor="on-pw" hint={t("settings.twoFactorPasswordHint")} error={start.error instanceof ApiError ? (start.error.fields.password ?? errorText(start.error)) : undefined}>
             <input id="on-pw" type="password" className="input max-w-[320px]" value={startPw} onChange={(e) => setStartPw(e.target.value)} autoComplete="current-password" />
           </Field>
-          <Button type="submit" variant="primary" loading={start.isPending} disabled={!startPw}>
-            {t("settings.twoFactorEnable")}
-          </Button>
+          <FormActions saving={start.isPending} disabled={!startPw} label={t("settings.twoFactorEnable")} />
         </form>
       )}
     </section>

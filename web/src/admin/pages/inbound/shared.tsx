@@ -42,8 +42,8 @@ export function LimitBadges({ clashOnly, shared }: { clashOnly: boolean; shared:
 }
 
 /** What the admin gives up with the chosen preset, said before it is added. */
-export function LimitNotes({ clashOnly, shared }: { clashOnly: boolean; shared: boolean }) {
-  if (!clashOnly && !shared) return null;
+export function LimitNotes({ clashOnly, shared, domainCert = false }: { clashOnly: boolean; shared: boolean; domainCert?: boolean }) {
+  if (!clashOnly && !shared && !domainCert) return null;
   return (
     <div className="mb-4 flex flex-col gap-2" role="note">
       {shared ? (
@@ -55,6 +55,7 @@ export function LimitNotes({ clashOnly, shared }: { clashOnly: boolean; shared: 
         </div>
       ) : null}
       {clashOnly ? <p className="text-xs text-[var(--ink-500)]">{t("inbounds.clashOnlyNote")}</p> : null}
+      {domainCert ? <p className="text-xs text-[var(--ink-500)]">{t("inbounds.domainCertNote")}</p> : null}
     </div>
   );
 }

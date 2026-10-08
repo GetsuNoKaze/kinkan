@@ -162,7 +162,7 @@ func TestSubscriptionWithoutServersIsAStub(t *testing.T) {
 		resp, body := h.do(http.MethodGet, "/"+subPath+"/"+u.SubToken, nil, map[string]string{"User-Agent": ua})
 		return resp.StatusCode, string(body)
 	}
-	if code, body := fetch("mihomo/1.19.31"); code != http.StatusOK || !strings.Contains(body, `"proxies": [`) || strings.Contains(body, "подходящих серверов") {
+	if code, body := fetch("mihomo/1.19.31"); code != http.StatusOK || !strings.Contains(body, "\nproxies:\n") || strings.Contains(body, "подходящих серверов") {
 		t.Fatalf("with servers: %d %.200s", code, body)
 	}
 	if _, err := h.st.DB.ExecContext(ctx, "UPDATE inbounds SET enabled = 0"); err != nil {

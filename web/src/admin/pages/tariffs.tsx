@@ -56,6 +56,7 @@ export function TariffsPage() {
   const selling = usePaymentSettings().data?.enabled === true;
   const [edit, setEdit] = useState<Tariff | "new" | null>(null);
   const [archive, setArchive] = useState<Tariff | null>(null);
+  const [creating, setCreating] = useState<"pools" | "packages" | null>(null);
   const qc = useQueryClient();
   const toast = useToast();
   const remove = useMutation({
@@ -75,12 +76,11 @@ export function TariffsPage() {
         title={t("nav.tariffs")}
         sub={t("tariffs.subtitle")}
         actions={
-          tab === "tariffs" ? (
-            <Button variant="primary" onClick={() => setEdit("new")}>
-              <Plus size={18} aria-hidden />
-              <span className="max-[760px]:hidden">{t("tariffs.new")}</span>
-            </Button>
-          ) : null
+          // Each section adds its own kind of thing from the same place.
+          <Button variant="primary" onClick={() => (tab === "tariffs" ? setEdit("new") : setCreating(tab))}>
+            <Plus size={18} aria-hidden />
+            <span className="max-[760px]:hidden">{tab === "pools" ? t("pools.add") : tab === "packages" ? t("packages.add") : t("tariffs.new")}</span>
+          </Button>
         }
       />
       <Tabs
@@ -91,13 +91,9 @@ export function TariffsPage() {
         onChange={(next) => void navigate({ search: { tab: next }, replace: true })}
       >
         {tab === "pools" ? (
-          <div className="max-w-4xl">
-            <PoolsCard />
-          </div>
+          <PoolsCard creating={creating === "pools"} onCreateClose={() => setCreating(null)} />
         ) : tab === "packages" ? (
-          <div className="max-w-4xl">
-            <PackagesCard />
-          </div>
+          <PackagesCard creating={creating === "packages"} onCreateClose={() => setCreating(null)} />
         ) : (
           <QueryBoundary
             query={tariffs}

@@ -51,6 +51,9 @@ type InboundView struct {
 	PoolID      *int64         `json:"pool_id,omitempty" doc:"Пул трафика, в который считается подключение; нет — основной трафик"`
 	Client      ClientEndpoint `json:"client" doc:"Куда подключаются клиенты, если не к ноде напрямую (mikan.client в шаблоне)"`
 	ClientSNI   bool           `json:"client_sni" doc:"Можно ли задать клиентам свой SNI: у REALITY имя задаёт сайт маскировки"`
+
+	// XHTTP is the tuning the form shows; absent for other transports.
+	XHTTP *proto.XHTTPTuning `json:"xhttp,omitempty" doc:"Тонкая настройка XHTTP; у других транспортов поля нет"`
 }
 
 // ClientEndpoint is where clients connect when a TCP proxy or a CDN stands in front of
@@ -87,7 +90,7 @@ type inboundOutput struct{ Body InboundView }
 
 type createInboundInput struct {
 	Body struct {
-		Preset string `json:"preset" enum:"vless_reality_xhttp,hysteria2,hysteria2_gecko,tuic_v5,vless_reality_vision,vless_reality_grpc,trojan_reality,anytls,vless_reality_xhttp_pq,trusttunnel,shadowquic,mieru,shadowsocks_2022,sudoku,snell,custom"`
+		Preset string `json:"preset" enum:"vless_reality_xhttp,hysteria2,hysteria2_gecko,tuic_v5,vless_reality_vision,vless_reality_grpc,trojan_reality,vless_tls_xhttp,vless_tls_vision,anytls,vless_reality_xhttp_pq,trusttunnel,shadowquic,mieru,shadowsocks_2022,sudoku,snell,custom"`
 		NodeID int64  `json:"node_id,omitempty" minimum:"1" doc:"Нода; по умолчанию — своя нода панели"`
 		Port   string `json:"port,omitempty" pattern:"^[0-9]{1,5}(-[0-9]{1,5})?$"`
 		Dest   string `json:"dest,omitempty" maxLength:"255" doc:"host:port для REALITY"`
@@ -113,6 +116,8 @@ type patchInboundInput struct {
 		Outbound    *string         `json:"outbound,omitempty" enum:"direct,warp,node" doc:"Выход в интернет: напрямую, через WARP ноды или через другую ноду"`
 		ExitNodeID  *int64          `json:"exit_node_id,omitempty" minimum:"1" doc:"Для outbound=node: через какую ноду"`
 		PoolID      *int64          `json:"pool_id,omitempty" minimum:"0" doc:"Пул трафика; 0 — основной трафик"`
+
+		XHTTP *proto.XHTTPTuning `json:"xhttp,omitempty" doc:"Тонкая настройка XHTTP целиком: пустое поле — значение ядра по умолчанию"`
 	}
 }
 
@@ -206,6 +211,9 @@ func (h *handlers) viewInbound(in db.Inbound, last map[int64]db.InboundEvent) In
 			obfs := proto.Obfs(t)
 			v.Obfs = &obfs
 		}
+		if x, ok := proto.XHTTPOf(t); ok {
+			v.XHTTP = &x
+		}
 		if in.Preset == presets.Custom {
 			v.Title = t.Type()
 		}
@@ -280,7 +288,7 @@ func (h *handlers) updateInbound(ctx context.Context, in *patchInboundInput) (*i
 			}
 		}
 	}
-	p := domain.InboundPatch{Port: b.Port, Enabled: b.Enabled, Config: b.Config, Dest: b.Dest, ServerName: b.ServerName, Fingerprint: b.Fingerprint, Obfs: b.Obfs,
+	p := domain.InboundPatch{Port: b.Port, Enabled: b.Enabled, Config: b.Config, Dest: b.Dest, ServerName: b.ServerName, Fingerprint: b.Fingerprint, Obfs: b.Obfs, XHTTP: b.XHTTP,
 		DisplayName: b.DisplayName, Listen: b.Listen, AutoPort: b.AutoPort, AutoSNI: b.AutoSNI, Outbound: b.Outbound, ExitNodeID: b.ExitNodeID, PoolID: b.PoolID}
 	if c := b.Client; c != nil {
 		// The address clients connect to: like the panel's public host, not for a key.
@@ -354,7 +362,16 @@ func inboundError(err error, dest bool) error {
 		if part, ok := strings.CutPrefix(edit.Err.Field, "mikan.client."); ok && edit.Field == "client" {
 			location += "." + part
 		}
-		return huma.Error422UnprocessableEntity("bad_"+edit.Field, &huma.ErrorDetail{Location: location, Message: edit.Err.Code})
+		// The XHTTP form names the setting: one location holds all of them.
+		var value any
+		if edit.Field == "xhttp" {
+			key := edit.Err.Field
+			for _, p := range []string{"xhttp-config.", "mikan.client.xhttp.xmux.", "mikan.client.xhttp."} {
+				key = strings.TrimPrefix(key, p)
+			}
+			value = key
+		}
+		return huma.Error422UnprocessableEntity("bad_"+edit.Field, &huma.ErrorDetail{Location: location, Message: edit.Err.Code, Value: value})
 	case dest && errors.As(err, &pe):
 		return huma.Error422UnprocessableEntity("bad_dest", &huma.ErrorDetail{Location: "body.dest", Message: pe.Code})
 	case dest && errors.As(err, &ne):

@@ -34,6 +34,7 @@ import (
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/panel/subpage"
 	"mikan/internal/panel/subs"
 	"mikan/internal/panel/tgbackup"
 	"mikan/internal/panel/tgbot"
@@ -242,6 +243,13 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	}
 	deps.Importer = importer
 	p.Importer = importer
+	// The subscriptions' handler comes later; the preview reaches it once it is there.
+	var subHandler *subs.Handler
+	deps.RoutesPreview = func(ctx context.Context, req subs.PreviewRequest) ([]byte, error) {
+		return subHandler.Preview(ctx, req)
+	}
+	deps.CheckTemplate = func(ctx context.Context, src string) error { return subHandler.CheckTemplate(ctx, src) }
+	deps.HappLink = func(ctx context.Context, u db.User) (string, error) { return subHandler.HappLink(ctx, u) }
 	apiHandler, _, err := api.New(deps)
 	if err != nil {
 		return nil, err
@@ -254,6 +262,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	if sp, err := server.NewSPA(o.Web, "sub.html"); err == nil {
 		p.subPage, subPageHandler = sp, sp
 	}
+	pages := subpage.NewService(st.Q)
 	buildSubCfg := func(ctx context.Context) (subs.Config, error) {
 		ep, err := set.Endpoint(ctx)
 		if err != nil {
@@ -284,6 +293,12 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		}
 		cfg := subs.Config{Brand: brand, SupportURL: support, Groups: groups, Routing: subs.ParseRouting(routing), Fingerprint: fingerprint,
 			Direct: []string{publicHost, domainName}, Lang: lang, Rules: subs.ServedRules(rules, groups.WithDefaults(lang))}
+		if cfg.Routes, _, err = settings.Get[subs.Routes](ctx, set, settings.KeyRoutes); err != nil {
+			return subs.Config{}, err
+		}
+		if cfg.Template, err = set.String(ctx, settings.KeyTemplate); err != nil {
+			return subs.Config{}, err
+		}
 		if cfg.Binding, err = set.On(ctx, settings.DeviceBinding); err != nil {
 			return subs.Config{}, err
 		}
@@ -302,10 +317,24 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		if cfg.App.Enabled, err = set.On(ctx, settings.AppBranding); err != nil {
 			return subs.Config{}, err
 		}
+		if cfg.Happ.HideSettings, err = set.On(ctx, settings.HappHide); err != nil {
+			return subs.Config{}, err
+		}
 		for key, dst := range map[string]*string{settings.KeySubTitle: &cfg.Title, settings.KeyAnnounce: &cfg.Announce, settings.KeyAnnounceURL: &cfg.AnnounceURL,
-			settings.KeyBrandAccent: &cfg.App.Accent, settings.KeyBrandLogo: &cfg.App.LogoURL} {
+			settings.KeyBrandAccent: &cfg.App.Accent, settings.KeyBrandLogo: &cfg.App.LogoURL,
+			settings.KeyHappRouting: &cfg.Happ.Routing, settings.KeyHappProvider: &cfg.Happ.ProviderID, settings.KeyHappCrypt: &cfg.Happ.Crypt} {
 			if *dst, err = set.String(ctx, key); err != nil {
 				return subs.Config{}, err
+			}
+		}
+		// The apps take the logo uploaded for the page when no link of its own is given.
+		if cfg.App.Enabled && cfg.App.LogoURL == "" && cfg.SubBase != "" {
+			assets, err := pages.Assets(ctx)
+			if err != nil {
+				return subs.Config{}, err
+			}
+			if a, ok := assets[subpage.AssetLogo]; ok {
+				cfg.App.LogoURL = cfg.SubBase + "/" + subpage.AssetPath(subpage.AssetLogo, a.Hash)
 			}
 		}
 		nodes, err := st.Q.ListNodes(ctx)
@@ -345,17 +374,21 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		return g
 	}}
 	subCfg := func(ctx context.Context) (subs.Config, error) { return cache.get(ctx, buildSubCfg) }
-	subHandler := subs.NewHandler(st, subCfg, subPageHandler, o.Now, deps.Devices, o.TrustProxy)
+	subHandler = subs.NewHandler(st, subCfg, subPageHandler, o.Now, deps.Devices, o.TrustProxy)
 	subHandler.SetLogger(o.Log)
 	subHandler.SetTelegram(p.Telegram)
 	subHandler.SetShop(p.Billing)
 	subHandler.SetPromo(promos)
+	subHandler.SetPages(pages)
 
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/api/", apiHandler)
 	adminMux.Handle("/", p.spa)
 	p.server = server.New(adminMux, subHandler)
 	p.server.SetLegacy(subHandler.Legacy())
+	if o.DataDir != "" {
+		p.server.SetSite(server.OwnSite(filepath.Join(o.DataDir, "www")))
+	}
 	p.server.SetHSTS(o.HSTS)
 	p.Handler = p.server
 	return p, nil

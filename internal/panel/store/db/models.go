@@ -131,6 +131,8 @@ type Node struct {
 	UpdatedAt  int64
 	PublicName string
 	Sort       int64
+	TotalUp    int64
+	TotalDown  int64
 }
 
 type NodeRelay struct {
@@ -157,6 +159,20 @@ type NodeSpeedtest struct {
 type NodeState struct {
 	Key   string
 	Value string
+}
+
+type NodeTrafficDaily struct {
+	NodeID int64
+	Day    int64
+	Up     int64
+	Down   int64
+}
+
+type NodeTrafficHourly struct {
+	NodeID int64
+	Hour   int64
+	Up     int64
+	Down   int64
 }
 
 type NodeWarp struct {
@@ -282,6 +298,26 @@ type Slot struct {
 type SlotCounter struct {
 	ID   int64
 	Last int64
+}
+
+type SubAsset struct {
+	Name        string
+	ContentType string
+	Data        []byte
+	Hash        string
+	UpdatedAt   int64
+}
+
+type SubDoc struct {
+	ID        int64
+	Title     string
+	Emoji     string
+	Body      string
+	Platform  string
+	Position  int64
+	Published int64
+	CreatedAt int64
+	UpdatedAt int64
 }
 
 type SubFetch struct {
@@ -445,6 +481,18 @@ type User struct {
 	UpdatedAt     int64
 	BillingDay    sql.NullInt64
 	UnboundAt     int64
+	Source        string
+	Hidden        int64
+	FolderID      sql.NullInt64
+}
+
+type UserFolder struct {
+	ID        int64
+	Name      string
+	Color     string
+	Emoji     string
+	Sort      int64
+	CreatedAt int64
 }
 
 type UserPool struct {

@@ -69,6 +69,10 @@ func TestCreate(t *testing.T) {
 	if _, err := s.Create(ctx, NewInbound{Preset: presets.Custom, Port: "30001", Config: "type: nope\n"}); !errors.As(err, &pe) {
 		t.Fatalf("a broken template: %v", err)
 	}
+	// Clients would talk plain TLS to the masking site: REALITY has no WebSocket.
+	if _, err := s.Create(ctx, NewInbound{Preset: presets.Custom, Port: "30002", Config: in.Config + "\nws-path: /ws\n"}); !errors.As(err, &pe) || pe.Code != "config_ws_reality" {
+		t.Fatalf("ws over reality: %v", err)
+	}
 	for _, c := range []struct {
 		in   NewInbound
 		want error

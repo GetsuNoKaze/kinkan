@@ -234,6 +234,7 @@ func (s *Syncer) desired(ctx context.Context) (nodeapi.DesiredState, error) {
 		return st, err
 	}
 	st.Torrent = snap.torrent.Block()
+	st.Filters = snap.filters.State()
 	st.Epoch, st.Policies, _ = s.policiesFrom(snap)
 	return st, nil
 }
@@ -531,7 +532,7 @@ func (s *Syncer) pullCounters(ctx context.Context) {
 		// Slots of the same user add up. Traffic past the base quota is taken from the
 		// grants on the batch's transaction: a batch delivered again is skipped above,
 		// grants included.
-		b := domain.TrafficBatch{Main: map[int64]domain.Bytes{}, Pools: map[[2]int64]domain.Bytes{}}
+		b := domain.TrafficBatch{Main: map[int64]domain.Bytes{}, Pools: map[[2]int64]domain.Bytes{}, Node: s.id}
 		for slot, t := range c.Slots {
 			if uid, ok := owner[slot]; ok {
 				cur := b.Main[uid]
@@ -709,7 +710,8 @@ func stateKey(st nodeapi.DesiredState) string {
 		R *nodeapi.Relay
 		E []nodeapi.Exit
 		B *nodeapi.TorrentBlock
-	}{st.Inbounds, st.Slots, st.TLS, st.SelfStealPort, st.Warp, st.Relay, st.Exits, st.Torrent})
+		F *nodeapi.Filters
+	}{st.Inbounds, st.Slots, st.TLS, st.SelfStealPort, st.Warp, st.Relay, st.Exits, st.Torrent, st.Filters})
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
 }

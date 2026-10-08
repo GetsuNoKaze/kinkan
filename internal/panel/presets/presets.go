@@ -31,6 +31,9 @@ type Info struct {
 	// Shared: one key for everyone. The node cannot tell users apart: no per-user traffic,
 	// limits, device binding or cut-off; a leaked key works until the key changes.
 	Shared bool `json:"shared,omitempty"`
+	// DomainCert: the point is a real certificate, which only a node with a domain has (the
+	// panel's node) or one with its own; elsewhere it runs on a pinned self-signed one.
+	DomainCert bool `json:"domain_cert,omitempty"`
 }
 
 // Custom is the "own config" entry: the admin writes the template in the editor.
@@ -44,6 +47,15 @@ const PresetPQ = "vless_reality_xhttp_pq"
 // that name a core of 1.19.26 or later get it, the rest go on with plain Hysteria2.
 const PresetGecko = "hysteria2_gecko"
 
+// PresetTLSXHTTP and PresetTLSVision are VLESS on plain TLS with the node certificate
+// (mikan.tls: node): on the panel's node with a domain it is the panel's public one, so a
+// probe sees the same site as on the panel's port; on a node with an own certificate,
+// that one; otherwise a self-signed one, pinned in links.
+const (
+	PresetTLSXHTTP  = "vless_tls_xhttp"
+	PresetTLSVision = "vless_tls_vision"
+)
+
 // Order is display and fallback order. Since 2026 the RU DPI freezes a server's 443/tcp
 // after bursts of parallel TLS handshakes; Vision opens one handshake per app connection,
 // so 443/tcp goes to XHTTP, which clients multiplex over a few long-lived connections.
@@ -55,6 +67,8 @@ var All = []Info{
 	{ID: "vless_reality_vision", Title: "VLESS · REALITY · Vision", Summary: "Для старых клиентов без XHTTP. На 443 в РФ быстро замораживается", Type: "vless", Network: "tcp", Port: "8443", Name: "vless-vision", SubName: "VLESS Vision", Default: true},
 	{ID: "vless_reality_grpc", Title: "VLESS · REALITY · gRPC", Summary: "HTTP/2 с мультиплексом: мало соединений, другой рисунок трафика", Type: "vless", Network: "tcp", Port: "2053", Name: "vless-grpc", SubName: "VLESS gRPC"},
 	{ID: "trojan_reality", Title: "Trojan · REALITY", Summary: "Другой протокол под той же маскировкой — запасной вариант", Type: "trojan", Network: "tcp", Port: "2087", Name: "trojan", SubName: "Trojan"},
+	{ID: PresetTLSXHTTP, Title: "VLESS · TLS · XHTTP", Summary: "Обычный TLS на настоящем сертификате домена панели, как у сайта: на чужие запросы отвечает как веб-сервер, держит мало соединений", Type: "vless", Network: "tcp", Port: "2443", Name: "vless-tls-xhttp", SubName: "VLESS TLS XHTTP", DomainCert: true},
+	{ID: PresetTLSVision, Title: "VLESS · TLS · Vision", Summary: "Классический VLESS Vision на настоящем сертификате домена панели: работает почти во всех приложениях. На 443 в РФ быстро замораживается", Type: "vless", Network: "tcp", Port: "3443", Name: "vless-tls-vision", SubName: "VLESS TLS Vision", DomainCert: true},
 	{ID: "anytls", Title: "AnyTLS", Summary: "TLS с паддингом против анализа размеров пакетов; нужен клиент на mihomo или sing-box", Type: "anytls", Network: "tcp", Port: "2083", Name: "anytls", SubName: "AnyTLS"},
 	{ID: PresetPQ, Title: "VLESS · REALITY · XHTTP · PQ", Summary: "XHTTP с постквантовым шифрованием VLESS: записанный сейчас трафик не расшифровать и в будущем. Нужен свежий клиент на mihomo или Xray; приложения на sing-box не подключатся", Type: "vless", Network: "tcp", Port: "2096", Name: "vless-pq", SubName: "VLESS PQ"},
 	{ID: "trusttunnel", Title: "TrustTunnel", Summary: "Протокол AdGuard: HTTP/2 на настоящем сертификате ноды, снаружи обычный сайт", Type: "trusttunnel", Network: "tcp", Port: "4443", Name: "trusttunnel", SubName: "TrustTunnel", Apps: "mihomo"},
@@ -106,6 +120,11 @@ func NewConfig(id, dest string) (string, error) {
 		t = proto.Template{"type": "vless", "grpc-service-name": strings.ToLower(secure.Token(8))}
 	case "trojan_reality":
 		t = proto.Template{"type": "trojan"}
+	case PresetTLSXHTTP:
+		return proto.Marshal(proto.Template{"type": "vless", "xhttp-config": map[string]any{"path": randomPath(), "mode": "stream-one"},
+			"mikan": map[string]any{"tls": "node"}}), nil
+	case PresetTLSVision:
+		return proto.Marshal(proto.Template{"type": "vless", "mikan": map[string]any{"flow": "xtls-rprx-vision", "tls": "node"}}), nil
 	case "hysteria2":
 		return proto.Marshal(proto.Template{"type": "hysteria2", "alpn": []any{"h3"}, "obfs": proto.ObfsSalamander, "obfs-password": secure.Token(24)}), nil
 	case PresetGecko:

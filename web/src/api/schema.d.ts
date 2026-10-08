@@ -277,6 +277,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/filters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Фильтры трафика */
+        get: operations["get-filters"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Настроить фильтры трафика
+         * @description Каждый переданный фильтр заменяется целиком. Ноды получают его со своим состоянием; ноды старше фильтров его не применяют.
+         */
+        patch: operations["update-filters"];
+        trace?: never;
+    };
+    "/api/v1/folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Папки пользователей */
+        get: operations["list-folders"];
+        put?: never;
+        /** Создать папку */
+        post: operations["create-folder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/folders/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Порядок папок */
+        put: operations["order-folders"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/folders/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Удалить папку: её пользователи остаются, но вне папок */
+        delete: operations["delete-folder"];
+        options?: never;
+        head?: never;
+        /** Изменить папку */
+        patch: operations["update-folder"];
+        trace?: never;
+    };
     "/api/v1/import": {
         parameters: {
             query?: never;
@@ -635,6 +709,23 @@ export interface paths {
          * @description Новые сверху; хранятся последние 100.
          */
         get: operations["list-node-speedtests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/nodes/{id}/traffic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** График трафика ноды */
+        get: operations["node-traffic"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1011,6 +1102,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/routes/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Сервисы и списки для маршрутизации */
+        get: operations["routes-catalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/routes/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Профиль Clash с этой маршрутизацией, без сохранения */
+        post: operations["routes-preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stats/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Трафик по нодам
+         * @description Сколько унесла каждая нода за период. Учёт идёт с версии, где он появился: прошлое по нодам не восстанавливается.
+         */
+        get: operations["stats-nodes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/stats/overview": {
         parameters: {
             query?: never;
@@ -1040,6 +1185,96 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sub-docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Инструкции страницы подписки */
+        get: operations["list-sub-docs"];
+        put?: never;
+        /** Новая инструкция */
+        post: operations["create-sub-doc"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sub-docs/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Порядок инструкций */
+        put: operations["order-sub-docs"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sub-docs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Изменить инструкцию */
+        put: operations["update-sub-doc"];
+        post?: never;
+        /** Удалить инструкцию */
+        delete: operations["delete-sub-doc"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sub-page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Страница подписки: вид, блоки, приложения */
+        get: operations["get-sub-page"];
+        /** Сохранить страницу подписки */
+        put: operations["update-sub-page"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sub-page/images/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Загруженная картинка страницы подписки */
+        get: operations["get-sub-page-image"];
+        /** Загрузить логотип или фон страницы подписки */
+        put: operations["put-sub-page-image"];
+        post?: never;
+        /** Убрать логотип или фон страницы подписки */
+        delete: operations["delete-sub-page-image"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1402,6 +1637,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{id}/happ-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Шифрованная ссылка Happ на подписку пользователя */
+        get: operations["user-happ-link"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{id}/pools": {
         parameters: {
             query?: never;
@@ -1747,13 +1999,21 @@ export interface components {
             queued: number;
         };
         BulkInputBody: {
-            /** @enum {string} */
-            action: "extend" | "reset" | "disable" | "enable" | "delete";
+            /**
+             * @description hide и unhide прячут пользователей из списка и возвращают, move кладёт в папку: ни то ни другое не меняет доступ
+             * @enum {string}
+             */
+            action: "extend" | "reset" | "disable" | "enable" | "delete" | "hide" | "unhide" | "move";
             /**
              * Format: int64
              * @description Для extend; не задано — на один период: до следующего дня оплаты или на 30 дней
              */
             days?: number;
+            /**
+             * Format: int64
+             * @description Для move: папка; 0 или не задано — убрать из папок
+             */
+            folder_id?: number;
             ids: number[];
         };
         BulkOutputBody: {
@@ -1885,6 +2145,15 @@ export interface components {
             /** @enum {string} */
             scope: "read" | "full";
         };
+        CreateFolderInputBody: {
+            /**
+             * @description Не задан — gray
+             * @enum {string}
+             */
+            color?: "gray" | "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple" | "pink";
+            emoji?: string;
+            name: string;
+        };
         CreateInboundInputBody: {
             /** @description Шаблон листенера (YAML) для preset=custom */
             config?: string;
@@ -1897,7 +2166,7 @@ export interface components {
             node_id?: number;
             port?: string;
             /** @enum {string} */
-            preset: "vless_reality_xhttp" | "hysteria2" | "hysteria2_gecko" | "tuic_v5" | "vless_reality_vision" | "vless_reality_grpc" | "trojan_reality" | "anytls" | "vless_reality_xhttp_pq" | "trusttunnel" | "shadowquic" | "mieru" | "shadowsocks_2022" | "sudoku" | "snell" | "custom";
+            preset: "vless_reality_xhttp" | "hysteria2" | "hysteria2_gecko" | "tuic_v5" | "vless_reality_vision" | "vless_reality_grpc" | "trojan_reality" | "vless_tls_xhttp" | "vless_tls_vision" | "anytls" | "vless_reality_xhttp_pq" | "trusttunnel" | "shadowquic" | "mieru" | "shadowsocks_2022" | "sudoku" | "snell" | "custom";
         };
         CreateNodeInputBody: {
             /**
@@ -1919,6 +2188,16 @@ export interface components {
             /** Format: int64 */
             tariff_id: number;
         };
+        DNS: {
+            default_nameserver?: string[];
+            nameserver?: string[];
+            policy?: components["schemas"]["DNSPolicy"][];
+            proxy_server_nameserver?: string[];
+        };
+        DNSPolicy: {
+            match: string;
+            servers: string[];
+        };
         DeviceView: {
             /** Format: date-time */
             first_seen: string;
@@ -1926,6 +2205,18 @@ export interface components {
             /** Format: date-time */
             last_seen: string;
             online: boolean;
+        };
+        EgressFilter: {
+            /** @description Домены вместе с поддоменами: example.com */
+            domains: string[];
+            /** @description Ноды не пропускают трафик пользователей туда, что указано ниже */
+            enabled: boolean;
+            /** @description Закрыть почтовые порты 465, 587 и 2525 (25 закрыт всегда): с общего адреса VPN, с которого шлют почту, адрес быстро попадает в чёрные списки */
+            mail: boolean;
+            /** @description Сети и адреса: 203.0.113.0/24, 198.51.100.7, 2001:db8::/32 */
+            networks: string[];
+            /** @description Порты и диапазоны: 6881, 6881-6889 */
+            ports: string[];
         };
         "Enable-promocodeRequest": {
             enabled: boolean;
@@ -2002,6 +2293,43 @@ export interface components {
              */
             months?: number;
         };
+        FiltersView: {
+            egress: components["schemas"]["EgressFilter"];
+            ingress: components["schemas"]["IngressFilter"];
+            /** @description Что закрывает почтовый пресет */
+            mail_ports: string[];
+        };
+        FolderView: {
+            /** @enum {string} */
+            color: "gray" | "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple" | "pink";
+            /** @description Значок перед названием; может быть пустым */
+            emoji: string;
+            /** Format: int64 */
+            id: number;
+            name: string;
+            /**
+             * Format: int64
+             * @description Сколько пользователей в папке, скрытые тоже
+             */
+            users: number;
+        };
+        Goal: {
+            about?: {
+                [key: string]: string;
+            };
+            currency: string;
+            id: string;
+            /** Format: int64 */
+            raised: number;
+            status: string;
+            /** Format: int64 */
+            target: number;
+            title: {
+                [key: string]: string;
+            };
+            url?: string;
+            version?: string;
+        };
         GrantInputBody: {
             /**
              * Format: int64
@@ -2047,6 +2375,10 @@ export interface components {
             remaining: number;
             /** @enum {string} */
             source: "purchase" | "admin";
+        };
+        HappLinkOutputBody: {
+            /** @description happ://crypt5/…: Happ открывает подписку, не показывая её адрес; пусто — шифрованная ссылка выключена */
+            link: string;
         };
         HostStatus: {
             /** @description RFC 3339 */
@@ -2142,12 +2474,15 @@ export interface components {
             type: string;
             /** Format: date-time */
             updated_at: string;
+            /** @description Тонкая настройка XHTTP; у других транспортов поля нет */
+            xhttp?: components["schemas"]["XHTTPTuning"];
         };
         Info: {
             apps?: string;
             default: boolean;
             default_name: string;
             default_port: string;
+            domain_cert?: boolean;
             id: string;
             network: string;
             shared?: boolean;
@@ -2158,6 +2493,14 @@ export interface components {
         };
         InfrastructureConnectOutputBody: {
             url: string;
+        };
+        IngressFilter: {
+            /** @description true — подключаться можно только из сетей списка; false — из сетей списка нельзя */
+            allow: boolean;
+            /** @description Ноды проверяют, откуда подключаются */
+            enabled: boolean;
+            /** @description Сети и адреса. Другие ноды панели (каскад) проверку не проходят: их пускают всегда */
+            networks: string[];
         };
         JobState: {
             /** Format: int64 */
@@ -2221,13 +2564,32 @@ export interface components {
             names: string[];
         };
         ListUsersOutputBody: {
+            /** @description Пользователи по состояниям среди подходящих под папку, источник и скрытых; состояние и поиск не учитываются */
             counts: components["schemas"]["UserCounts"];
+            /** @description Пользователи по папкам (ключ — id папки, none — вне папок) среди подходящих под источник и скрытых */
+            folder_counts: {
+                [key: string]: number;
+            };
+            /**
+             * Format: int64
+             * @description Сколько из них скрыто
+             */
+            hidden_total: number;
             items: components["schemas"]["UserView"][];
+            /** @description Пользователи по источникам (admin, bot, trial, import) среди подходящих под папку и скрытых */
+            source_counts: {
+                [key: string]: number;
+            };
             /**
              * Format: int64
              * @description Сколько подходит под фильтр
              */
             total: number;
+            /**
+             * Format: int64
+             * @description Все пользователи панели, как бы ни был задан фильтр
+             */
+            users_total: number;
         };
         ListenerStatus: {
             code?: string;
@@ -2315,6 +2677,11 @@ export interface components {
             public_name: string;
             /** @enum {string} */
             status: "ok" | "error" | "unknown";
+            /**
+             * Format: int64
+             * @description Сколько унесла нода за последние сутки (вверх и вниз вместе), байты; у только что добавленной ноды 0
+             */
+            traffic_24h: number;
             /** @description Как идёт или прошло обновление ноды */
             update?: components["schemas"]["UpdateStatus"];
             version?: string;
@@ -2325,6 +2692,32 @@ export interface components {
             /** @description Ключ подключения ноды: показывается один раз */
             key: string;
             node: components["schemas"]["NodeInfo"];
+        };
+        NodeShare: {
+            /**
+             * Format: int64
+             * @description up + down
+             */
+            bytes: number;
+            /** Format: int64 */
+            down: number;
+            /** Format: int64 */
+            id: number;
+            /** @description Своя нода панели */
+            local: boolean;
+            /** @description Имя ноды; у своей ноды панели может быть пустым */
+            name: string;
+            /** Format: int64 */
+            up: number;
+        };
+        NodeSharesOutputBody: {
+            /** @description Все ноды, больше всех сверху */
+            items: components["schemas"]["NodeShare"][];
+            /**
+             * Format: int64
+             * @description Сколько унесли все ноды вместе
+             */
+            total: number;
         };
         NodeView: {
             /** Format: date-time */
@@ -2347,8 +2740,16 @@ export interface components {
             traffic_100: boolean;
             traffic_90: boolean;
         };
+        OrderFoldersInputBody: {
+            /** @description Все папки, каждая один раз, в том порядке, в каком их показывает список */
+            ids: number[];
+        };
         OrderNodesInputBody: {
             /** @description Все ноды панели, каждая один раз, в том порядке, в каком их серверы идут в подписках */
+            ids: number[];
+        };
+        OrderSubDocsInputBody: {
+            /** @description Все инструкции в новом порядке */
             ids: number[];
         };
         OverviewOutputBody: {
@@ -2438,6 +2839,129 @@ export interface components {
             /** Format: int64 */
             sort: number;
         };
+        Page: {
+            apps: components["schemas"]["PageApps"];
+            /** @description Блоки страницы в их порядке; встроенные — по одному, своих (text, links) — до 12 */
+            blocks: components["schemas"]["PageBlock"][];
+            brand: components["schemas"]["PageBrand"];
+            /** @description Свой CSS страницы подписки (не админки), до 20 КБ; @import и < убираются */
+            css: string;
+            look: components["schemas"]["PageLook"];
+            og: components["schemas"]["PageOG"];
+        };
+        PageAppList: {
+            hidden: string[];
+            order: string[];
+        };
+        PageApps: {
+            android: components["schemas"]["PageAppList"];
+            ios: components["schemas"]["PageAppList"];
+            linux: components["schemas"]["PageAppList"];
+            macos: components["schemas"]["PageAppList"];
+            /**
+             * @description Вкладка, открытая сначала; auto — по устройству посетителя
+             * @enum {string}
+             */
+            platform: "auto" | "ios" | "android" | "windows" | "macos" | "linux";
+            /** @description Кнопка QR-кода в блоке ссылки */
+            qr: boolean;
+            windows: components["schemas"]["PageAppList"];
+        };
+        PageAsset: {
+            content_type: string;
+            hash: string;
+            name: string;
+            /** Format: int64 */
+            size: number;
+            /** Format: int64 */
+            updated_at: number;
+        };
+        PageBackground: {
+            /**
+             * Format: int64
+             * @description Направление градиента в градусах
+             */
+            angle: number;
+            /**
+             * Format: int64
+             * @description Затемнение картинки, %
+             */
+            dim: number;
+            /** @description #RRGGBB */
+            from: string;
+            /**
+             * @description theme — фон темы, solid — цвет from, gradient — от from к to, image — загруженная картинка
+             * @enum {string}
+             */
+            kind: "theme" | "solid" | "gradient" | "image";
+            /** @description #RRGGBB */
+            to: string;
+        };
+        PageBlock: {
+            id: string;
+            /** @description Блок links: кнопки-ссылки */
+            links?: components["schemas"]["PageLink"][];
+            on: boolean;
+            /** @description Блок text: Markdown */
+            text?: string;
+            /** @description Свой заголовок (у кнопок — текст кнопки); пусто — обычный */
+            title: string;
+            /** @enum {string} */
+            type: "announce" | "status" | "promo" | "shop" | "traffic" | "devices" | "apps" | "guide" | "instructions" | "link" | "locations" | "telegram" | "support" | "text" | "links";
+        };
+        PageBrand: {
+            emoji: string;
+            /**
+             * @description letter — первая буква бренда, image — загруженный логотип, emoji, none — без значка
+             * @enum {string}
+             */
+            logo: "letter" | "image" | "emoji" | "none";
+            /** @description Строка под названием; пусто — нет */
+            subtitle: string;
+        };
+        PageLink: {
+            emoji?: string;
+            label: string;
+            /** @description https://, http:// или tg:// */
+            url: string;
+        };
+        PageLook: {
+            /**
+             * @description theme — цвет палитры, brand — цвет бренда (brand_accent)
+             * @enum {string}
+             */
+            accent: "theme" | "brand";
+            background: components["schemas"]["PageBackground"];
+            /**
+             * @description glass — полупрозрачные карточки, solid — непрозрачные
+             * @enum {string}
+             */
+            cards: "glass" | "solid";
+            /**
+             * @description default — Unbounded и Onest, onest — только Onest, system — шрифт устройства, rounded — скруглённый системный
+             * @enum {string}
+             */
+            font: "default" | "onest" | "system" | "rounded";
+            /**
+             * @description light, dark (как Midnight) или system — как у посетителя
+             * @enum {string}
+             */
+            mode: "light" | "dark" | "system";
+            /**
+             * @description Палитра темы, как темы панели
+             * @enum {string}
+             */
+            palette: "mikan" | "ocean" | "sakura" | "forest";
+            /** @enum {string} */
+            radius: "small" | "medium" | "large";
+        };
+        PageOG: {
+            description: string;
+            /** @description Логотип картинкой превью */
+            image: boolean;
+            /** @description Заголовок превью; пусто — бренд */
+            title: string;
+        };
         PasswordInputBody: {
             current: string;
             /** @description Не короче 12 символов */
@@ -2458,6 +2982,19 @@ export interface components {
             hour?: number;
             /** @description Пароль, которым шифруется файл: от 20 символов. Файл остаётся в истории чата навсегда; без пароля его не открыть */
             password?: string;
+        };
+        PatchFiltersInputBody: {
+            /** @description Весь исходящий фильтр */
+            egress?: components["schemas"]["EgressFilter"];
+            /** @description Весь входящий фильтр */
+            ingress?: components["schemas"]["IngressFilter"];
+        };
+        PatchFolderInputBody: {
+            /** @enum {string} */
+            color?: "gray" | "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple" | "pink";
+            /** @description Пустая строка убирает значок */
+            emoji?: string;
+            name?: string;
         };
         PatchInboundInputBody: {
             /** @description Нельзя включить, пока у подключения свой адрес (listen) */
@@ -2499,6 +3036,8 @@ export interface components {
             port?: string;
             /** @description SNI для клиентов, если dest — IP (цель из подбора соседей) */
             server_name?: string;
+            /** @description Тонкая настройка XHTTP целиком: пустое поле — значение ядра по умолчанию */
+            xhttp?: components["schemas"]["XHTTPTuning"];
         };
         PatchLegacyInputBody: {
             /** @enum {string} */
@@ -2542,6 +3081,12 @@ export interface components {
             device_binding?: boolean;
             device_require_hwid?: boolean;
             domain?: string;
+            /** @enum {string} */
+            happ_crypt?: "off" | "api" | "local";
+            happ_hide_settings?: boolean;
+            happ_provider_id?: string;
+            /** @description happ://routing/…, auto — собрать из маршрутизации; пусто — не отдавать */
+            happ_routing?: string;
             public_host?: string;
             /** Format: int64 */
             quiet_hour_utc?: number;
@@ -2555,10 +3100,13 @@ export interface components {
              * @description Отдельный порт подписок на сервере панели; 0 — убрать. Ссылки переезжают на него, старые продолжают работать
              */
             sub_port?: number;
+            sub_routes?: components["schemas"]["Routes"];
             /** @enum {string} */
-            sub_routing?: "ru_direct" | "all";
+            sub_routing?: "ru_direct" | "all" | "blocked";
             /** @description Свои правила Clash, до 500 строк; ошибка указывает номер строки */
             sub_rules?: string;
+            /** @description Свой профиль Clash; пусто — вернуть встроенный */
+            sub_template?: string;
             /** @description Переменные — см. SettingsView.sub_title */
             sub_title?: string;
             /** @description https://… или tg://… */
@@ -2585,6 +3133,7 @@ export interface components {
             /** @enum {string} */
             channel?: "stable" | "beta";
             nodes_follow?: boolean;
+            show_goals?: boolean;
         };
         PatchUserInputBody: {
             /**
@@ -2599,6 +3148,13 @@ export interface components {
             disabled?: boolean;
             /** Format: date-time */
             expires_at?: string;
+            /**
+             * Format: int64
+             * @description Положить в папку; 0 — убрать из папки
+             */
+            folder_id?: number;
+            /** @description Скрыть пользователя из списка или вернуть в него; доступ он не теряет */
+            hidden?: boolean;
             inbounds?: number[];
             name?: string;
             never_expires?: boolean;
@@ -2906,6 +3462,16 @@ export interface components {
             /** Format: int64 */
             successful_activations: number;
         };
+        PutSubImageInputBody: {
+            /** @description Картинка в base64: PNG, JPEG или WebP; логотип до 512 КБ, фон до 2 МБ. SVG не принимается */
+            data: string;
+        };
+        PutSubPageInputBody: {
+            brand?: string;
+            /** @description #RRGGBB или пусто */
+            brand_accent?: string;
+            config: components["schemas"]["Page"];
+        };
         RecoveryOutputBody: {
             /** @description Показываются один раз */
             recovery_codes: string[];
@@ -2947,6 +3513,25 @@ export interface components {
             tls13: boolean;
             x25519: boolean;
         };
+        RouteDirectSet: {
+            id: string;
+            name: string;
+            name_en: string;
+        };
+        RouteList: {
+            behavior: string;
+            format: string;
+            name: string;
+            target: string;
+            url: string;
+        };
+        RouteService: {
+            icon: string;
+            id: string;
+            /** @description По-русски */
+            name: string;
+            name_en: string;
+        };
         RouteStruct: {
             /** @enum {string} */
             mode: "direct" | "node" | "proxy";
@@ -2958,6 +3543,39 @@ export interface components {
             /** @description socks5://user:pass@host:port, http://… или https://…; не передан — прежний (mode=proxy) */
             proxy?: string;
         };
+        Routes: {
+            direct?: string[];
+            dns?: components["schemas"]["DNS"];
+            lists?: components["schemas"]["RouteList"][];
+            servers?: components["schemas"]["Servers"];
+            services?: {
+                [key: string]: string;
+            };
+            tune?: components["schemas"]["Tune"];
+        };
+        RoutesCatalogOutputBody: {
+            direct: components["schemas"]["RouteDirectSet"][];
+            services: components["schemas"]["RouteService"][];
+        };
+        RoutesPreviewInputBody: {
+            /** @description Встроенный профиль с этими sub_routing и sub_routes как начало своего: без серверов, группы просят их сами */
+            starter?: boolean;
+            /** @description Имя группы автовыбора вместо сохранённого */
+            sub_group_auto?: string;
+            /** @description Имя главной группы вместо сохранённого */
+            sub_group_main?: string;
+            sub_routes: components["schemas"]["Routes"];
+            /** @enum {string} */
+            sub_routing: "ru_direct" | "all" | "blocked";
+            /** @description Свои правила вместо сохранённых */
+            sub_rules?: string;
+            /** @description Свой профиль Clash: показать его вместо встроенного */
+            sub_template?: string;
+        };
+        RoutesPreviewOutputBody: {
+            /** @description Профиль Clash (YAML) пользователя со всеми подключениями; ключи — заглушки */
+            profile: string;
+        };
         ScanTargetsOutputBody: {
             /** @description Адрес сервера, вокруг которого искали */
             ip: string;
@@ -2966,6 +3584,12 @@ export interface components {
             scanned: number;
             /** @description Свой домен с сертификатом панели */
             self_steal?: components["schemas"]["Result"];
+        };
+        Servers: {
+            auto?: string;
+            /** Format: int64 */
+            interval?: number;
+            no_countries?: boolean;
         };
         SessionView: {
             /** Format: date-time */
@@ -3003,6 +3627,17 @@ export interface components {
             /** @description Не выдавать подписку приложениям без ID устройства (иначе они вместе занимают одно место) */
             device_require_hwid: boolean;
             domain: string;
+            /**
+             * @description Шифрованная ссылка для кнопки Happ: off — обычная happ://add/, api — через сервис Happ (адрес подписки уходит на crypto.happ.su), local — панель шифрует сама
+             * @enum {string}
+             */
+            happ_crypt: "off" | "api" | "local";
+            /** @description Скрыть в Happ настройки серверов подписки (нужен Provider ID) */
+            happ_hide_settings: boolean;
+            /** @description Provider ID с happ-proxy.com; без него Happ не принимает hide-settings */
+            happ_provider_id: string;
+            /** @description Профиль маршрутизации Happ: ссылка happ://routing/onadd/… (добавить и включить), happ://routing/add/… или happ://routing/off; auto — панель собирает его сама из маршрутизации Clash-профиля (Настройки → Маршрутизация); уходит только в Happ заголовком routing */
+            happ_routing: string;
             /** Format: int64 */
             panel_port: number;
             public_host: string;
@@ -3029,13 +3664,17 @@ export interface components {
             sub_port: number;
             /** @description sub_port_busy — сохранённый порт занят на сервере, подписки пока идут через порт панели */
             sub_port_error?: string;
+            /** @description Куда идут сервисы (services: id → vpn, direct, block или node:<id>), какие приложения и сайты идут мимо VPN (direct) и свои DNS (dns). Каталог — GET /api/v1/settings/routes/catalog */
+            sub_routes: components["schemas"]["Routes"];
             /**
-             * @description Маршруты в Clash-приложениях: ru_direct — российские сайты и IP напрямую по геобазам mihomo, all — всё через VPN
+             * @description Маршруты в Clash-приложениях: ru_direct — российские сайты и IP напрямую по геобазам mihomo, all — всё через VPN, blocked — через VPN только заблокированное (списки privWL-clash), остальное напрямую
              * @enum {string}
              */
-            sub_routing: "ru_direct" | "all";
+            sub_routing: "ru_direct" | "all" | "blocked";
             /** @description Свои правила Clash: по строке TYPE,VALUE,TARGET[,no-resolve]; # — комментарий */
             sub_rules: string;
+            /** @description Свой профиль Clash (YAML) вместо встроенного для приложений на mihomo; пусто — встроенный. Серверы панель подставляет сама: в proxies и в группы с include-all-proxies или mikan: {nodes, types} */
+            sub_template: string;
             /** @description Название подписки в приложениях (заголовок profile-title); пусто — бренд. Переменные: {brand} — бренд, {name} — имя пользователя, {date} — дата окончания (ДД.ММ.ГГГГ, МСК), {days} — дней осталось, {used} — израсходовано, {left} — осталось трафика, {total} — всего; без срока или лимита — ∞ */
             sub_title: string;
             support_url: string;
@@ -3086,6 +3725,43 @@ export interface components {
             not_after: string;
             /** @description Свой сертификат публично доверенный для адреса панели */
             trusted?: boolean;
+        };
+        SubDocBody: {
+            /** @description Markdown: заголовки #, списки, **жирный**, *курсив*, код в обратных кавычках, [ссылки](https://…), картинки ![](https://…) */
+            body: string;
+            emoji: string;
+            /** @enum {string} */
+            platform: "ios" | "android" | "windows" | "macos" | "linux" | "";
+            published: boolean;
+            title: string;
+        };
+        SubDocView: {
+            /** @description Markdown */
+            body: string;
+            emoji: string;
+            /** Format: int64 */
+            id: number;
+            /** @description ios, android, windows, macos, linux; пусто — для всех */
+            platform: string;
+            /** @description Видна на странице подписки и в Mini App */
+            published: boolean;
+            title: string;
+            /** Format: int64 */
+            updated_at: number;
+        };
+        SubDocsOutputBody: {
+            items: components["schemas"]["SubDocView"][];
+        };
+        SubPageView: {
+            background?: components["schemas"]["PageAsset"];
+            /** @description Название бренда (settings.brand) */
+            brand: string;
+            /** @description Цвет бренда (settings.brand_accent); его же получают приложения с брендингом */
+            brand_accent: string;
+            config: components["schemas"]["Page"];
+            /** @description Страница по умолчанию — к ней ведёт «Сбросить» */
+            defaults: components["schemas"]["Page"];
+            logo?: components["schemas"]["PageAsset"];
         };
         System: {
             /** Format: double */
@@ -3397,6 +4073,11 @@ export interface components {
             /** Format: int64 */
             up: number;
         };
+        Tune: {
+            block_quic?: boolean;
+            real_ip?: boolean;
+            sniffer?: boolean;
+        };
         UpdateStatus: {
             /** @description RFC 3339 */
             at: string;
@@ -3422,8 +4103,12 @@ export interface components {
              */
             checked_at: number;
             current: string;
+            /** @description Куда поддержать проект без цели */
+            donate: string;
             /** @description Почему последняя проверка не удалась; no_release — релизов ещё нет */
             error: string;
+            /** @description На что проект собирает деньги: из подписанного индекса релизов; пусто, пока проверки не было */
+            goals: components["schemas"]["Goal"][];
             /** @description Как прошло последнее обновление на сервере */
             host?: components["schemas"]["HostStatus"];
             /** @description Последний релиз; пусто, пока проверки не было */
@@ -3443,6 +4128,8 @@ export interface components {
              * @description Когда нажали «Обновить»; 0 — заявки нет или сервер её уже взял
              */
             requested_at: number;
+            /** @description Показывать цели в карточке обновлений */
+            show_goals: boolean;
             /** @description Вышел newest, но с этой версии к нему не ведёт ни одно обновление */
             unreachable: boolean;
         };
@@ -3504,6 +4191,13 @@ export interface components {
             device_limit: number | null;
             /** Format: date-time */
             expires_at: string | null;
+            /**
+             * Format: int64
+             * @description Папка пользователя; null — вне папок
+             */
+            folder_id: number | null;
+            /** @description Скрыт из списка пользователей. Только прячет строку: подписка, оплата и ноды работают как у всех, счётчики обзора не меняются */
+            hidden: boolean;
             /** Format: int64 */
             id: number;
             /** @description Разрешённые подключения; пусто — все */
@@ -3523,6 +4217,11 @@ export interface components {
             reset_strategy: "none" | "month_start" | "period";
             /** Format: date-time */
             resets_at: string | null;
+            /**
+             * @description Откуда пользователь: admin — создан в панели или по ключу API, bot — куплен в боте, trial — пробный период бота, import — перенесён из другой панели. Заполняется при создании, не меняется
+             * @enum {string}
+             */
+            source: "admin" | "bot" | "trial" | "import";
             /** @enum {string} */
             state: "active" | "expiring" | "limited" | "expired" | "disabled";
             sub_url: string;
@@ -3612,6 +4311,41 @@ export interface components {
             source?: "register" | "import" | "";
             /** @description Последняя проверка выхода через WARP с ноды; нет — у ноды ещё нет настроенного WARP */
             status?: components["schemas"]["WarpCheck"];
+        };
+        XHTTPTuning: {
+            /**
+             * @description Режим XHTTP; пусто — по умолчанию
+             * @enum {string}
+             */
+            mode?: "" | "stream-one" | "stream-up" | "packet-up";
+            /** @description Наибольший запрос отправки (packet-up), байт: число или диапазон */
+            sc_max_each_post_bytes?: string;
+            /** @description Пауза между запросами отправки (packet-up), мс */
+            sc_min_posts_interval_ms?: string;
+            /** @description Размер куска отправки, байт: число или диапазон */
+            uplink_chunk_size?: string;
+            /** @enum {string} */
+            uplink_http_method?: "" | "POST" | "PUT" | "PATCH";
+            /** @description Размер паддинга, байт: число или диапазон «100-1000» */
+            x_padding_bytes?: string;
+            x_padding_header?: string;
+            x_padding_key?: string;
+            /** @enum {string} */
+            x_padding_method?: "" | "repeat-x" | "tokenish";
+            /** @description Паддинг в своём месте вместо Referer: нужен свежий Xray или mihomo 1.19.31+ у клиентов */
+            x_padding_obfs_mode?: boolean;
+            /** @enum {string} */
+            x_padding_placement?: "" | "queryInHeader" | "header" | "cookie" | "query";
+            /** @description Сколько раз переиспользовать соединение */
+            xmux_c_max_reuse_times?: string;
+            /** @description Запросов на соединение HTTP/2 */
+            xmux_h_max_request_times?: string;
+            /** @description Сколько секунд соединение живёт */
+            xmux_h_max_reusable_secs?: string;
+            /** @description Потоков на соединение: диапазон «16-32» */
+            xmux_max_concurrency?: string;
+            /** @description Соединений сразу; взаимоисключается с потоками */
+            xmux_max_connections?: string;
         };
     };
     responses: never;
@@ -4136,6 +4870,225 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TotpSetupOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-filters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FiltersView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-filters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchFiltersInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FiltersView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderView"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-folder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateFolderInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "order-folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderFoldersInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-folder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-folder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchFolderInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderView"];
                 };
             };
             /** @description Error */
@@ -5017,6 +5970,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpeedTestView"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "node-traffic": {
+        parameters: {
+            query?: {
+                range?: "24h" | "7d" | "30d";
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrafficOutputBody"];
                 };
             };
             /** @description Error */
@@ -6042,6 +7028,99 @@ export interface operations {
             };
         };
     };
+    "routes-catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoutesCatalogOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "routes-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoutesPreviewInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoutesPreviewOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "stats-nodes": {
+        parameters: {
+            query?: {
+                range?: "24h" | "7d" | "30d";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeSharesOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "stats-overview": {
         parameters: {
             query?: never;
@@ -6090,6 +7169,327 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TrafficOutputBody"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-sub-docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubDocsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-sub-doc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubDocBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubDocView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "order-sub-docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderSubDocsInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubDocsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-sub-doc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubDocBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubDocView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-sub-doc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-sub-page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubPageView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-sub-page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutSubPageInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubPageView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-sub-page-image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: "logo" | "background";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description PNG, JPEG или WebP */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    "Content-Type"?: string;
+                    "X-Content-Type-Options"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
+                    "image/webp": unknown;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "put-sub-page-image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: "logo" | "background";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutSubImageInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageAsset"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-sub-page-image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: "logo" | "background";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {
@@ -6692,6 +8092,12 @@ export interface operations {
             query?: {
                 state?: "all" | "active" | "expiring" | "limited" | "expired" | "disabled";
                 q?: string;
+                /** @description all — любая; none — вне папок; число — id папки */
+                folder?: string;
+                /** @description Откуда пользователь, см. source у пользователя */
+                source?: "all" | "admin" | "bot" | "trial" | "import";
+                /** @description show — вместе со скрытыми (по умолчанию: скрытие касается только списка в панели); hide — без скрытых; only — только скрытые */
+                hidden?: "hide" | "show" | "only";
                 limit?: number;
                 offset?: number;
             };
@@ -7062,6 +8468,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GrantView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "user-happ-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HappLinkOutputBody"];
                 };
             };
             /** @description Error */

@@ -128,6 +128,19 @@ func (m *Manager) Trusted() bool {
 	return false
 }
 
+// Public is the certificate the panel serves when clients trust it without a pin: the one
+// from Let's Encrypt, or the admin's own that is publicly trusted. nil otherwise.
+func (m *Manager) Public() *tls.Certificate {
+	if !m.Trusted() {
+		return nil
+	}
+	c, err := m.holder.Get(nil)
+	if err != nil || c.Leaf == nil {
+		return nil
+	}
+	return c
+}
+
 // Renew asks the background loop to try again now (e.g. after the admin freed port 80).
 func (m *Manager) Renew() {
 	select {

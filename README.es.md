@@ -12,7 +12,7 @@
 [![Versión](https://img.shields.io/github/v/release/Miroshka000/mikan?color=f07a2e&label=versión&style=flat-square)](https://github.com/Miroshka000/mikan/releases)
 [![Imagen](https://img.shields.io/badge/ghcr.io-miroshka000%2Fmikan-2b8c9e?style=flat-square&logo=docker&logoColor=white)](https://github.com/Miroshka000/mikan/pkgs/container/mikan)
 [![Licencia](https://img.shields.io/badge/licencia-GPL--3.0-2f9e6b?style=flat-square)](LICENSE)
-[![mihomo](https://img.shields.io/badge/núcleo-mihomo%201.19.31-9e8eff?style=flat-square)](https://github.com/MetaCubeX/mihomo)
+[![mihomo](https://img.shields.io/badge/núcleo-mihomo%201.19.32-9e8eff?style=flat-square)](https://github.com/MetaCubeX/mihomo)
 
 [English](README.md) · [Русский](README.ru.md) · [简体中文](README.zh-CN.md) · [فارسی](README.fa.md) · [Türkçe](README.tr.md) · **Español**
 
@@ -130,7 +130,7 @@ lo confirme.
 
 ## Protocolos
 
-Quince protocolos, cada uno un preset con las claves generadas por ti. La suscripción da a cada app solo lo que ejecuta:
+Diecisiete protocolos, cada uno un preset con las claves generadas por ti. La suscripción da a cada app solo lo que ejecuta:
 
 | Protocolo | Apps Clash<br><sub>núcleo mihomo</sub> | Apps Xray<br><sub>Happ, v2RayTun</sub> | Apps sing-box<br><sub>Hiddify, Karing</sub> |
 |---|:---:|:---:|:---:|
@@ -139,6 +139,8 @@ Quince protocolos, cada uno un preset con las claves generadas por ti. La suscri
 | VLESS · REALITY · gRPC | ✅ | ✅ | ✅ |
 | VLESS PQ (cifrado poscuántico) | ✅ | ✅ | — |
 | Trojan · REALITY | ✅ | ✅ | ✅ |
+| VLESS · TLS · XHTTP | ✅ | ✅ | — |
+| VLESS · TLS · Vision | ✅ | ✅ | ✅ |
 | Hysteria2 | ✅ | ✅ | ✅ |
 | TUIC v5 | ✅ | — | ✅ |
 | AnyTLS | ✅ | — | ✅ |

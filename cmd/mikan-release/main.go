@@ -168,7 +168,7 @@ func makeManifest(args []string) error {
 		}
 	}
 	m := release.Manifest{Version: *version, MinInstaller: *minInstaller, Published: time.Now().UTC().Truncate(time.Second), Image: *image, Digest: *digest,
-		Installer: map[string]release.Asset{}, Notes: release.Notes(log, *version)}
+		Installer: map[string]release.Asset{}, Notes: release.NotesFor(log, *version)}
 	for _, lang := range languages {
 		if m.Notes[lang] == "" {
 			return fmt.Errorf("%s has no %q notes for %s (want \"## %s\" with \"### en\" and \"### ru\")", *changelog, lang, *version, *version)

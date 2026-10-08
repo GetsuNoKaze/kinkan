@@ -426,6 +426,10 @@ func (m *Manager) prune(ctx context.Context, now time.Time) {
 		m.log.Error("prune traffic", "err", err)
 		return
 	}
+	// The nodes' traffic is a view of the users': failing it must not keep the rest.
+	if err := m.st.Q.PruneNodeTrafficHourly(ctx, now.Add(-hourlyKeep).Unix()/3600); err != nil {
+		m.log.Error("prune node traffic", "err", err)
+	}
 	if err := m.st.Q.PruneDevices(ctx, now.Add(-deviceKeep).Unix()); err != nil {
 		m.log.Error("prune devices", "err", err)
 		return

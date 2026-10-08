@@ -1,4 +1,5 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { UsersSearch } from "../admin/search";
 import { api, rawApi, unwrap, type Schemas, type User } from "./client";
 
 export const qk = {
@@ -32,8 +33,14 @@ export const qk = {
   promocodeRedemptions: ["promocodes", "redemptions"] as const,
   userGrants: (id: number) => ["users", "grants", id] as const,
   torrent: ["torrent"] as const,
+  filters: ["filters"] as const,
   torrentHits: (user: number) => ["torrent", "hits", user] as const,
   speedTests: (node: number) => ["speedtests", node] as const,
+  subPage: ["sub-page"] as const,
+  subDocs: ["sub-docs"] as const,
+  folders: ["folders"] as const,
+  nodeTraffic: (node: number, range: string) => ["node-traffic", node, range] as const,
+  nodeShares: (range: string) => ["node-shares", range] as const,
 };
 
 export const meQuery = {
@@ -43,7 +50,9 @@ export const meQuery = {
   retry: false,
 };
 
-type UsersFilter = { state: "all" | User["state"]; q: string };
+/** What the list is asked for: left out, a part of the filter is "any" (hidden: everyone, as
+ * the API has it; the Users page asks for "hide"). */
+type UsersFilter = Pick<UsersSearch, "state" | "q" | "folder" | "source"> & { hidden?: "hide" | "show" | "only" };
 
 /** The users page lists everyone it can (the API's cap); a card that shows a few asks for just those. */
 const USERS_MAX = 500;
@@ -52,7 +61,13 @@ export function useUsers(f: UsersFilter, o: { limit?: number; refetchInterval?: 
   const limit = o.limit ?? USERS_MAX;
   return useQuery({
     queryKey: [...qk.users, "list", f, limit],
-    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users", { params: { query: { state: f.state, q: f.q || undefined, limit } }, signal })),
+    queryFn: ({ signal }) =>
+      unwrap(
+        api.GET("/api/v1/users", {
+          params: { query: { state: f.state, q: f.q || undefined, folder: f.folder === undefined ? undefined : String(f.folder), source: f.source, hidden: f.hidden, limit } },
+          signal,
+        }),
+      ),
     placeholderData: keepPreviousData,
     refetchInterval: o.refetchInterval ?? 10_000,
   });
@@ -138,6 +153,11 @@ export function useTorrent() {
   return useQuery({ queryKey: qk.torrent, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/torrent", { signal })) });
 }
 
+/** The ingress and egress filters of the nodes. */
+export function useFilters() {
+  return useQuery({ queryKey: qk.filters, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/filters", { signal })) });
+}
+
 /** The torrent blocker's catches, newest first, a page at a time; user 0: everyone's. */
 export function useTorrentHits(user = 0, limit = 50) {
   return useInfiniteQuery({
@@ -173,6 +193,8 @@ export function useUserMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TRe
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: qk.users });
       void qc.invalidateQueries({ queryKey: qk.overview });
+      // A user moved in or out of a folder changes its count.
+      void qc.invalidateQueries({ queryKey: qk.folders });
     },
   });
 }
@@ -192,6 +214,52 @@ export const userActions = {
 
 /** One paid period: a month up to the billing day, or 30 days without one. */
 export const onePeriod = (u: Pick<User, "billing_day">): Schemas["ExtendInputBody"] => (u.billing_day != null ? { months: 1 } : { days: 30 });
+
+export function useFolders() {
+  return useQuery({ queryKey: qk.folders, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/folders", { signal })) });
+}
+
+/** A folder changes what the list shows and counts: the users' views are refreshed with the folders. */
+export function useFolderMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: qk.folders });
+      void qc.invalidateQueries({ queryKey: qk.users });
+    },
+  });
+}
+
+export const folderActions = {
+  create: (body: Schemas["CreateFolderInputBody"]) => unwrap(api.POST("/api/v1/folders", { body })),
+  update: ({ id, body }: { id: number; body: Schemas["PatchFolderInputBody"] }) => unwrap(api.PATCH("/api/v1/folders/{id}", { params: { path: { id } }, body })),
+  remove: (id: number) => unwrap(api.DELETE("/api/v1/folders/{id}", { params: { path: { id } } })),
+  order: (ids: number[]) => unwrap(api.PUT("/api/v1/folders/order", { body: { ids } })),
+};
+
+/** One node's traffic by the hour (24 h, 7 days) or by the day (30 days). */
+export function useNodeTraffic(id: number | undefined, range: "24h" | "7d" | "30d") {
+  return useQuery({
+    queryKey: qk.nodeTraffic(id ?? 0, range),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/nodes/{id}/traffic", { params: { path: { id: id! }, query: { range } }, signal })),
+    enabled: !!id,
+    // Another range of the same node keeps its chart while loading; another node never
+    // shows the previous one's.
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[1] === (id ?? 0) ? prev : undefined),
+    refetchInterval: 60_000,
+  });
+}
+
+/** What every node carried in a range, biggest first: the dashboard's share of each. */
+export function useNodeShares(range: "24h" | "7d" | "30d") {
+  return useQuery({
+    queryKey: qk.nodeShares(range),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/stats/nodes", { params: { query: { range } }, signal })),
+    placeholderData: keepPreviousData,
+    refetchInterval: 60_000,
+  });
+}
 
 export function usePools() {
   return useQuery({ queryKey: qk.pools, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/pools", { signal })) });
