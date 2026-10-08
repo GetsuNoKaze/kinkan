@@ -68,8 +68,8 @@
       "id": "vless-tls",
       "title": {"ru": "VLESS TLS на домене панели", "en": "VLESS TLS on the panel's domain"},
       "about": {
-        "ru": "Протокол VLESS с обычным TLS и настоящим сертификатом домена панели, без REALITY.",
-        "en": "VLESS with plain TLS and the panel domain's real certificate, without REALITY."
+        "ru": "Протокол VLESS с обычным TLS и настоящим сертификатом домена вашей панели, как у обычного сайта. Ещё один вариант подключения рядом с REALITY.",
+        "en": "VLESS with plain TLS and the real certificate of your panel domain, like any website. One more way to connect next to REALITY."
       },
       "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6qZ"
     },
@@ -104,8 +104,8 @@
       "id": "pay-demo",
       "title": {"ru": "Демо-режим оплаты", "en": "Payment demo mode"},
       "about": {
-        "ru": "Бот показывает тарифы, цены и кнопки оплаты без настоящей платёжки. Нужно, чтобы ЮKassa, Platega и другие одобрили заявку.",
-        "en": "The bot shows plans, prices and pay buttons without a real payment system. Needed for YooKassa, Platega and others to approve the application."
+        "ru": "Платёжные системы при подключении проверяют, как в боте устроены тарифы и оплата. Демо-режим показывает тарифы, цены и порядок оплаты заранее, а кнопка оплаты честно пишет, что оплата скоро заработает.",
+        "en": "Payment systems check how plans and payment work in the bot before they connect it. The demo mode shows the plans, prices and payment steps in advance, and the pay button says plainly that payment is coming soon."
       },
       "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6r3"
     },
