@@ -34,6 +34,7 @@ import (
 	"sync"
 	"time"
 
+	"go.yaml.in/yaml/v3"
 	"golang.org/x/net/proxy"
 )
 
@@ -235,8 +236,8 @@ func prepare() {
 // under devicePrefix, reachable on 12001… in devProtos order.
 func writeClient(token string, device map[string]any) {
 	var cfg map[string]any
-	if err := json.Unmarshal(fetchSub(token, "mihomo/1.19.31"), &cfg); err != nil {
-		log.Fatalf("clash subscription is not JSON/YAML: %v", err)
+	if err := yaml.Unmarshal(fetchSub(token, "mihomo/1.19.31"), &cfg); err != nil {
+		log.Fatalf("clash subscription is not YAML: %v", err)
 	}
 	cfg["allow-lan"] = true
 	cfg["bind-address"] = "*"
@@ -435,11 +436,11 @@ func devices() {
 	raw, _ := os.ReadFile("/work/token")
 	token := string(raw)
 	var shared, own map[string]any
-	if err := json.Unmarshal(fetchSub(token, "mihomo/1.19.31"), &shared); err != nil {
+	if err := yaml.Unmarshal(fetchSub(token, "mihomo/1.19.31"), &shared); err != nil {
 		log.Fatal(err)
 	}
 	_, body := fetchDevice(token, deviceHWID)
-	if err := json.Unmarshal(body, &own); err != nil {
+	if err := yaml.Unmarshal(body, &own); err != nil {
 		log.Fatalf("device profile: %v", err)
 	}
 	a, b := proxyField(shared, "VLESS Vision", "uuid"), proxyField(own, "VLESS Vision", "uuid")
@@ -515,7 +516,7 @@ func devicesCheck() {
 		}
 	}
 	resp, body := fetchDevice(string(token), "slice-extra-00000004")
-	if resp.Header.Get("X-Hwid-Max-Devices-Reached") != "true" || !bytes.Contains(body, []byte(`"port":1`)) {
+	if resp.Header.Get("X-Hwid-Max-Devices-Reached") != "true" || !bytes.Contains(body, []byte("port: 1\n")) {
 		log.Fatalf("a device over the limit gets the stub: %v %.200s", resp.Header, body)
 	}
 	log.Print("a device over the limit gets the stub")
