@@ -514,16 +514,21 @@ func (s *Syncer) pullCounters(ctx context.Context) {
 	if c.Idle && c.Epoch == epoch {
 		return // no traffic, nothing cut: only the live view above was of use
 	}
+	now := s.m.now()
+	// A stored batch is acknowledged once storeInterval has passed since it was stored.
+	// Until then the node keeps offering it and cuts nothing new, so what comes meanwhile
+	// adds up on the node and goes to PostgreSQL in one batch as soon as it is cut: at most
+	// about one interval late, nothing lost or counted twice. The node enforces the quotas
+	// itself, the batch it holds included.
+	ackDue := now.Sub(s.lastStored) >= s.m.storeInterval
 	if c.Epoch == epoch && c.Seq <= seq {
-		_ = s.node.Ack(ctx, c.Epoch, c.Seq)
+		if ackDue || s.lastStored.IsZero() {
+			_ = s.node.Ack(ctx, c.Epoch, c.Seq)
+		}
 		return
 	}
-	now := s.m.now()
-	if c.Epoch == epoch && !s.lastStored.IsZero() && now.Sub(s.lastStored) < s.m.storeInterval {
-		// Not acknowledged, so the node keeps this batch and offers it again, while what
-		// comes after it adds up in the next one: nothing is lost, there are just fewer
-		// transactions. The node enforces the quotas itself, the batch it holds included.
-		return
+	if c.Epoch == epoch && !s.lastStored.IsZero() && !ackDue {
+		return // a node that cut a batch anyway (an older one): it keeps it until then
 	}
 	c = s.vet(c, now)
 	names := make([]string, 0, len(c.Slots)+len(c.Pools))
@@ -591,8 +596,9 @@ func (s *Syncer) pullCounters(ctx context.Context) {
 	s.lastStored = now
 	s.m.noteBatch(s.id)
 	// An idle reply has no batch behind it: there is nothing for the node to drop, and it
-	// would answer the acknowledgement with stale_ack.
-	if !c.Idle {
+	// would answer the acknowledgement with stale_ack. A stored batch otherwise waits for
+	// its acknowledgement until storeInterval is over (above); with none, it goes at once.
+	if !c.Idle && s.m.storeInterval <= 0 {
 		if err := s.node.Ack(ctx, c.Epoch, c.Seq); err != nil {
 			s.log.Warn("ack counters", "err", err)
 		}

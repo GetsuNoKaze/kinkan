@@ -217,7 +217,7 @@ func TestOnlineViewOfADeadNodeIsForgotten(t *testing.T) {
 // A node is a server somebody else may run: it cannot take traffic off a user, nor
 // charge a user with more than its link can carry.
 func TestCountersFromANodeAreVetted(t *testing.T) {
-	s, fake, st, users, _ := setup(t)
+	s, fake, st, users, now := setup(t)
 	ctx := context.Background()
 	tariffs, _ := st.Q.ListTariffs(ctx)
 	mk := func(name string) (db.User, string) {
@@ -246,6 +246,8 @@ func TestCountersFromANodeAreVetted(t *testing.T) {
 			t.Fatalf("user %d: up %d down %d, want %d %d", c.u.ID, got.UsedUp, got.UsedDown, c.up, c.down)
 		}
 	}
+	*now = now.Add(storeEvery)
+	s.pullCounters(ctx) // offered again once the interval is over: acknowledged
 	if len(fake.acked) != 1 || fake.acked[0] != 1 {
 		t.Fatalf("the batch is still acknowledged, or the node offers it for ever: %v", fake.acked)
 	}
