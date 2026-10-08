@@ -2555,6 +2555,7 @@
             "type": "integer"
           },
           "cpu_percent": {
+            "description": "Загрузка процессора всего сервера, не только ноды",
             "format": "double",
             "type": "number"
           },
@@ -2604,6 +2605,11 @@
           "name": {
             "description": "Группа в подписке, например «🇳🇱 Нидерланды»; её флаг — префикс имён подключений",
             "type": "string"
+          },
+          "proc_cpu_percent": {
+            "description": "Доля процессора самого процесса ноды (вся машина = 100); нет у нод до 0.5.0.4",
+            "format": "double",
+            "type": "number"
           },
           "public_name": {
             "description": "Публичное имя для канала состояния; пустое — нода скрыта из списка",
@@ -5689,6 +5695,10 @@
             "format": "int64",
             "minimum": 0,
             "type": "integer"
+          },
+          "proc_cpu_percent": {
+            "format": "double",
+            "type": "number"
           },
           "proc_rss": {
             "format": "int64",
@@ -12049,18 +12059,21 @@
         "operationId": "list-users",
         "parameters": [
           {
+            "description": "attention — исчерпан лимит, истекают и истекли, в этом порядке: одним запросом для обзора",
             "explode": false,
             "in": "query",
             "name": "state",
             "schema": {
               "default": "all",
+              "description": "attention — исчерпан лимит, истекают и истекли, в этом порядке: одним запросом для обзора",
               "enum": [
                 "all",
                 "active",
                 "expiring",
                 "limited",
                 "expired",
-                "disabled"
+                "disabled",
+                "attention"
               ],
               "type": "string"
             }

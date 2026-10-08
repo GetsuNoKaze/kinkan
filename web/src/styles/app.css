@@ -142,6 +142,8 @@ html[data-theme="forest"] {
    * recomposited on every frame under every card, which is what heats a mid-range phone.
    */
   .atmo.calm .glow { animation: none; }
+  /* Nobody is looking (components/atmosphere.tsx): the glows hold where they are. */
+  .atmo.idle .glow { animation-play-state: paused; }
   .calm-glass .glass { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--surface); }
 
   .theme-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 96px), 1fr)); gap: 8px; }

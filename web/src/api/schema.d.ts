@@ -2650,7 +2650,10 @@ export interface components {
             checked_at?: string;
             /** Format: int64 */
             conns: number;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Загрузка процессора всего сервера, не только ноды
+             */
             cpu_percent: number;
             domain: string;
             enabled: boolean;
@@ -2673,6 +2676,11 @@ export interface components {
             mem_used: number;
             /** @description Группа в подписке, например «🇳🇱 Нидерланды»; её флаг — префикс имён подключений */
             name: string;
+            /**
+             * Format: double
+             * @description Доля процессора самого процесса ноды (вся машина = 100); нет у нод до 0.5.0.4
+             */
+            proc_cpu_percent?: number;
             /** @description Публичное имя для канала состояния; пустое — нода скрыта из списка */
             public_name: string;
             /** @enum {string} */
@@ -3774,6 +3782,8 @@ export interface components {
             net_rx_bps: number;
             /** Format: int64 */
             net_tx_bps: number;
+            /** Format: double */
+            proc_cpu_percent?: number;
             /** Format: int64 */
             proc_rss: number;
         };
@@ -8090,7 +8100,8 @@ export interface operations {
     "list-users": {
         parameters: {
             query?: {
-                state?: "all" | "active" | "expiring" | "limited" | "expired" | "disabled";
+                /** @description attention — исчерпан лимит, истекают и истекли, в этом порядке: одним запросом для обзора */
+                state?: "all" | "active" | "expiring" | "limited" | "expired" | "disabled" | "attention";
                 q?: string;
                 /** @description all — любая; none — вне папок; число — id папки */
                 folder?: string;
