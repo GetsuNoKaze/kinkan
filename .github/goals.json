@@ -1,0 +1,41 @@
+{
+  "donate": "https://web.tribute.tg/d/REA",
+  "items": [
+    {
+      "id": "device-addon",
+      "title": {"ru": "Докупка устройств в боте", "en": "Extra devices in the bot"},
+      "about": {
+        "ru": "Клиент сам докупает +1 устройство к подписке в боте и Mini App, без продления тарифа.",
+        "en": "A client buys one more device for the subscription in the bot and the Mini App, without renewing the plan."
+      },
+      "target": 150,
+      "raised": 0,
+      "currency": "USD",
+      "status": "open"
+    },
+    {
+      "id": "utm",
+      "title": {"ru": "Метки рекламных кампаний", "en": "Campaign tags"},
+      "about": {
+        "ru": "Ссылки на бота с меткой кампании и статистика: сколько людей пришло, купило и продлило по каждой рекламе.",
+        "en": "Bot links tagged by campaign, with stats: how many came, bought and renewed from each ad."
+      },
+      "target": 150,
+      "raised": 0,
+      "currency": "USD",
+      "status": "open"
+    },
+    {
+      "id": "grace-access",
+      "title": {"ru": "День на продление", "en": "A day to renew"},
+      "about": {
+        "ru": "После окончания подписки клиент ещё сутки может открыть Telegram через один сервер, чтобы продлить её в боте.",
+        "en": "After the subscription ends, a client keeps Telegram on one server for a day to renew it in the bot."
+      },
+      "target": 200,
+      "raised": 0,
+      "currency": "USD",
+      "status": "open"
+    }
+  ]
+}

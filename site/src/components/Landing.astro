@@ -159,7 +159,10 @@ const screens = Object.keys(t.screens.items) as Screen[];
 		<aside class="sponsor" aria-labelledby="sponsor-title">
 			<h3 id="sponsor-title">{t.cta.sponsorTitle}</h3>
 			<p>{t.cta.sponsorText}</p>
-			<a class="btn btn-accent" href={links.sponsor}>{t.cta.sponsor}</a>
+			<div class="actions">
+				<a class="btn btn-accent" href={links.sponsor}>{t.cta.sponsor}</a>
+				<a class="btn btn-ghost" href={docs('support/')}>{t.cta.goals}</a>
+			</div>
 		</aside>
 	</section>
 </div>
