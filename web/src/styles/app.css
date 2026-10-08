@@ -194,7 +194,10 @@ html[data-theme="forest"] {
   .sidebar { position: sticky; top: 16px; height: calc(100vh - 32px); height: calc(100dvh - 32px); border-radius: var(--r-xl); padding: 16px 12px; display: flex; flex-direction: column; gap: 20px; }
   .brand { display: flex; align-items: center; gap: 12px; padding: 4px 8px; }
   .brand-name { font: 600 20px/24px var(--font-display-stack); letter-spacing: -0.02em; }
-  .nav { display: flex; flex-direction: column; gap: 4px; }
+  /* On a short screen (a laptop at 125%) the sections scroll and the foot stays inside the
+     sidebar; the 2px padding keeps the focus ring of the items out of the clip. */
+  .nav { display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; padding: 2px; margin: -2px; }
+  .nav > *, .side-foot { flex-shrink: 0; }
   .nav-item { display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 12px; border-radius: var(--r-md); color: var(--ink-600); font-weight: 500; transition: background-color 0.2s, color 0.2s; text-align: left; width: 100%; }
   .nav-item:hover { background: var(--surface-soft); color: var(--ink-900); }
   .nav-item.active { background: var(--raised); color: var(--ink-900); box-shadow: var(--shadow-sm); }
