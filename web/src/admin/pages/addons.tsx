@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Bot, ChevronRight, ListFilter, ShieldBan, Wallet, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Bot, ChevronRight, ListFilter, ShieldBan, Wallet, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { api, unwrap } from "../../api/client";
 import { qk, useFilters, useTorrent } from "../../api/hooks";
+import { QueryBoundary } from "../../components/query";
 import { PageHeader, Pill, Skeleton } from "../../components/ui";
 import { t } from "../../i18n";
 import { addonName, useAddons } from "./payment-addons";
@@ -72,24 +73,26 @@ function FiltersTile() {
 // install and set them up, which stays in Payments.
 function PaymentTiles() {
   const q = useAddons();
-  if (!q.data) return <Skeleton style={{ height: 72, borderRadius: 20 }} />;
-  const d = q.data;
   return (
-    <div className="addon-grid">
-      {d.installed.map((a, i) => (
-        <Tile
-          key={a.id}
-          to="/payments"
-          search={{ tab: "methods" }}
-          icon={Wallet}
-          title={addonName(a.id, d)}
-          sub={t("addons.paymentSub")}
-          state={a.status === "failed" ? <Pill tone="bad">{t("addons.stateFailed")}</Pill> : a.enabled ? <Pill tone="ok">{t("addons.on")}</Pill> : <Pill tone="off">{t("addons.off")}</Pill>}
-          i={4 + i}
-        />
-      ))}
-      <Tile to="/payments" search={{ tab: "methods" }} icon={Wallet} title={t("addons.paymentAdd")} sub={t("addons.paymentAddSub", { n: d.catalog.length })} state={null} i={4 + d.installed.length} />
-    </div>
+    <QueryBoundary query={q} pending={<Skeleton style={{ height: 72, borderRadius: 20 }} />} wrap={(state) => <section className="card glass">{state}</section>}>
+      {(d) => (
+        <div className="addon-grid">
+          {d.installed.map((a, i) => (
+            <Tile
+              key={a.id}
+              to="/payments"
+              search={{ tab: "methods" }}
+              icon={Wallet}
+              title={addonName(a.id, d)}
+              sub={t("addons.paymentSub")}
+              state={a.status === "failed" ? <Pill tone="bad">{t("addons.stateFailed")}</Pill> : a.enabled ? <Pill tone="ok">{t("addons.on")}</Pill> : <Pill tone="off">{t("addons.off")}</Pill>}
+              i={4 + i}
+            />
+          ))}
+          <Tile to="/payments" search={{ tab: "methods" }} icon={Wallet} title={t("addons.paymentAdd")} sub={t("addons.paymentAddSub", { n: d.catalog.length })} state={null} i={4 + d.installed.length} />
+        </div>
+      )}
+    </QueryBoundary>
   );
 }
 
@@ -109,6 +112,7 @@ export function TorrentPage() {
 export function BackToAddons() {
   return (
     <Link to="/addons" className="btn btn-glass">
+      <ArrowLeft size={16} aria-hidden />
       {t("addons.back")}
     </Link>
   );

@@ -83,17 +83,19 @@ func (h *handlers) routesPreview(ctx context.Context, in *routesPreviewInput) (*
 	}
 	req := subs.PreviewRequest{Routing: subs.ParseRouting(in.Body.SubRouting), Routes: in.Body.SubRoutes, Template: in.Body.SubTemplate, Starter: in.Body.Starter, Rules: in.Body.SubRules}
 	if in.Body.GroupMain != nil || in.Body.GroupAuto != nil {
-		g := subs.Groups{}
+		// The saved names with the given ones over them, checked as a save would check them.
+		g, err := h.groups(ctx)
+		if err != nil {
+			return nil, err
+		}
 		if in.Body.GroupMain != nil {
 			g.Main = strings.TrimSpace(*in.Body.GroupMain)
 		}
 		if in.Body.GroupAuto != nil {
 			g.Auto = strings.TrimSpace(*in.Body.GroupAuto)
 		}
-		for field, name := range map[string]string{"sub_group_main": g.Main, "sub_group_auto": g.Auto} {
-			if name != "" && subs.ValidName(name) != nil {
-				return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body." + field, Message: subs.ValidName(name).Error()})
-			}
+		if bad := h.checkGroups(ctx, g); len(bad) > 0 {
+			return nil, huma.Error422UnprocessableEntity("validation", bad...)
 		}
 		req.Groups = &g
 	}
