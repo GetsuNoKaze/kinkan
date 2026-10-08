@@ -6,8 +6,9 @@
 //	devices:        a device that sends its id gets keys of its own; the client gets them too
 //	devices-check:  the device's keys work on both nodes and count to the user; unbound, they
 //	                stop at once; extra devices get the stub
-//	autotune:       with the node's 443/tcp dropped for the client (the blocker container), keep
-//	                checking every proxy like a url-test group until the panel moves XHTTP
+//	autotune:       with the node's 443/tcp dropped for two clients on two networks (the blocker
+//	                containers), keep checking every proxy like a url-test group until the
+//	                panel moves XHTTP
 //	autotune-check: the client on the new profile gets through XHTTP again
 //	pools:          VLESS Vision counts to a 4 MiB traffic pool: its bytes go there, not to the
 //	                main quota; past the limit the node cuts it while XHTTP keeps going
@@ -320,8 +321,15 @@ func fetchSubVia(token, ua, socks string) []byte {
 	return raw
 }
 
-func download(port int, n int64) (int64, error) {
-	d, _ := proxy.SOCKS5("tcp", net.JoinHostPort("client", strconv.Itoa(port)), nil, &net.Dialer{Timeout: 10 * time.Second})
+// clients are the mihomo containers of one subscription: client on the default network,
+// client2 on isp2 (the autotune phase alone).
+var clients = []string{"client", "client2"}
+
+func download(port int, n int64) (int64, error) { return downloadVia("client", port, n) }
+
+// downloadVia pulls n bytes from the target through a client's mixed port.
+func downloadVia(host string, port int, n int64) (int64, error) {
+	d, _ := proxy.SOCKS5("tcp", net.JoinHostPort(host, strconv.Itoa(port)), nil, &net.Dialer{Timeout: 10 * time.Second})
 	c, err := d.Dial("tcp", "target:9000")
 	if err != nil {
 		return 0, err
@@ -529,29 +537,34 @@ func devicesCheck() {
 // xhttpPort is the client's mixed port of the local VLESS XHTTP (protos[1]).
 const xhttpPort = 11002
 
-// autotune: the blocker container drops the client's packets to the node's 443/tcp, where
-// the local XHTTP listens, like an ISP's DPI. The client keeps checking every local proxy
-// the way a Clash url-test group does; the panel must move XHTTP on its own. The phase
-// then writes the new profile for the client.
+// autotune: the blocker containers drop the packets of two clients, each on a network of
+// its own, to the node's 443/tcp, where the local XHTTP listens, like the DPI of two ISPs:
+// one network alone does not move a port (GitHub issue #67). Both clients keep checking
+// every local proxy the way a Clash url-test group does; the panel must move XHTTP on its
+// own. The phase then writes the new profile for the client.
 func autotune() {
 	p := login()
 	p.call("PATCH", "/api/v1/settings", map[string]any{"auto_port": true}, nil)
 	raw, _ := os.ReadFile("/work/token")
 	token := string(raw)
-	// The client takes its profile from its own address: now the detector trusts it.
-	fetchSubVia(token, "mihomo/1.19.31", net.JoinHostPort("client", strconv.Itoa(directPort)))
-	if _, err := download(xhttpPort, 64<<10); err == nil {
-		log.Fatal("the blocker did not cut XHTTP off")
+	// Each client takes its profile from its own address: now the detector trusts it.
+	for _, host := range clients {
+		fetchSubVia(token, "mihomo/1.19.31", net.JoinHostPort(host, strconv.Itoa(directPort)))
+		if _, err := downloadVia(host, xhttpPort, 64<<10); err == nil {
+			log.Fatalf("the blocker did not cut XHTTP off for %s", host)
+		}
 	}
 	start := time.Now()
 	for time.Since(start) < 150*time.Second {
 		var wg sync.WaitGroup
-		for i := range localProtos {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				_, _ = download(11001+i, 16<<10)
-			}()
+		for _, host := range clients {
+			for i := range localProtos {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					_, _ = downloadVia(host, 11001+i, 16<<10)
+				}()
+			}
 		}
 		wg.Wait()
 		var ins []struct {
