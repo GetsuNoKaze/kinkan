@@ -139,6 +139,43 @@ func TestIngress(t *testing.T) {
 	}
 }
 
+// The networks become ranges that do not overlap: nested, overlapping and touching
+// networks, IPv4 beside IPv6, the edges of each range.
+func TestIngressRanges(t *testing.T) {
+	r := NewRegistry("e", 0, time.Minute, time.Now)
+	r.SetIngress(&nodeapi.Filters{Ingress: nodeapi.Ingress{Allow: true, Networks: []string{
+		"10.0.0.0/8", "10.1.0.0/16", // nested
+		"192.0.2.0/25", "192.0.2.64/26", "192.0.2.128/25", // overlapping, touching
+		"198.51.100.7",
+		"::ffff:203.0.113.0/120", // IPv4 written as IPv6
+		"2001:db8::/32",
+		"0.0.0.0/32",
+		"255.255.255.255",
+		"ffff:ffff:ffff:ffff:ffff:ffff:ffff:fff0/124",
+	}}})
+	for addr, want := range map[string]bool{
+		"10.0.0.0": true, "10.255.255.255": true, "9.255.255.255": false, "11.0.0.0": false, "10.1.2.3": true,
+		"192.0.2.0": true, "192.0.2.127": true, "192.0.2.128": true, "192.0.2.255": true, "192.0.3.0": false, "192.0.1.255": false,
+		"198.51.100.7": true, "198.51.100.6": false, "198.51.100.8": false,
+		"203.0.113.9": true, "::ffff:203.0.113.9": true, "203.0.114.0": false,
+		"2001:db8::1": true, "2001:db8:ffff:ffff:ffff:ffff:ffff:ffff": true, "2001:db9::": false, "2001:db7:ffff::": false,
+		"::": false, "::a00:1": false, // IPv6, not 10.0.0.1
+		"0.0.0.0": true, "0.0.0.1": false, "255.255.255.255": true, "255.255.255.254": false,
+		"ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff": true, "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffef": false,
+	} {
+		if got := r.admitFrom(mustAddr(addr)); got != want {
+			t.Errorf("%s: admitted %v, want %v", addr, got, want)
+		}
+	}
+	if in := r.ingress.Load(); len(in.ranges) != 9 {
+		t.Errorf("ranges: %v", in.ranges)
+	}
+	r.SetIngress(&nodeapi.Filters{Ingress: nodeapi.Ingress{Networks: []string{"10.0.0.0/8"}}})
+	if r.admitFrom(mustAddr("10.2.3.4")) || !r.admitFrom(mustAddr("11.2.3.4")) || !r.admitFrom(netip.Addr{}) {
+		t.Fatal("the deny list")
+	}
+}
+
 // The ingress filter turns a connection away before its user is looked at; another node
 // of the panel relaying its users is never turned away.
 func TestIngressInTunnel(t *testing.T) {
