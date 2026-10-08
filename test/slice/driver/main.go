@@ -294,6 +294,11 @@ func waitNode(p *panel, want int) {
 	log.Fatal("node did not come up with healthy listeners")
 }
 
+// storeSettle is how long a phase waits before it reads a baseline: the panel stores a
+// node's traffic every 10 s (nodesync.storeEvery), and a baseline read at once would count
+// the tail of the previous phase as this one's.
+const storeSettle = 12 * time.Second
+
 // directPort is the client's mixed port without a proxy behind it.
 const directPort = 11000
 
@@ -473,6 +478,7 @@ func devicesCheck() {
 	raw, _ := os.ReadFile("/work/user")
 	id := string(raw)
 	var before, after user
+	time.Sleep(storeSettle)
 	p.call("GET", "/api/v1/users/"+id, nil, &before)
 	const each = 4 * mib
 	for i, pr := range devProtos {
@@ -739,6 +745,7 @@ func cascade() {
 	log.Printf("cascade: the target sees node2 %s", node2IP)
 
 	var before, after user
+	time.Sleep(storeSettle)
 	p.call("GET", "/api/v1/users/"+strconv.FormatInt(uid, 10), nil, &before)
 	const each = 8 * mib
 	if _, err := download(port, each); err != nil {
@@ -843,8 +850,8 @@ func pools() {
 		}
 		return m, pl
 	}
-	// The node learns the pool with its next state; wait until Vision counts there.
-	time.Sleep(3 * time.Second)
+	// The node learns the pool with its next state, and the panel stores what came before.
+	time.Sleep(storeSettle)
 	main0, pool0 := usage()
 	if _, err := download(visionPort, 2*mib); err != nil {
 		log.Fatalf("pools: vision download: %v", err)

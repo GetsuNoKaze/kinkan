@@ -371,3 +371,61 @@ func TestRecordDevicesDoesNotPrune(t *testing.T) {
 		t.Fatalf("devices: %+v", devices)
 	}
 }
+
+// Online users and their addresses are written every touchOnline, not every upkeep: in
+// between there is nothing to write and no transaction; a new address goes in at once.
+func TestRecordDevicesWritesEveryFewMinutes(t *testing.T) {
+	s, fake, st, users, now := setup(t)
+	ctx := context.Background()
+	tariffs, _ := st.Q.ListTariffs(ctx)
+	u, _ := users.Create(ctx, domain.CreateInput{Name: "a", TariffID: tariffs[1].ID})
+	slot, _ := st.Q.GetSlot(ctx, u.SlotID.Int64)
+	online := func(ips ...string) {
+		fake.batch = nodeapi.Counters{Epoch: "e", Seq: 1, Idle: true, Online: map[string]nodeapi.Online{slot.Name: {IPs: ips}}}
+		s.pullCounters(ctx)
+	}
+	seen := func() (onlineAt int64, lastSeen map[string]int64) {
+		t.Helper()
+		got, err := st.Q.GetUser(ctx, u.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		devices, err := st.Q.ListUserDevices(ctx, u.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lastSeen = map[string]int64{}
+		for _, d := range devices {
+			lastSeen[d.Ip] = d.LastSeen
+		}
+		return got.OnlineAt.Int64, lastSeen
+	}
+	record := func() {
+		t.Helper()
+		if err := s.m.recordDevices(ctx, *now); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	online("203.0.113.9")
+	record()
+	start := now.Unix()
+	if at, ls := seen(); at != start || ls["203.0.113.9"] != start {
+		t.Fatalf("first upkeep: online_at %d, devices %v", at, ls)
+	}
+	*now = now.Add(30 * time.Second)
+	record()
+	if at, ls := seen(); at != start || ls["203.0.113.9"] != start {
+		t.Fatalf("half a minute later nothing is rewritten: online_at %d, devices %v", at, ls)
+	}
+	online("203.0.113.9", "198.51.100.4")
+	record()
+	if _, ls := seen(); ls["198.51.100.4"] != now.Unix() || ls["203.0.113.9"] != start {
+		t.Fatalf("a new address goes in at once, the known one waits: %v", ls)
+	}
+	*now = now.Add(touchOnline)
+	record()
+	if at, ls := seen(); at != now.Unix() || ls["203.0.113.9"] != now.Unix() {
+		t.Fatalf("after %s both are written again: online_at %d, devices %v", touchOnline, at, ls)
+	}
+}

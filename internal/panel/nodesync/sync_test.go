@@ -112,6 +112,59 @@ func TestCountersAppliedOnce(t *testing.T) {
 	}
 }
 
+// Batches go to PostgreSQL every storeEvery, not every pull: one pulled sooner is left
+// unacknowledged, so the node keeps it and offers it again; nothing is lost, nothing is
+// counted twice. A new epoch is stored at once.
+func TestCountersStoredEveryInterval(t *testing.T) {
+	s, node, st, users, now := setup(t)
+	ctx := context.Background()
+	tariffs, _ := st.Q.ListTariffs(ctx)
+	u, err := users.Create(ctx, domain.CreateInput{Name: "a", TariffID: tariffs[1].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	slot, _ := st.Q.GetSlot(ctx, u.SlotID.Int64)
+	used := func() int64 {
+		t.Helper()
+		got, err := st.Q.GetUser(ctx, u.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got.UsedDown
+	}
+	batch := func(epoch string, seq, down int64) {
+		node.batch = nodeapi.Counters{Epoch: epoch, Seq: seq, Slots: map[string]nodeapi.Traffic{slot.Name: {Down: down}}}
+	}
+
+	batch("e1", 1, 100)
+	s.pullCounters(ctx) // the first batch is stored at once
+	if used() != 100 || !slices.Equal(node.acked, []int64{1}) {
+		t.Fatalf("first batch: used %d, acks %v", used(), node.acked)
+	}
+	batch("e1", 2, 50)
+	*now = now.Add(2 * time.Second)
+	s.pullCounters(ctx)
+	if used() != 100 || len(node.acked) != 1 {
+		t.Fatalf("a batch within %s must wait unacknowledged: used %d, acks %v", storeEvery, used(), node.acked)
+	}
+	*now = now.Add(storeEvery)
+	s.pullCounters(ctx) // the node offers the same batch again: now it is stored
+	if used() != 150 || !slices.Equal(node.acked, []int64{1, 2}) {
+		t.Fatalf("held batch: used %d, acks %v", used(), node.acked)
+	}
+	batch("e2", 1, 7)
+	*now = now.Add(time.Second)
+	s.pullCounters(ctx) // a new epoch does not wait
+	if used() != 157 || !slices.Equal(node.acked, []int64{1, 2, 1}) {
+		t.Fatalf("new epoch: used %d, acks %v", used(), node.acked)
+	}
+	// The position the loop keeps is what PostgreSQL holds.
+	epoch, seq, err := s.readCountersPos(ctx)
+	if err != nil || epoch != "e2" || seq != 1 || s.pos != (counterPos{epoch: "e2", seq: 1}) {
+		t.Fatalf("stored position %q/%d (%v), kept %+v", epoch, seq, err, s.pos)
+	}
+}
+
 func TestPolicies(t *testing.T) {
 	s, _, st, users, now := setup(t)
 	ctx := context.Background()

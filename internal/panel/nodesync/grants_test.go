@@ -16,6 +16,7 @@ import (
 // after a grant and the node's quota grows by it, and the period reset keeps grants.
 func TestTrafficGrantsOnThePanel(t *testing.T) {
 	s, node, st, users, _ := setup(t)
+	s.m.storeInterval = 0 // batch after batch, each stored
 	ctx := context.Background()
 	q := st.Q
 	pool, err := q.CreateTrafficPool(ctx, db.CreateTrafficPoolParams{Name: "WL", CreatedAt: 1})
