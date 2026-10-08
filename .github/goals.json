@@ -8,7 +8,7 @@
         "ru": "Перенос панели на новый сервер одной командой: клиенты, тарифы, ноды и настройки переезжают, ссылки подписок продолжают работать.",
         "en": "Move the panel to a new server with one command: clients, plans, nodes and settings come along, subscription links keep working."
       },
-      "target": 100, "raised": 0, "currency": "USD", "status": "open"
+      "target": 100, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6qS"
     },
     {
       "id": "external-subs",
@@ -17,7 +17,7 @@
         "ru": "Добавить чужую подписку по ссылке: панель сама подтягивает её серверы, обновляет их и раздаёт клиентам под вашим названием. Для перепродажи.",
         "en": "Add someone else's subscription by link: the panel pulls its servers, keeps them updated and hands them to your clients under your name. For resellers."
       },
-      "target": 100, "raised": 0, "currency": "USD", "status": "open"
+      "target": 100, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6qT"
     },
     {
       "id": "admin-bot",
@@ -26,7 +26,7 @@
         "ru": "Команда /admin в боте: клиенты, подписки, устройства и ноды прямо из Telegram, без входа в панель.",
         "en": "An /admin command in the bot: clients, subscriptions, devices and nodes right from Telegram, without opening the panel."
       },
-      "target": 200, "raised": 0, "currency": "USD", "status": "open"
+      "target": 200, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6qU"
     },
     {
       "id": "device-addon",
@@ -35,7 +35,7 @@
         "ru": "Клиент сам докупает +1 устройство к подписке в боте и Mini App, без продления тарифа.",
         "en": "A client buys one more device for the subscription in the bot and the Mini App, without renewing the plan."
       },
-      "target": 50, "raised": 0, "currency": "USD", "status": "open"
+      "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6qV"
     },
     {
       "id": "utm",
@@ -44,7 +44,7 @@
         "ru": "Ссылки на бота с меткой кампании и статистика: сколько людей пришло, купило и продлило по каждой рекламе.",
         "en": "Bot links tagged by campaign, with stats: how many came, bought and renewed from each ad."
       },
-      "target": 50, "raised": 0, "currency": "USD", "status": "open"
+      "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6qW"
     },
     {
       "id": "grace-access",
@@ -53,7 +53,7 @@
         "ru": "После окончания подписки клиент ещё сутки может открыть Telegram через один сервер, чтобы продлить её в боте.",
         "en": "After the subscription ends, a client keeps Telegram on one server for a day to renew it in the bot."
       },
-      "target": 50, "raised": 0, "currency": "USD", "status": "open"
+      "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6qX"
     },
     {
       "id": "sub-domain",
@@ -62,7 +62,7 @@
         "ru": "Отдельный домен или поддомен для ссылок подписки, отдельно от панели и серверов. Ссылки не меняются при переезде панели.",
         "en": "A separate domain or subdomain for subscription links, apart from the panel and the servers. Links stay the same when the panel moves."
       },
-      "target": 50, "raised": 0, "currency": "USD", "status": "open"
+      "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6qY"
     },
     {
       "id": "vless-tls",
@@ -71,7 +71,7 @@
         "ru": "Протокол VLESS с обычным TLS и настоящим сертификатом домена панели, без REALITY.",
         "en": "VLESS with plain TLS and the panel domain's real certificate, without REALITY."
       },
-      "target": 50, "raised": 0, "currency": "USD", "status": "open"
+      "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6qZ"
     },
     {
       "id": "node-clients",
@@ -80,7 +80,7 @@
         "ru": "Кто подключается через ноду, когда был последний раз и сколько трафика. И наоборот: в карточке клиента его ноды и трафик на каждой.",
         "en": "Who connects through a node, when they were last seen and how much traffic. And the other way round: a client's nodes and traffic on each."
       },
-      "target": 50, "raised": 0, "currency": "USD", "status": "open"
+      "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6r1"
     },
     {
       "id": "inbound-copy",
@@ -89,7 +89,7 @@
         "ru": "Скопировать настроенный протокол на ту же или другую ноду и поменять только порт или SNI, не настраивая всё заново.",
         "en": "Copy a set-up protocol to the same or another node and change only the port or SNI, without setting it all up again."
       },
-      "target": 50, "raised": 0, "currency": "USD", "status": "open"
+      "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6r0"
     },
     {
       "id": "inbound-order",
@@ -98,7 +98,7 @@
         "ru": "Одно окно со всеми подключениями, которые получают клиенты, и их порядок перетаскиванием. Например, сгруппировать по стране выхода.",
         "en": "One screen with every connection clients get, ordered by dragging. For example, grouped by exit country."
       },
-      "target": 50, "raised": 0, "currency": "USD", "status": "open"
+      "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6r2"
     },
     {
       "id": "pay-demo",
@@ -107,7 +107,7 @@
         "ru": "Бот показывает тарифы, цены и кнопки оплаты без настоящей платёжки. Нужно, чтобы ЮKassa, Platega и другие одобрили заявку.",
         "en": "The bot shows plans, prices and pay buttons without a real payment system. Needed for YooKassa, Platega and others to approve the application."
       },
-      "target": 50, "raised": 0, "currency": "USD", "status": "open"
+      "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6r3"
     },
     {
       "id": "ai-key",
@@ -116,7 +116,7 @@
         "ru": "Отдельный уровень доступа к API, при котором ИИ не может удалить или сломать важное, и MCP-сервер для подключения к ChatGPT и другим агентам.",
         "en": "A separate API access level that keeps an AI from deleting or breaking anything important, and an MCP server to connect ChatGPT and other agents."
       },
-      "target": 50, "raised": 0, "currency": "USD", "status": "open"
+      "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6r4"
     }
   ]
 }
