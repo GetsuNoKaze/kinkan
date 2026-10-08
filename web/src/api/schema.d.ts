@@ -2313,6 +2313,23 @@ export interface components {
              */
             users: number;
         };
+        Goal: {
+            about?: {
+                [key: string]: string;
+            };
+            currency: string;
+            id: string;
+            /** Format: int64 */
+            raised: number;
+            status: string;
+            /** Format: int64 */
+            target: number;
+            title: {
+                [key: string]: string;
+            };
+            url?: string;
+            version?: string;
+        };
         GrantInputBody: {
             /**
              * Format: int64
@@ -3115,6 +3132,7 @@ export interface components {
             /** @enum {string} */
             channel?: "stable" | "beta";
             nodes_follow?: boolean;
+            show_goals?: boolean;
         };
         PatchUserInputBody: {
             /**
@@ -4084,8 +4102,12 @@ export interface components {
              */
             checked_at: number;
             current: string;
+            /** @description Куда поддержать проект без цели */
+            donate: string;
             /** @description Почему последняя проверка не удалась; no_release — релизов ещё нет */
             error: string;
+            /** @description На что проект собирает деньги: из подписанного индекса релизов; пусто, пока проверки не было */
+            goals: components["schemas"]["Goal"][];
             /** @description Как прошло последнее обновление на сервере */
             host?: components["schemas"]["HostStatus"];
             /** @description Последний релиз; пусто, пока проверки не было */
@@ -4105,6 +4127,8 @@ export interface components {
              * @description Когда нажали «Обновить»; 0 — заявки нет или сервер её уже взял
              */
             requested_at: number;
+            /** @description Показывать цели в карточке обновлений */
+            show_goals: boolean;
             /** @description Вышел newest, но с этой версии к нему не ведёт ни одно обновление */
             unreachable: boolean;
         };

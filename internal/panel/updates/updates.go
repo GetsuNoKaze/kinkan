@@ -49,6 +49,8 @@ type Found struct {
 	// Fallback says why the release index was not used, when the answer is GitHub's latest
 	// release instead; "" when it came from the index.
 	Fallback string
+	// Goals are the index's (none when it fell back).
+	Goals release.Goals
 }
 
 // Source finds the release for a query, checked.
@@ -131,7 +133,7 @@ func fetch(indexURL, latestURL string, pub ed25519.PublicKey, client *http.Clien
 			return Found{}, fmt.Errorf("release index: %w", err)
 		}
 		c := release.Choose(ix.Releases, q.Current, q.Channel == release.Beta)
-		var f Found
+		f := Found{Goals: ix.Goals}
 		e := c.Target
 		switch {
 		case c.Newest.Version == "":

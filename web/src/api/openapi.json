@@ -1601,6 +1601,55 @@
         ],
         "type": "object"
       },
+      "Goal": {
+        "additionalProperties": false,
+        "properties": {
+          "about": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "raised": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "target": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "url": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "target",
+          "raised",
+          "currency",
+          "status"
+        ],
+        "type": "object"
+      },
       "GrantInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -3867,6 +3916,9 @@
             "type": "string"
           },
           "nodes_follow": {
+            "type": "boolean"
+          },
+          "show_goals": {
             "type": "boolean"
           }
         },
@@ -6466,9 +6518,20 @@
           "current": {
             "type": "string"
           },
+          "donate": {
+            "description": "Куда поддержать проект без цели",
+            "type": "string"
+          },
           "error": {
             "description": "Почему последняя проверка не удалась; no_release — релизов ещё нет",
             "type": "string"
+          },
+          "goals": {
+            "description": "На что проект собирает деньги: из подписанного индекса релизов; пусто, пока проверки не было",
+            "items": {
+              "$ref": "#/components/schemas/Goal"
+            },
+            "type": "array"
           },
           "host": {
             "$ref": "#/components/schemas/HostStatus",
@@ -6502,6 +6565,10 @@
             "format": "int64",
             "type": "integer"
           },
+          "show_goals": {
+            "description": "Показывать цели в карточке обновлений",
+            "type": "boolean"
+          },
           "unreachable": {
             "description": "Вышел newest, но с этой версии к нему не ведёт ни одно обновление",
             "type": "boolean"
@@ -6520,7 +6587,10 @@
           "newest",
           "unreachable",
           "requested_at",
-          "nodes_follow"
+          "nodes_follow",
+          "goals",
+          "donate",
+          "show_goals"
         ],
         "type": "object"
       },
