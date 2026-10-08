@@ -127,7 +127,7 @@ Go 和 PostgreSQL，三个小容器。在带客户端的实际运行服务器上
 
 ## 协议
 
-十五种协议，每种都是预设，密钥自动生成。订阅只给每个应用下发它能运行的协议：
+十七种协议，每种都是预设，密钥自动生成。订阅只给每个应用下发它能运行的协议：
 
 | 协议 | Clash 类应用<br><sub>mihomo 内核</sub> | Xray 类应用<br><sub>Happ, v2RayTun</sub> | sing-box 类应用<br><sub>Hiddify, Karing</sub> |
 |---|:---:|:---:|:---:|
@@ -136,6 +136,8 @@ Go 和 PostgreSQL，三个小容器。在带客户端的实际运行服务器上
 | VLESS · REALITY · gRPC | ✅ | ✅ | ✅ |
 | VLESS PQ（后量子加密） | ✅ | ✅ | — |
 | Trojan · REALITY | ✅ | ✅ | ✅ |
+| VLESS · TLS · XHTTP | ✅ | ✅ | — |
+| VLESS · TLS · Vision | ✅ | ✅ | ✅ |
 | Hysteria2 | ✅ | ✅ | ✅ |
 | TUIC v5 | ✅ | — | ✅ |
 | AnyTLS | ✅ | — | ✅ |

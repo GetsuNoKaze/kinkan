@@ -130,7 +130,7 @@ lo confirme.
 
 ## Protocolos
 
-Quince protocolos, cada uno un preset con las claves generadas por ti. La suscripción da a cada app solo lo que ejecuta:
+Diecisiete protocolos, cada uno un preset con las claves generadas por ti. La suscripción da a cada app solo lo que ejecuta:
 
 | Protocolo | Apps Clash<br><sub>núcleo mihomo</sub> | Apps Xray<br><sub>Happ, v2RayTun</sub> | Apps sing-box<br><sub>Hiddify, Karing</sub> |
 |---|:---:|:---:|:---:|
@@ -139,6 +139,8 @@ Quince protocolos, cada uno un preset con las claves generadas por ti. La suscri
 | VLESS · REALITY · gRPC | ✅ | ✅ | ✅ |
 | VLESS PQ (cifrado poscuántico) | ✅ | ✅ | — |
 | Trojan · REALITY | ✅ | ✅ | ✅ |
+| VLESS · TLS · XHTTP | ✅ | ✅ | — |
+| VLESS · TLS · Vision | ✅ | ✅ | ✅ |
 | Hysteria2 | ✅ | ✅ | ✅ |
 | TUIC v5 | ✅ | — | ✅ |
 | AnyTLS | ✅ | — | ✅ |

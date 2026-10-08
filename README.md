@@ -129,7 +129,7 @@ the provider confirms it.
 
 ## Protocols
 
-Fifteen protocols, each a preset with keys generated for you. The subscription gives every app only what it runs:
+Seventeen protocols, each a preset with keys generated for you. The subscription gives every app only what it runs:
 
 | Protocol | Clash apps<br><sub>mihomo core</sub> | Xray apps<br><sub>Happ, v2RayTun</sub> | sing-box apps<br><sub>Hiddify, Karing</sub> |
 |---|:---:|:---:|:---:|
@@ -138,6 +138,8 @@ Fifteen protocols, each a preset with keys generated for you. The subscription g
 | VLESS · REALITY · gRPC | ✅ | ✅ | ✅ |
 | VLESS PQ (post-quantum encryption) | ✅ | ✅ | — |
 | Trojan · REALITY | ✅ | ✅ | ✅ |
+| VLESS · TLS · XHTTP | ✅ | ✅ | — |
+| VLESS · TLS · Vision | ✅ | ✅ | ✅ |
 | Hysteria2 | ✅ | ✅ | ✅ |
 | TUIC v5 | ✅ | — | ✅ |
 | AnyTLS | ✅ | — | ✅ |
