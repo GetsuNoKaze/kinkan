@@ -206,7 +206,6 @@ func makeGoals(args []string) error {
 	fs := flag.NewFlagSet("goals", flag.ContinueOnError)
 	file := fs.String("file", ".github/goals.json", "the goals")
 	in := fs.String("in", "", "the current index.json (its signature next to it, .sig)")
-	ledgerFile := fs.String("ledger", "", "donations.json: what the donations workflow counted (optional)")
 	out := fs.String("out", "dist", "output directory")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -226,13 +225,6 @@ func makeGoals(args []string) error {
 	goals, err := release.ParseGoals(raw)
 	if err != nil {
 		return fmt.Errorf("%s: %w", *file, err)
-	}
-	if *ledgerFile != "" {
-		l, err := readLedger(*ledgerFile)
-		if err != nil {
-			return err
-		}
-		l.addTo(&goals)
 	}
 	data, err := os.ReadFile(*in)
 	if err != nil {
