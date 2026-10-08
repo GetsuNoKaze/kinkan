@@ -48,6 +48,19 @@ function dateInput(value?: string) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// Chrome takes up to six digits for the year and moves on to the time only after them, so
+// "2026" and then "00" for the hours makes the year 202600. A max with a four-digit year
+// makes it move on after four.
+const DATE_MIN = "2000-01-01T00:00";
+const DATE_MAX = "9999-12-31T23:59";
+
+/** A filled date field that is not a date in four digits: saving it would drop it silently. */
+function badDate(value: string) {
+  if (!value) return false;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) || d.getFullYear() > 9999;
+}
+
 function epoch(value?: string) {
   if (!value) return undefined;
   const ms = new Date(value).getTime();
@@ -284,6 +297,7 @@ function PromoForm({ value, onSave, onSaving, onBlocked }: { value: PromoCode; o
     tariff_ids: [...value.tariff_ids],
   }));
   const [error, setError] = useState("");
+  const [dateErrors, setDateErrors] = useState<{ starts_at?: string; ends_at?: string }>({});
   const set = (key: keyof Draft) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setP((x) => ({ ...x, [key]: e.target.value }));
   const flag = (key: "first_purchase_only" | "new_users_only" | "enabled") => (on: boolean) => setP((x) => ({ ...x, [key]: on }));
   // What the form needs to be saved is missing: the sheet's save button waits.
@@ -292,6 +306,12 @@ function PromoForm({ value, onSave, onSaving, onBlocked }: { value: PromoCode; o
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
+    const dates = {
+      starts_at: badDate(p.starts_at) ? t("promocodes.badDate") : undefined,
+      ends_at: badDate(p.ends_at) ? t("promocodes.badDate") : undefined,
+    };
+    setDateErrors(dates);
+    if (dates.starts_at || dates.ends_at) return;
     onSaving(true);
     try {
       await onSave({
@@ -366,11 +386,29 @@ function PromoForm({ value, onSave, onSaving, onBlocked }: { value: PromoCode; o
       <SwitchRow label={t("promocodes.enabled")} checked={p.enabled} onChange={flag("enabled")} />
       <Disclosure title={t("promocodes.limits")} sub={t("promocodes.limitsSub")}>
         <div className="grid gap-x-3 sm:grid-cols-2">
-          <Field label={t("promocodes.startsAt")} htmlFor="pc-start">
-            <input id="pc-start" className="input" type="datetime-local" value={p.starts_at} onChange={set("starts_at")} />
+          <Field label={t("promocodes.startsAt")} htmlFor="pc-start" error={dateErrors.starts_at}>
+            <input
+              id="pc-start"
+              className="input"
+              type="datetime-local"
+              min={DATE_MIN}
+              max={DATE_MAX}
+              value={p.starts_at}
+              onChange={set("starts_at")}
+              aria-invalid={!!dateErrors.starts_at}
+            />
           </Field>
-          <Field label={t("promocodes.endsAt")} htmlFor="pc-end">
-            <input id="pc-end" className="input" type="datetime-local" value={p.ends_at} onChange={set("ends_at")} />
+          <Field label={t("promocodes.endsAt")} htmlFor="pc-end" error={dateErrors.ends_at}>
+            <input
+              id="pc-end"
+              className="input"
+              type="datetime-local"
+              min={DATE_MIN}
+              max={DATE_MAX}
+              value={p.ends_at}
+              onChange={set("ends_at")}
+              aria-invalid={!!dateErrors.ends_at}
+            />
           </Field>
           <Field label={t("promocodes.maxUses")} htmlFor="pc-max">
             <input id="pc-max" className="input" type="number" min="1" placeholder={t("promocodes.noLimit")} value={p.max_uses ?? ""} onChange={set("max_uses")} />

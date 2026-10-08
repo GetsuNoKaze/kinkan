@@ -25,6 +25,8 @@
   --surface-soft: rgba(255, 255, 255, 0.55);
   --surface-hover: rgba(255, 255, 255, 0.92);
   --surface-solid: #ffffff;
+  /* A selected tab, segment or menu item: above the card it sits on. */
+  --raised: #ffffff;
   --glass: rgba(255, 255, 255, 0.6);
   --glass-strong: rgba(255, 255, 255, 0.86);
   --glass-highlight: rgba(255, 255, 255, 0.9);
@@ -60,12 +62,21 @@ html[data-theme="midnight"] {
   --surface-soft: rgba(24, 31, 42, .72);
   --surface-hover: rgba(40, 50, 64, .96);
   --surface-solid: #161d27;
+  --raised: #263142;
   --glass: rgba(24, 31, 42, .72); --glass-strong: rgba(22, 29, 39, .92); --glass-edge: rgba(255,132,61,.18);
   --glass-highlight: rgba(255,132,61,.18);
   --hairline: rgba(255,255,255,.09); --hover: rgba(255,255,255,.06);
   --shadow-sm: 0 1px 2px rgba(0,0,0,.25); --shadow-md: 0 12px 32px -14px rgba(0,0,0,.55); --shadow-lg: 0 32px 64px -24px rgba(0,0,0,.65);
 }
 html[data-theme="midnight"] .btn-primary:hover:not(:disabled) { background: var(--mikan-600); }
+/* The dawn glows at full strength turn a dark page brown; dimmed, they stay a hint. */
+html[data-theme="midnight"] .glow { opacity: 0.3; }
+html[data-theme="midnight"] .grain { mix-blend-mode: overlay; opacity: 0.04; }
+/* Orange at 45% over a dark card reads as mud: a disabled primary button goes grey instead. */
+html[data-theme="midnight"] .btn-primary:disabled { opacity: 1; background: var(--ink-100); color: var(--ink-400); box-shadow: none; }
+/* The pastel avatars with light initials: the colour moves to the letter, the circle gets a tint of it. */
+html[data-theme="midnight"] .avatar { background: color-mix(in srgb, var(--av, #ede7e1) 20%, var(--surface-solid)); color: var(--av, #ede7e1); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--av, #ede7e1) 25%, transparent); }
+html[data-theme="midnight"] .scrim { background: rgba(0, 0, 0, 0.5); }
 html[data-theme="ocean"] {
   --bg: #eaf5f8; --mikan-50: #e6f5f8; --mikan-100: #cbeaf0; --mikan-200: #a9dce5; --mikan-400: #4bb8ca; --mikan-500: #2499ae; --mikan-600: #167f92; --mikan-700: #0f6272;
   --glass: rgba(255,255,255,.62); --glass-strong: rgba(255,255,255,.88); --glass-edge: rgba(255,255,255,.80);
@@ -161,7 +172,7 @@ html[data-theme="forest"] {
   .btn-primary { background: var(--fill); color: var(--on-fill); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 8px 20px -10px rgba(22, 26, 36, 0.55); }
   .btn-primary:hover:not(:disabled) { background: var(--ink-700); }
   .btn-glass { background: var(--surface); border: 1px solid var(--hairline); color: var(--ink-800); box-shadow: var(--shadow-sm); }
-  .btn-glass:hover:not(:disabled) { background: var(--surface-solid); }
+  .btn-glass:hover:not(:disabled) { background: var(--raised); }
   .btn-ghost { color: var(--ink-700); }
   .btn-ghost:hover:not(:disabled) { background: var(--hover); }
   .btn.danger { color: var(--berry-600); }
@@ -186,7 +197,7 @@ html[data-theme="forest"] {
   .nav { display: flex; flex-direction: column; gap: 4px; }
   .nav-item { display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 12px; border-radius: var(--r-md); color: var(--ink-600); font-weight: 500; transition: background-color 0.2s, color 0.2s; text-align: left; width: 100%; }
   .nav-item:hover { background: var(--surface-soft); color: var(--ink-900); }
-  .nav-item.active { background: var(--surface-solid); color: var(--ink-900); box-shadow: var(--shadow-sm); }
+  .nav-item.active { background: var(--raised); color: var(--ink-900); box-shadow: var(--shadow-sm); }
   .nav-item.active svg { color: var(--mikan-600); }
   .nav-count { margin-left: auto; font-size: 12px; color: var(--ink-500); }
   .side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 12px; }
@@ -217,7 +228,7 @@ html[data-theme="forest"] {
   .tabs button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tabs button svg { flex: none; }
   .tabs button:hover { color: var(--ink-900); background: var(--hover); }
-  .tabs button[aria-selected="true"] { background: var(--surface-solid); color: var(--ink-900); box-shadow: var(--shadow-sm); }
+  .tabs button[aria-selected="true"] { background: var(--raised); color: var(--ink-900); box-shadow: var(--shadow-sm); }
   .tabs button:focus-visible { outline: 2px solid var(--mikan-600, currentColor); outline-offset: 2px; }
   /* A page's many sections: a list beside the content on wide screens, a select on narrow ones. */
   .section-layout { display: flex; flex-direction: column; gap: 16px; align-items: stretch; }
@@ -226,7 +237,7 @@ html[data-theme="forest"] {
   .section-nav button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 40px; padding: 8px 12px; border-radius: var(--r-md); text-align: left; font-weight: 500; color: var(--ink-600); transition: background-color 0.2s, color 0.2s, box-shadow 0.2s; }
   .section-nav button:hover { background: var(--surface-soft); color: var(--ink-900); }
   .section-nav button[aria-current="page"], .section-nav button[data-open="true"] { color: var(--ink-900); }
-  .section-nav button[aria-current="page"] { background: var(--surface-solid); box-shadow: var(--shadow-sm); }
+  .section-nav button[aria-current="page"] { background: var(--raised); box-shadow: var(--shadow-sm); }
   .section-nav button[aria-current="page"] svg, .section-nav button[data-open="true"] svg { color: var(--mikan-600); }
   .section-nav button svg { flex: none; }
   .section-nav .sub { gap: 2px; margin: 0 0 4px 28px; padding-left: 12px; border-left: 1px solid var(--hairline); }
@@ -274,7 +285,7 @@ html[data-theme="forest"] {
   .seg button:hover { color: var(--ink-900); }
   .seg-block { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; }
   .seg-block button { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .seg button[aria-pressed="true"] { background: var(--surface-solid); color: var(--ink-900); box-shadow: var(--shadow-sm); }
+  .seg button[aria-pressed="true"] { background: var(--raised); color: var(--ink-900); box-shadow: var(--shadow-sm); }
   .lang-switch button { padding: 0 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; }
   .metric { padding: 12px; border-radius: 16px; background: var(--surface-soft); border: 1px solid var(--hairline); }
   .metric-label { font-size: 12px; color: var(--ink-500); }
@@ -382,7 +393,7 @@ html[data-theme="forest"] {
   .gauge-label b { font: 500 20px/24px var(--font-display-stack); letter-spacing: -0.02em; display: block; }
   .gauge-label span { font-size: 11px; color: var(--ink-500); }
   .chip-btn { height: 32px; padding: 0 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--hairline); font-size: 13px; font-weight: 500; color: var(--ink-700); transition: background-color 0.2s, border-color 0.2s; }
-  .chip-btn:hover:not(:disabled) { background: var(--surface-solid); border-color: var(--mikan-200); }
+  .chip-btn:hover:not(:disabled) { background: var(--raised); border-color: var(--mikan-200); }
   .chip-btn:disabled { opacity: 0.45; cursor: not-allowed; }
   .chip-btn[aria-pressed="true"] { background: var(--mikan-50); border-color: var(--mikan-400); color: var(--ink-900); }
   .link-field { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 4px 0 12px; border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--hairline); }
@@ -416,8 +427,8 @@ html[data-theme="forest"] {
   .config-editor:focus-within { border-color: var(--mikan-600); box-shadow: 0 0 0 3px rgba(240, 122, 46, 0.18); }
   .config-editor[aria-invalid="true"] { border-color: var(--berry-600); }
   .opt { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 12px; border-radius: 16px; background: var(--surface-soft); border: 1.5px solid var(--hairline); text-align: left; transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s; }
-  .opt:hover { background: var(--surface-solid); }
-  .opt[aria-checked="true"] { border-color: var(--ink-900); background: var(--surface-solid); box-shadow: var(--shadow-sm); }
+  .opt:hover { background: var(--raised); }
+  .opt[aria-checked="true"] { border-color: var(--ink-900); background: var(--raised); box-shadow: var(--shadow-sm); }
   .opt:disabled { cursor: progress; }
   .update-chip { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 12px; font-size: 13px; font-weight: 500; color: var(--mikan-700); background: rgba(240, 122, 46, 0.1); border: 1px solid rgba(240, 122, 46, 0.3); transition: background-color 0.2s, border-color 0.2s; }
   .update-chip:hover { background: rgba(240, 122, 46, 0.16); border-color: rgba(240, 122, 46, 0.5); }
@@ -461,7 +472,7 @@ html[data-theme="forest"] {
   .method.patch, .method.put { background: var(--lagoon-50); color: var(--lagoon-600); }
   .method.delete { background: var(--berry-50); color: var(--berry-600); }
   .api-op { border-radius: 16px; border: 1px solid var(--hairline); background: var(--surface-soft); transition: background-color 0.2s, box-shadow 0.2s; }
-  .api-op[open] { background: var(--surface-solid); box-shadow: var(--shadow-sm); }
+  .api-op[open] { background: var(--raised); box-shadow: var(--shadow-sm); }
   .api-op > summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px; cursor: pointer; list-style: none; border-radius: 16px; }
   .api-op > summary::-webkit-details-marker { display: none; }
   .api-op > summary:hover { background: var(--hover); }
@@ -496,15 +507,41 @@ html[data-theme="forest"] {
 }
 /* Folded by the admin on a wide screen: the same icons-only sidebar as on a narrower one. */
 .fold-btn { margin-left: auto; color: var(--ink-500); }
+/*
+ * Folding animates: the column narrows, the labels fade out where they stand and the icons
+ * keep their place (the paddings move them to the middle of the 76px column), the server
+ * card collapses. Nothing changes its layout mid-way, so nothing jumps.
+ */
 @media (min-width: 1280px) {
+  .app { transition: grid-template-columns 0.32s var(--ease-out); }
+  .sidebar { overflow-x: clip; overflow-clip-margin: 4px; transition: padding 0.32s var(--ease-out); }
+  .brand { position: relative; transition: padding 0.32s var(--ease-out); }
+  .brand > img { transition: opacity 0.2s; }
+  :is(.brand-name, .nav-label, .nav-count, .update-label) { white-space: nowrap; transition: opacity 0.2s var(--ease-out); }
+  .nav-item, .update-chip { transition: background-color 0.2s, color 0.2s, border-color 0.2s, padding 0.32s var(--ease-out); }
+  :is(.nav-item, .update-chip) > svg { flex-shrink: 0; }
+  .admin-row { transition: padding 0.32s var(--ease-out); }
+  .admin-row :is(.who-wrap, .logout) { transition: opacity 0.2s, visibility 0.2s; }
+  /* As wide as the open sidebar inside (248 - 2 × 12 - 2 × 1), so it does not reflow while the column narrows. */
+  .node-card { min-width: 222px; overflow: hidden; interpolate-size: allow-keywords; transition: opacity 0.2s, height 0.32s var(--ease-out), padding 0.32s var(--ease-out), margin 0.32s var(--ease-out), border-width 0.32s; }
+
   .app[data-folded] { grid-template-columns: 76px minmax(0, 1fr); }
-  .app[data-folded] .sidebar { padding: 16px 8px; align-items: center; }
-  .app[data-folded] .brand { padding: 4px; flex-direction: column; gap: 8px; }
-  .app[data-folded] .fold-btn { margin-left: 0; }
-  .app[data-folded] :is(.brand-name, .nav-label, .nav-count, .node-card, .admin-row .who-wrap, .admin-row .logout, .update-label) { display: none; }
-  .app[data-folded] .nav-item { justify-content: center; width: 48px; padding: 0; }
-  .app[data-folded] .update-chip { justify-content: center; width: 48px; padding: 8px 0; }
+  .app[data-folded] .sidebar { padding: 16px 8px; }
+  /* The 32px logo in the middle of the 60px inside; the unfold button takes its place on hover. */
+  .app[data-folded] .brand { padding: 4px 13px; }
+  .app[data-folded] .fold-btn { position: absolute; left: 11px; top: 2px; margin: 0; opacity: 0; transition: opacity 0.2s; }
+  .app[data-folded] .brand:is(:hover, :focus-within) .fold-btn { opacity: 1; }
+  .app[data-folded] .brand:is(:hover, :focus-within) > img { opacity: 0; }
+  .app[data-folded] :is(.brand-name, .nav-label, .nav-count, .update-label) { opacity: 0; }
+  .app[data-folded] .nav-item { padding: 0 20px; }
+  .app[data-folded] .update-chip { padding: 8px 0 8px 20px; }
+  .app[data-folded] .admin-row { padding: 4px 15px; }
+  .app[data-folded] .admin-row :is(.who-wrap, .logout) { opacity: 0; visibility: hidden; }
+  .app[data-folded] .node-card { height: 0; padding-block: 0; margin-top: -12px; border-width: 0; opacity: 0; overflow: hidden; visibility: hidden; }
   .app[data-folded] .sidebar .lang-switch { flex-direction: column; align-self: center; }
+}
+@media (min-width: 1280px) and (prefers-reduced-motion: reduce) {
+  .app, .sidebar, .brand, .nav-item, .update-chip, .admin-row, .node-card { transition: none; }
 }
 @media (max-width: 1279px) {
   .fold-btn { display: none; }
@@ -546,7 +583,18 @@ html[data-theme="forest"] {
 
 /* The addons: tiles that lead to a tool or a payment method. */
 .section-title { font: 600 15px/20px var(--font-display-stack); margin: 4px 4px 12px; color: var(--ink-700); }
-.addon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 16px; }
-.addon-tile { display: flex; align-items: center; gap: 12px; padding: 16px 20px; transition: border-color 0.2s, background-color 0.2s; }
-.addon-tile:hover { border-color: color-mix(in srgb, var(--mikan-500) 40%, var(--glass-edge)); background: var(--surface-solid); }
-.addon-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: color-mix(in srgb, var(--mikan-500) 14%, transparent); color: var(--mikan-600); flex-shrink: 0; }
+/* Three across the page on wide screens, both sections on the same columns. */
+.addon-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+@media (min-width: 760px) { .addon-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1280px) { .addon-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.addon-tile { display: flex; flex-direction: column; gap: 16px; min-height: 200px; padding: 24px; transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s; }
+.addon-tile:hover { border-color: color-mix(in srgb, var(--mikan-500) 40%, var(--glass-edge)); background: var(--raised); box-shadow: var(--shadow-lg); }
+.addon-tile.add { border-style: dashed; border-color: var(--ink-200); background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+.addon-tile.add:hover { border-color: var(--mikan-500); background: var(--surface-soft); }
+.addon-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 14px; background: color-mix(in srgb, var(--mikan-500) 14%, transparent); color: var(--mikan-600); flex-shrink: 0; }
+.addon-title { display: block; font: 600 16px/22px var(--font-ui-stack); letter-spacing: -0.01em; color: var(--ink-900); }
+.addon-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding-top: 16px; border-top: 1px solid var(--hairline); }
+.addon-action { margin-top: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; color: var(--mikan-700); }
+.addon-action svg { transition: transform 0.2s var(--ease-out); }
+.addon-tile:hover .addon-action svg { transform: translateX(3px); }
+@media (prefers-reduced-motion: reduce) { .addon-tile:hover .addon-action svg { transform: none; } }
