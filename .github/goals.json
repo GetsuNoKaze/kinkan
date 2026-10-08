@@ -17,7 +17,7 @@
         "ru": "Добавить чужую подписку по ссылке: панель сама подтягивает её серверы, обновляет их и раздаёт клиентам под вашим названием. Для перепродажи.",
         "en": "Add someone else's subscription by link: the panel pulls its servers, keeps them updated and hands them to your clients under your name. For resellers."
       },
-      "target": 100, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6qT"
+      "target": 300, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6qT"
     },
     {
       "id": "admin-bot",
