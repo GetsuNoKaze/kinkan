@@ -44,7 +44,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: mikan-release keygen|manifest|verify|legacy-check|index …")
+		return errors.New("usage: mikan-release keygen|manifest|verify|legacy-check|index|goals …")
 	}
 	switch args[0] {
 	case "keygen":
@@ -57,6 +57,8 @@ func run(args []string) error {
 		return legacyCheckFile(args[1:])
 	case "index":
 		return makeIndex(args[1:])
+	case "goals":
+		return makeGoals(args[1:])
 	}
 	return fmt.Errorf("unknown command %q", args[0])
 }
