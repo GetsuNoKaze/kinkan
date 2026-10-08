@@ -161,12 +161,20 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 	opts.SubPort, opts.SubPortError = subPort.Set, subPort.Error
 	if !cfg.Dev {
 		certs = acme.New(cfg.DataDir, holder, self, settings.New(st.Q), logger, time.Now)
+		// The certificate already on disk is served before the nodes are first synced: links
+		// drop the pin once it is public, so the local node must start with it too.
+		certs.Load(ctx)
 		opts.Certs = certs
 		opts.HSTS = certs.Trusted
 	}
 	p, err := NewPanel(st, opts)
 	if err != nil {
 		return err
+	}
+	// A certificate issued, renewed or uploaded later goes to the nodes at once: they get it
+	// only with their state, which is sent again on a change.
+	if certs != nil && p.Nodes != nil {
+		certs.OnChange(p.Nodes.SlotsChanged)
 	}
 	paths, err := p.Apply(ctx)
 	if err != nil {
