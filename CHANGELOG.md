@@ -9,6 +9,8 @@ the signed manifest, and the panel shows the one in its language.
 - **Lighter on the server**: PostgreSQL is asked far less often while nobody touches the panel. Traffic is stored every 10 seconds instead of every 2 (nothing is lost: the node holds what is not stored yet), "online" and the devices' last seen every 2 minutes, and the torrent blocker no longer rereads every user and slot every 5 seconds. The infrastructure alerts and the settings reload read through a short cache.
 - **Lighter in the browser**: an open overview asks the server about twice as rarely, the menu no longer polls the overview's figures on every page, the "Needs attention" card is one request instead of three, and the backdrop stops drifting when the window is not in focus or nobody has touched it for a minute.
 - Autotune has three more ports to move a blocked protocol to: 10443, 11443 and 12443. With almost every protocol on one node, the twelve before could all be taken, and a blocked protocol stayed where it was. `mikan update` opens the ports of the list in ufw on servers where ufw is on.
+- On Android (with reduced animations or the battery saver on) confirmation windows, such as "Update mikan", slid off to the right edge of the screen; so did the bar of the actions on selected clients. Both now stay in the middle.
+- In the dark theme of the subscription page and the Mini App, a plan you touched turned white with unreadable text. It is now a darker shade, and the highlight under the finger no longer sticks on phones.
 - The node card's CPU is the whole server's (on the panel's own server the panel and its database count too): it is now called "Server CPU", with the node's own share under it.
 
 ### ru
@@ -16,6 +18,8 @@ the signed manifest, and the panel shows the one in its language.
 - **Меньше нагрузки на сервер**: пока в панели никто ничего не делает, PostgreSQL почти не дёргается. Трафик сохраняется раз в 10 секунд вместо 2 (ничего не теряется: нода держит то, что ещё не сохранено), «в сети» и последнее появление устройств раз в 2 минуты, а блокировка торрентов больше не перечитывает всех пользователей и слоты каждые 5 секунд. Уведомления об инфраструктуре и перечитка настроек идут через короткий кэш.
 - **Меньше нагрузки в браузере**: открытый обзор спрашивает сервер примерно вдвое реже, меню больше не опрашивает цифры обзора на каждой странице, карточка «Требует внимания» делает один запрос вместо трёх, а фон перестаёт двигаться, когда окно не в фокусе или его минуту не трогали.
 - У автонастройки три новых порта, куда она переносит заблокированный протокол: 10443, 11443 и 12443. Когда на одной ноде включены почти все протоколы, прежние двенадцать могли быть заняты, и заблокированный протокол оставался на месте. `mikan update` открывает порты этого списка в ufw на серверах, где ufw включён.
+- На Android (с отключёнными анимациями или в режиме энергосбережения) окна подтверждения, например «Обновить mikan», уезжали к правому краю экрана, как и панель действий с выбранными клиентами. Теперь они по центру.
+- В тёмной теме страницы подписки и Mini App тариф, которого коснулись, становился белым с нечитаемым текстом. Теперь он выделяется тёмным оттенком, и подсветка под пальцем на телефоне больше не залипает.
 - Процессор на карточке ноды — это весь сервер (на сервере панели туда входят сама панель и её база): теперь он так и называется, «Процессор сервера», а под ним доля самой ноды.
 
 ## 0.5.0.3

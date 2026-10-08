@@ -533,9 +533,9 @@ function BulkBar({ chosen, clear, folders }: { chosen: User[]; clear: () => void
             className="bulk-bar glass-strong"
             role="region"
             aria-label={t("users.bulkLabel")}
-            initial={{ opacity: 0, y: 24, x: "-50%" }}
-            animate={{ opacity: 1, y: 0, x: "-50%" }}
-            exit={{ opacity: 0, y: 24, x: "-50%" }}
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 24 }}
             transition={{ type: "spring", stiffness: 420, damping: 32 }}
           >
             <span className="num mr-2 font-semibold whitespace-nowrap">{t("users.selected", { n })}</span>
