@@ -16,11 +16,12 @@ type Goal = {
 	url?: string;
 };
 
-const { lang = 'ru' } = Astro.props as { lang?: Lang };
+// compact: the landing's strip, the open goals only and no more than three.
+const { lang = 'ru', compact = false } = Astro.props as { lang?: Lang; compact?: boolean };
 const other: Lang = lang === 'ru' ? 'en' : 'ru';
 const text = (m?: Partial<Record<Lang, string>>) => m?.[lang] || m?.[other] || '';
 const items = goals.items as Goal[];
-const active = items.filter((g) => g.status !== 'done');
+const active = items.filter((g) => g.status !== 'done').slice(0, compact ? 3 : undefined);
 const done = items.filter((g) => g.status === 'done');
 
 const t = {
@@ -51,7 +52,7 @@ const money = (n: number, currency: string) =>
 const pct = (g: Goal) => Math.min(100, Math.round((g.raised / g.target) * 100));
 ---
 
-<div class="goals not-content">
+<div class:list={['goals', 'not-content', { compact }]}>
 	{active.length === 0 ? <p class="none">{t.none}</p> : null}
 	<ul class="grid">
 		{
@@ -86,9 +87,9 @@ const pct = (g: Goal) => Math.min(100, Math.round((g.raised / g.target) * 100));
 			))
 		}
 	</ul>
-	<a class="any" href={goals.donate} rel="noopener" target="_blank">{t.giveAny}</a>
+	{compact ? null : <a class="any" href={goals.donate} rel="noopener" target="_blank">{t.giveAny}</a>}
 	{
-		done.length > 0 ? (
+		!compact && done.length > 0 ? (
 			<section class="done" aria-labelledby="goals-done">
 				<h3 id="goals-done">{t.doneTitle}</h3>
 				<ul>
@@ -127,6 +128,16 @@ const pct = (g: Goal) => Math.min(100, Math.round((g.raised / g.target) * 100));
 		.grid {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
+	}
+
+	@media (min-width: 64rem) {
+		.compact .grid {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+	}
+
+	.compact {
+		margin-top: 0;
 	}
 
 	.goal {

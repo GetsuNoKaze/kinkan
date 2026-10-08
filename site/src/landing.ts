@@ -109,6 +109,12 @@ export const strings = {
 			href: docs('ru', 'subscriptions/page/'),
 			alts: ['Страница подписки на телефоне', 'Обзор панели на телефоне'],
 		},
+		funding: {
+			badge: 'Идёт сбор на новые функции',
+			title: 'Сборы на функции',
+			lead: 'Функции, которые просит сообщество, мы делаем, когда на них собрана сумма. Выберите нужную и поддержите её.',
+			all: 'Все цели',
+		},
 		cta: {
 			title: 'Поставить на свой сервер',
 			text: 'Одна команда на чистом сервере. Дальше всё делается в панели, а команда mikan открывает меню управления.',
@@ -221,6 +227,12 @@ export const strings = {
 			link: 'About subscriptions and apps',
 			href: docs('en', 'subscriptions/page/'),
 			alts: ['The subscription page on a phone', 'The panel overview on a phone'],
+		},
+		funding: {
+			badge: 'Collecting for new features',
+			title: 'Funding features',
+			lead: 'Features the community asks for get built once their sum is collected. Pick the one you need and support it.',
+			all: 'All goals',
 		},
 		cta: {
 			title: 'Put it on your server',
