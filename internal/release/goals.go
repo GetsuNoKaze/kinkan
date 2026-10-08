@@ -49,7 +49,7 @@ const (
 )
 
 // MaxGoals is how many goals an index carries; the panel shows the first few.
-const MaxGoals = 12
+const MaxGoals = 20
 
 var (
 	goalID       = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)
