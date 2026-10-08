@@ -159,3 +159,86 @@ func TestOwnProfileOverHTTP(t *testing.T) {
 		t.Fatalf("cleared, still the own profile:\n%s", p)
 	}
 }
+
+// The routing form over the API: the admin's own lists are refused with a code and then
+// saved, and the preview takes the rules and the group names the form has not saved yet,
+// checked as a save would check them.
+func TestRoutesListsAndPreviewOverrides(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	if err := domain.Seed(ctx, h.st, h.now); err != nil {
+		t.Fatal(err)
+	}
+	for k, v := range map[string]any{settings.KeyPublicHost: "203.0.113.10", settings.KeyPanelPort: 21355} {
+		if err := settings.Set(ctx, settings.New(h.st.Q), k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if resp, _ := h.login(password, ""); resp.StatusCode != http.StatusOK {
+		t.Fatal("login")
+	}
+	api := "/" + adminPath + "/api/v1/settings"
+	csrf := map[string]string{"X-CSRF-Token": h.csrf}
+
+	list := func(f func(l map[string]any)) map[string]any {
+		l := map[string]any{"name": "wl", "url": "https://example.com/wl.yaml", "behavior": "classical", "format": "yaml", "target": "vpn"}
+		f(l)
+		return map[string]any{"lists": []any{l}}
+	}
+	for code, routes := range map[string]map[string]any{
+		"routes_list_name":     list(func(l map[string]any) { l["name"] = "Bad Name" }),
+		"routes_list_url":      list(func(l map[string]any) { l["url"] = "http://example.com/wl.yaml" }),
+		"routes_list_behavior": list(func(l map[string]any) { l["behavior"] = "nope" }),
+		"routes_list_format":   list(func(l map[string]any) { l["format"] = "mrs" }),
+		"routes_target":        list(func(l map[string]any) { l["target"] = "node:99" }),
+		"routes_servers":       {"servers": map[string]any{"interval": 5}},
+	} {
+		for name, path := range map[string]string{"save": api, "preview": api + "/routes/preview"} {
+			method, body := http.MethodPatch, map[string]any{"sub_routes": routes}
+			if name == "preview" {
+				method, body = http.MethodPost, map[string]any{"sub_routing": "all", "sub_routes": routes}
+			}
+			if resp, out := h.do(method, path, body, csrf); resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(string(out), code) {
+				t.Fatalf("%s %s: %d %s", name, code, resp.StatusCode, out)
+			}
+		}
+	}
+
+	good := list(func(map[string]any) {})
+	if resp, out := h.do(http.MethodPatch, api, map[string]any{"sub_routes": good}, csrf); resp.StatusCode != http.StatusOK || !strings.Contains(string(out), "https://example.com/wl.yaml") {
+		t.Fatalf("save: %d %s", resp.StatusCode, out)
+	}
+
+	preview := func(extra map[string]any) (int, string) {
+		body := map[string]any{"sub_routing": "all", "sub_routes": good}
+		for k, v := range extra {
+			body[k] = v
+		}
+		resp, out := h.do(http.MethodPost, api+"/routes/preview", body, csrf)
+		var pv struct {
+			Profile string `json:"profile"`
+		}
+		_ = json.Unmarshal(out, &pv)
+		if resp.StatusCode != http.StatusOK {
+			return resp.StatusCode, string(out)
+		}
+		return resp.StatusCode, pv.Profile
+	}
+	code, profile := preview(map[string]any{"sub_rules": "DOMAIN-SUFFIX,unsaved.example,DIRECT"})
+	if code != http.StatusOK || !strings.Contains(profile, "unsaved.example") || !strings.Contains(profile, "own-wl") {
+		t.Fatalf("rules: %d %s", code, profile)
+	}
+	if _, saved := preview(nil); strings.Contains(saved, "unsaved.example") {
+		t.Fatal("the preview kept the rules it was given")
+	}
+	// A renamed main group alone keeps the saved name of the other.
+	code, profile = preview(map[string]any{"sub_group_main": "Мой VPN"})
+	if code != http.StatusOK || !strings.Contains(profile, "Мой VPN") {
+		t.Fatalf("group: %d %s", code, profile)
+	}
+	for field, name := range map[string]string{"sub_group_main": "DIRECT", "sub_group_auto": "vpn"} {
+		if code, out := preview(map[string]any{field: name}); code != http.StatusUnprocessableEntity || !strings.Contains(out, field) {
+			t.Fatalf("%s %q: %d %s", field, name, code, out)
+		}
+	}
+}
