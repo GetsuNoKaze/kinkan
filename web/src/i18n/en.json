@@ -2439,6 +2439,7 @@
     "ingress": "Incoming connections",
     "ingressSub": "The nodes check where connections come from",
     "ingressOn": "Check where connections come from",
+    "ingressNetworksHint": "One per line. With a CDN or a TCP proxy in front of a node, the node sees its address, not the user's: list its networks or leave the check off",
     "relay": "The panel's other nodes (cascade) are always let in",
     "mode": "List",
     "deny": "Deny these networks",

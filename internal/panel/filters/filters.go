@@ -6,8 +6,6 @@ package filters
 import (
 	"context"
 	"errors"
-	"net/netip"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -89,9 +87,9 @@ func (c *Config) Validate() error {
 		l     *[]string
 		canon func(string) (string, bool)
 	}{
-		{"egress.ports", &c.Egress.Ports, canonPorts},
+		{"egress.ports", &c.Egress.Ports, nodeapi.CanonPorts},
 		{"egress.networks", &c.Egress.Networks, canonNetwork},
-		{"egress.domains", &c.Egress.Domains, canonDomain},
+		{"egress.domains", &c.Egress.Domains, nodeapi.CanonDomain},
 		{"ingress.networks", &c.Ingress.Networks, canonNetwork},
 	}
 	for _, x := range lists {
@@ -102,6 +100,10 @@ func (c *Config) Validate() error {
 		for i, v := range *x.l {
 			s, ok := x.canon(strings.TrimSpace(v))
 			if !ok {
+				// The answer names the entry; a pasted page must not come back whole.
+				if r := []rune(v); len(r) > 64 {
+					v = string(r[:64]) + "…"
+				}
 				return &Problem{List: x.name, Index: i, Value: v}
 			}
 			out = append(out, s)
@@ -112,41 +114,9 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-func canonPorts(s string) (string, bool) {
-	lo, hi, isRange := strings.Cut(s, "-")
-	a, errA := strconv.Atoi(strings.TrimSpace(lo))
-	b := a
-	var errB error
-	if isRange {
-		b, errB = strconv.Atoi(strings.TrimSpace(hi))
-	}
-	if errA != nil || errB != nil || a < 1 || b > 65535 || a > b {
-		return "", false
-	}
-	if a == b {
-		return strconv.Itoa(a), true
-	}
-	return strconv.Itoa(a) + "-" + strconv.Itoa(b), true
-}
-
 func canonNetwork(s string) (string, bool) {
-	if p, err := netip.ParsePrefix(s); err == nil {
-		return p.Masked().String(), true
-	}
-	if a, err := netip.ParseAddr(s); err == nil && a.Zone() == "" {
-		a = a.Unmap()
-		return netip.PrefixFrom(a, a.BitLen()).String(), true
-	}
-	return "", false
-}
-
-var domainRe = regexp.MustCompile(`^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
-
-// canonDomain takes "example.com", ".example.com" or "*.example.com": the domain and its
-// subdomains.
-func canonDomain(s string) (string, bool) {
-	s = strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(s, "*."), "."), "."))
-	return s, len(s) <= 253 && domainRe.MatchString(s)
+	p, ok := nodeapi.CanonNetwork(s)
+	return p.String(), ok
 }
 
 // State is what the nodes get: nil when neither filter is on or has anything to do.

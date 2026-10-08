@@ -2,28 +2,29 @@ package node
 
 import (
 	"net/netip"
-	"strconv"
-	"strings"
+	"slices"
 
 	"mikan/internal/nodeapi"
 )
 
 // egressRules refuse users' traffic to the ports, networks and domains of the egress
 // filter. They come after the node's own REJECT rules and before the cascade and WARP, so
-// no way out reaches what the filter closes. What does not parse is left out: the panel
-// checks the lists, an older or broken one must not take the node's rules down.
+// no way out reaches what the filter closes. Each entry is read as the panel reads it
+// and written in that canonical form; what does not parse is left out: mihomo refuses
+// the whole config over one rule it cannot parse, and an older or broken panel must not
+// take the node's users down with it.
 func egressRules(f *nodeapi.Filters) []string {
 	if f == nil {
 		return nil
 	}
 	var r []string
 	for _, p := range f.Egress.Ports {
-		if validPorts(p) {
-			r = append(r, "DST-PORT,"+p+",REJECT")
+		if c, ok := nodeapi.CanonPorts(p); ok {
+			r = append(r, "DST-PORT,"+c+",REJECT")
 		}
 	}
 	for _, n := range f.Egress.Networks {
-		p, ok := parseNetwork(n)
+		p, ok := nodeapi.CanonNetwork(n)
 		if !ok {
 			continue
 		}
@@ -36,49 +37,70 @@ func egressRules(f *nodeapi.Filters) []string {
 		r = append(r, kind+","+p.String()+",REJECT")
 	}
 	for _, d := range f.Egress.Domains {
-		d = strings.ToLower(strings.TrimPrefix(strings.TrimPrefix(d, "*."), "."))
-		if safeRuleValue(d) {
-			r = append(r, "DOMAIN-SUFFIX,"+d+",REJECT")
+		if c, ok := nodeapi.CanonDomain(d); ok {
+			r = append(r, "DOMAIN-SUFFIX,"+c+",REJECT")
 		}
 	}
 	return r
 }
 
-// validPorts takes a port ("465") or a range ("1000-2000") of 1–65535.
-func validPorts(s string) bool {
-	lo, hi, isRange := strings.Cut(s, "-")
-	if !isRange {
-		hi = lo
-	}
-	a, errA := strconv.Atoi(lo)
-	b, errB := strconv.Atoi(hi)
-	return errA == nil && errB == nil && a >= 1 && b <= 65535 && a <= b
-}
-
-// parseNetwork takes a network ("203.0.113.0/24") or one address.
-func parseNetwork(s string) (netip.Prefix, bool) {
-	if p, err := netip.ParsePrefix(s); err == nil {
-		return p.Masked(), true
-	}
-	if a, err := netip.ParseAddr(s); err == nil {
-		a = a.Unmap()
-		return netip.PrefixFrom(a, a.BitLen()), true
-	}
-	return netip.Prefix{}, false
-}
-
-// ingress is the ingress filter as the tunnel checks it.
+// ingress is the ingress filter as the tunnel checks it: the networks as sorted ranges
+// that do not overlap, so a check is a binary search. It runs for every UDP packet, and
+// a list may hold a thousand networks.
 type ingress struct {
-	allow bool
-	nets  []netip.Prefix
+	allow  bool
+	ranges []addrRange
+}
+
+type addrRange struct{ first, last netip.Addr }
+
+func newIngress(allow bool, nets []netip.Prefix) *ingress {
+	rs := make([]addrRange, 0, len(nets))
+	for _, p := range nets {
+		p = p.Masked()
+		rs = append(rs, addrRange{p.Addr(), lastAddr(p)})
+	}
+	// netip.Addr orders IPv4 before IPv6, so one sorted list holds both.
+	slices.SortFunc(rs, func(a, b addrRange) int { return a.first.Compare(b.first) })
+	in := &ingress{allow: allow}
+	for _, r := range rs {
+		if n := len(in.ranges); n > 0 && r.first.Compare(in.ranges[n-1].last) <= 0 {
+			if r.last.Compare(in.ranges[n-1].last) > 0 {
+				in.ranges[n-1].last = r.last
+			}
+			continue
+		}
+		in.ranges = append(in.ranges, r)
+	}
+	return in
+}
+
+// lastAddr is the last address of a masked network.
+func lastAddr(p netip.Prefix) netip.Addr {
+	b := p.Addr().AsSlice()
+	for i := range b {
+		switch n := p.Bits() - i*8; {
+		case n <= 0:
+			b[i] = 0xff
+		case n < 8:
+			b[i] |= 0xff >> n
+		}
+	}
+	a, _ := netip.AddrFromSlice(b)
+	return a
 }
 
 func (in *ingress) admits(a netip.Addr) bool {
 	a = a.Unmap()
-	for _, p := range in.nets {
-		if p.Contains(a) {
-			return in.allow
+	// i is the first range that starts after a: only the one before it can hold a.
+	i, _ := slices.BinarySearchFunc(in.ranges, a, func(r addrRange, a netip.Addr) int {
+		if r.first.Compare(a) <= 0 {
+			return -1
 		}
+		return 1
+	})
+	if i > 0 && a.Compare(in.ranges[i-1].last) <= 0 {
+		return in.allow
 	}
 	return !in.allow
 }
@@ -89,19 +111,19 @@ func (r *Registry) SetIngress(f *nodeapi.Filters) {
 		r.ingress.Store(nil)
 		return
 	}
-	in := &ingress{allow: f.Ingress.Allow}
+	var nets []netip.Prefix
 	for _, n := range f.Ingress.Networks {
-		if p, ok := parseNetwork(n); ok {
-			in.nets = append(in.nets, p)
+		if p, ok := nodeapi.CanonNetwork(n); ok {
+			nets = append(nets, p)
 		}
 	}
 	// An allow list with nothing that parses would shut every user out; nothing listed
 	// is no filter.
-	if len(in.nets) == 0 {
+	if len(nets) == 0 {
 		r.ingress.Store(nil)
 		return
 	}
-	r.ingress.Store(in)
+	r.ingress.Store(newIngress(f.Ingress.Allow, nets))
 }
 
 // admitFrom says whether the ingress filter lets a connection from the address in.
