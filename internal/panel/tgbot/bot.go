@@ -77,6 +77,7 @@ type Status struct {
 
 type Bot struct {
 	d      Deps
+	polled *settings.Settings // d.Settings through a short cache, for loops that ask every few seconds
 	reload chan struct{}
 	out    atomic.Pointer[Outbox] // nil while the bot is off
 	client atomic.Pointer[Client] // the running bot's, for calls outside the update loop
@@ -114,7 +115,11 @@ func New(d Deps) *Bot {
 	if d.Limits == (Limits{}) {
 		d.Limits = DefaultLimits
 	}
-	return &Bot{d: d, reload: make(chan struct{}, 1), input: map[int64][]time.Time{},
+	polled := d.Settings
+	if d.Store != nil {
+		polled = settings.Cached(d.Store.Q, 15*time.Second)
+	}
+	return &Bot{d: d, polled: polled, reload: make(chan struct{}, 1), input: map[int64][]time.Time{},
 		transfers: map[int64]transfer{}, refused: map[string]time.Time{}, notices: map[string]*noticeState{}}
 }
 
@@ -183,13 +188,21 @@ func (b *Bot) Run(ctx context.Context) {
 }
 
 // Config is the admin's setup, or the default one in the panel's default language.
-func (b *Bot) Config(ctx context.Context) Config {
-	lang, _ := b.d.Settings.Lang(ctx)
+func (b *Bot) Config(ctx context.Context) Config { return b.config(ctx, b.d.Settings) }
+
+// PolledConfig and PolledInfrastructure are Config and InfrastructureEnabled for a loop
+// that asks every few seconds (the infrastructure alerts): read through a short cache.
+func (b *Bot) PolledConfig(ctx context.Context) Config { return b.config(ctx, b.polled) }
+
+func (b *Bot) PolledInfrastructure(ctx context.Context) bool { return b.infrastructure(ctx, b.polled) }
+
+func (b *Bot) config(ctx context.Context, set *settings.Settings) Config {
+	lang, _ := set.Lang(ctx)
 	// A setup saved before an option existed gets that option's default. A saved menu
 	// replaces the default one whole.
 	def := Default(lang)
 	def.Buttons = nil
-	cfg, ok, err := settings.GetOver(ctx, b.d.Settings, KeyConfig, def)
+	cfg, ok, err := settings.GetOver(ctx, set, KeyConfig, def)
 	if err != nil || !ok {
 		return Default(lang)
 	}
@@ -282,11 +295,15 @@ func (b *Bot) InfrastructureClient(ctx context.Context) (*Client, error) {
 
 // InfrastructureEnabled reports whether Telegram delivery is enabled and has a token.
 func (b *Bot) InfrastructureEnabled(ctx context.Context) bool {
-	enabled, err := b.d.Settings.On(ctx, settings.Switch{Key: KeyEnabled})
+	return b.infrastructure(ctx, b.d.Settings)
+}
+
+func (b *Bot) infrastructure(ctx context.Context, set *settings.Settings) bool {
+	enabled, err := set.On(ctx, settings.Switch{Key: KeyEnabled})
 	if err != nil || !enabled {
 		return false
 	}
-	token, err := b.d.Settings.String(ctx, KeyToken)
+	token, err := set.String(ctx, KeyToken)
 	return err == nil && token != ""
 }
 

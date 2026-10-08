@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"mikan/internal/nodeapi"
+	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/panel/torrent"
 )
 
 // torrentPullEvery is how often a node is asked for its torrent blocker's hits. The node
@@ -40,11 +42,12 @@ type torrentSource interface {
 // pullTorrents stores the node's new torrent hits. A caught user is banned on every node
 // from the panel's clock, so a node's wrong clock cannot make a ban longer or shorter.
 func (s *Syncer) pullTorrents(ctx context.Context) {
-	snap, err := s.m.snapshot(ctx, s.id)
+	cfg, err := s.m.torrentConfig(ctx)
 	if err != nil {
+		s.log.Error("torrent settings", "err", err)
 		return
 	}
-	if !snap.torrent.Enabled {
+	if !cfg.Enabled {
 		s.torrentWas(ctx, false)
 		return
 	}
@@ -82,7 +85,6 @@ func (s *Syncer) pullTorrents(ctx context.Context) {
 		return
 	}
 	now := s.m.now()
-	cfg := snap.torrent
 	banned := false
 	err = s.m.st.Tx(ctx, func(q *db.Queries) error {
 		banned = false // Tx retries the callback: what it captured must start over
@@ -150,19 +152,41 @@ func (s *Syncer) pullTorrents(ctx context.Context) {
 	}
 }
 
+// torrentConfig returns the blocker's settings, read again only when a change was announced
+// since: the API changes them through PoliciesChanged, and the upkeep announces one every
+// 30 s, which brings in what the CLI or a restore wrote.
+func (m *Manager) torrentConfig(ctx context.Context) (torrent.Config, error) {
+	m.torMu.Lock()
+	defer m.torMu.Unlock()
+	changes := m.changes.Load()
+	if m.torRead && m.torChanges == changes {
+		return m.tor, nil
+	}
+	cfg, err := torrent.Load(ctx, settings.New(m.st.Q))
+	if err != nil {
+		return torrent.Config{}, err
+	}
+	m.tor, m.torChanges, m.torRead = cfg, changes, true
+	return cfg, nil
+}
+
 // torrentWas says whether the blocker was on for this node at the last pull, and records
 // that it is on or off now. A node reports a hit only while the blocker is on, so what it
-// holds after an off period is stale.
+// holds after an off period is stale. Only this syncer writes the key, so once read or
+// written it is known without asking PostgreSQL every few seconds.
 func (s *Syncer) torrentWas(ctx context.Context, on bool) bool {
+	want := "0"
+	if on {
+		want = "1"
+	}
+	if s.torrentOn == want {
+		return on
+	}
 	key := stateKeyOf("torrent_on", s.id)
 	was, err := s.m.st.Q.GetNodeState(ctx, key)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		s.log.Error("torrent state", "err", err)
 		return true // do not drop hits over a failed read; the age rule still holds
-	}
-	want := "0"
-	if on {
-		want = "1"
 	}
 	if was != want {
 		if err := s.m.st.Q.SetNodeState(ctx, db.SetNodeStateParams{Key: key, Value: want}); err != nil {
@@ -170,6 +194,7 @@ func (s *Syncer) torrentWas(ctx context.Context, on bool) bool {
 			return true
 		}
 	}
+	s.torrentOn = want
 	return was == "1"
 }
 

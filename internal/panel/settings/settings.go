@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"mikan/internal/panel/store/db"
 	"mikan/internal/release"
@@ -113,17 +115,78 @@ var (
 // ValidLang says whether s is a language of the panel.
 func ValidLang(s string) bool { return s == "ru" || s == "en" }
 
-type Settings struct{ q *db.Queries }
+type Settings struct {
+	q     *db.Queries
+	cache *cache // nil: every read goes to the database
+}
 
 func New(q *db.Queries) *Settings { return &Settings{q: q} }
 
-// Get decodes the JSON value stored under key. ok is false when the key is absent.
-func Get[T any](ctx context.Context, s *Settings, key string) (v T, ok bool, err error) {
+// Cached is a Settings for a loop that reads the same settings every few seconds: a value
+// is kept for ttl and dropped as soon as this process writes any setting. What another
+// process writes (the CLI) is seen within ttl. Not for a transaction's queries, and not
+// where a value must be read right after it is written.
+func Cached(q *db.Queries, ttl time.Duration) *Settings {
+	return &Settings{q: q, cache: &cache{ttl: ttl, items: map[string]cachedValue{}}}
+}
+
+type cache struct {
+	ttl   time.Duration
+	mu    sync.Mutex
+	items map[string]cachedValue
+}
+
+type cachedValue struct {
+	raw   string
+	found bool
+	gen   uint64
+	at    time.Time
+}
+
+// writeGrace: a value read this soon after a write in this process is not kept. Set moves
+// the generation before its transaction commits, so such a read may still see the old value
+// under the new generation.
+const writeGrace = 2 * time.Second
+
+// raw is the stored JSON under key; found is false when the key is absent.
+func (s *Settings) raw(ctx context.Context, key string) (string, bool, error) {
+	if s.cache == nil {
+		return s.read(ctx, key)
+	}
+	gen, now := generation.Load(), time.Now()
+	s.cache.mu.Lock()
+	v, ok := s.cache.items[key]
+	s.cache.mu.Unlock()
+	if ok && v.gen == gen && now.Sub(v.at) < s.cache.ttl {
+		return v.raw, v.found, nil
+	}
+	raw, found, err := s.read(ctx, key)
+	if err != nil {
+		return "", false, err
+	}
+	if now.Sub(time.Unix(0, writtenAt.Load())) >= writeGrace {
+		s.cache.mu.Lock()
+		s.cache.items[key] = cachedValue{raw: raw, found: found, gen: gen, at: now}
+		s.cache.mu.Unlock()
+	}
+	return raw, found, nil
+}
+
+func (s *Settings) read(ctx context.Context, key string) (string, bool, error) {
 	raw, err := s.q.GetSetting(ctx, key)
 	if errors.Is(err, sql.ErrNoRows) {
-		return v, false, nil
+		return "", false, nil
 	}
 	if err != nil {
+		return "", false, err
+	}
+	return raw, true, nil
+}
+
+// Get decodes the JSON value stored under key. ok is false when the key is absent.
+func Get[T any](ctx context.Context, s *Settings, key string) (v T, ok bool, err error) {
+	raw, found, err := s.raw(ctx, key)
+	if err != nil || !found {
 		return v, false, err
 	}
 	if err := json.Unmarshal([]byte(raw), &v); err != nil {
@@ -135,11 +198,8 @@ func Get[T any](ctx context.Context, s *Settings, key string) (v T, ok bool, err
 // GetOver decodes the value stored under key over def: what the stored JSON lacks, such
 // as a field added after it was saved, keeps def's value.
 func GetOver[T any](ctx context.Context, s *Settings, key string, def T) (T, bool, error) {
-	raw, err := s.q.GetSetting(ctx, key)
-	if errors.Is(err, sql.ErrNoRows) {
-		return def, false, nil
-	}
-	if err != nil {
+	raw, found, err := s.raw(ctx, key)
+	if err != nil || !found {
 		return def, false, err
 	}
 	v := def
@@ -157,7 +217,7 @@ func Set[T any](ctx context.Context, s *Settings, key string, v T) error {
 	if err := s.q.SetSetting(ctx, db.SetSettingParams{Key: key, Value: string(raw)}); err != nil {
 		return err
 	}
-	generation.Add(1)
+	moved()
 	return nil
 }
 
@@ -166,12 +226,20 @@ func Set[T any](ctx context.Context, s *Settings, key string, v T) error {
 // process (the CLI) do not move it: they are seen when what is kept expires.
 var generation atomic.Uint64
 
+// writtenAt is when generation last moved (unix nanoseconds).
+var writtenAt atomic.Int64
+
+func moved() {
+	writtenAt.Store(time.Now().UnixNano())
+	generation.Add(1)
+}
+
 // Generation is how many settings have been written by this process so far.
 func Generation() uint64 { return generation.Load() }
 
 // Touch moves the generation for a change kept outside the settings table that what is
 // built from settings reads too (the subscription page's uploaded logo).
-func Touch() { generation.Add(1) }
+func Touch() { moved() }
 
 func (s *Settings) String(ctx context.Context, key string) (string, error) {
 	v, _, err := Get[string](ctx, s, key)

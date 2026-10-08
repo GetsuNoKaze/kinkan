@@ -36,7 +36,7 @@ function readFolded(): boolean {
 
 export function Shell() {
   useLocale(); // the sidebar and the bar read their texts at render time
-  const overview = useOverview();
+  const overview = useOverview({ poll: false });
   const [folded, setFolded] = useState(readFolded);
   const fold = () =>
     setFolded((f) => {

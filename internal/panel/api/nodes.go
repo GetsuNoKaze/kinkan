@@ -39,7 +39,8 @@ type NodeInfo struct {
 	Listeners   int        `json:"listeners"`
 	ListenersOK int        `json:"listeners_ok"`
 	Conns       int        `json:"conns"`
-	CPUPercent  float64    `json:"cpu_percent"`
+	CPUPercent  float64    `json:"cpu_percent" doc:"Загрузка процессора всего сервера, не только ноды"`
+	ProcCPU     *float64   `json:"proc_cpu_percent,omitempty" doc:"Доля процессора самого процесса ноды (вся машина = 100); нет у нод до 0.5.0.4"`
 	MemUsed     uint64     `json:"mem_used"`
 	MemTotal    uint64     `json:"mem_total"`
 	CheckedAt   *time.Time `json:"checked_at,omitempty"`
@@ -171,6 +172,9 @@ func (h *handlers) viewNode(ctx context.Context, n db.Node, inbounds []db.Inboun
 	}
 	v.Status, v.Version, v.Conns = "ok", hv.Health.Version, hv.Health.Conns
 	v.CPUPercent, v.MemUsed, v.MemTotal = hv.Health.System.CPUPercent, hv.Health.System.MemUsed, hv.Health.System.MemTotal
+	if p := hv.Health.System.ProcCPUPercent; p > 0 {
+		v.ProcCPU = &p
+	}
 	for _, l := range hv.Listeners {
 		v.Listeners++
 		if l.OK {

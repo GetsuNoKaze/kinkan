@@ -330,10 +330,16 @@ function NodeCard({
           <dt className="text-xs text-[var(--ink-500)]">{t("nodes.cpu")}</dt>
           <dd>
             {n.status === "ok" ? (
-              <div className="flex items-center gap-2">
-                <Bar pct={n.cpu_percent} className="flex-1" label={t("nodes.cpu")} />
-                <span className="num w-10 text-right">{Math.round(n.cpu_percent)}%</span>
-              </div>
+              <>
+                <div className="flex items-center gap-2">
+                  <Bar pct={n.cpu_percent} className="flex-1" label={t("nodes.cpu")} />
+                  <span className="num w-10 text-right">{Math.round(n.cpu_percent)}%</span>
+                </div>
+                {/* The bar is the whole server (on the panel's own one, the panel and its database too). */}
+                {n.proc_cpu_percent !== undefined ? (
+                  <div className="num mt-1 text-xs text-[var(--ink-500)]">{t("nodes.cpuNode", { pct: n.proc_cpu_percent < 1 ? "<1" : Math.round(n.proc_cpu_percent) })}</div>
+                ) : null}
+              </>
             ) : (
               "—"
             )}

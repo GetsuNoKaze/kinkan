@@ -91,7 +91,7 @@ export function UsersPage() {
   const users = useUsers({ state: search.state, q: search.q, folder: search.folder, source: search.source, hidden: search.hidden ?? "hide" });
   const tariffs = useTariffs();
   const folders = useFolders();
-  const overview = useOverview();
+  const overview = useOverview({ poll: false });
   const [managing, setManaging] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
   const narrow = useMediaQuery("(max-width: 767px)");

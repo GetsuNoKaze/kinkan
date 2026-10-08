@@ -82,6 +82,7 @@ func (m *Manager) attach(t *testing.T, id int64, target Target) *Syncer {
 
 func TestCountersAppliedOnce(t *testing.T) {
 	s, node, st, users, _ := setup(t)
+	s.m.storeInterval = 0 // every batch acknowledged at once
 	ctx := context.Background()
 	tariffs, _ := st.Q.ListTariffs(ctx)
 	u, err := users.Create(ctx, domain.CreateInput{Name: "a", TariffID: tariffs[1].ID})
@@ -109,6 +110,65 @@ func TestCountersAppliedOnce(t *testing.T) {
 	case <-s.policiesDirty: // the policy loop pushes them, with the quotas re-based
 	default:
 		t.Fatal("epoch change must re-push policies")
+	}
+}
+
+// A batch is stored as soon as the node cuts it, and acknowledged storeEvery later: until
+// then the node keeps offering it and cuts nothing new, so the next batch holds what came
+// in that time and the database gets one transaction per interval. Nothing is lost or
+// counted twice; a new epoch is stored at once.
+func TestCountersStoredEveryInterval(t *testing.T) {
+	s, node, st, users, now := setup(t)
+	ctx := context.Background()
+	tariffs, _ := st.Q.ListTariffs(ctx)
+	u, err := users.Create(ctx, domain.CreateInput{Name: "a", TariffID: tariffs[1].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	slot, _ := st.Q.GetSlot(ctx, u.SlotID.Int64)
+	used := func() int64 {
+		t.Helper()
+		got, err := st.Q.GetUser(ctx, u.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got.UsedDown
+	}
+	batch := func(epoch string, seq, down int64) {
+		node.batch = nodeapi.Counters{Epoch: epoch, Seq: seq, Slots: map[string]nodeapi.Traffic{slot.Name: {Down: down}}}
+	}
+
+	batch("e1", 1, 100)
+	s.pullCounters(ctx) // stored at once, acknowledged later
+	if used() != 100 || len(node.acked) != 0 {
+		t.Fatalf("first batch: used %d, acks %v", used(), node.acked)
+	}
+	*now = now.Add(2 * time.Second)
+	s.pullCounters(ctx) // offered again: already stored, not acknowledged yet
+	if used() != 100 || len(node.acked) != 0 {
+		t.Fatalf("within %s: used %d, acks %v", storeEvery, used(), node.acked)
+	}
+	*now = now.Add(storeEvery)
+	s.pullCounters(ctx) // the interval is over: acknowledged, the node may cut the next
+	if used() != 100 || !slices.Equal(node.acked, []int64{1}) {
+		t.Fatalf("after %s: used %d, acks %v", storeEvery, used(), node.acked)
+	}
+	batch("e1", 2, 50)
+	*now = now.Add(2 * time.Second)
+	s.pullCounters(ctx) // what came meanwhile, in one batch, stored at once
+	if used() != 150 || !slices.Equal(node.acked, []int64{1}) {
+		t.Fatalf("next batch: used %d, acks %v", used(), node.acked)
+	}
+	batch("e2", 1, 7)
+	*now = now.Add(time.Second)
+	s.pullCounters(ctx) // a new epoch does not wait
+	if used() != 157 {
+		t.Fatalf("new epoch: used %d, acks %v", used(), node.acked)
+	}
+	// The position the loop keeps is what PostgreSQL holds.
+	epoch, seq, err := s.readCountersPos(ctx)
+	if err != nil || epoch != "e2" || seq != 1 || s.pos != (counterPos{epoch: "e2", seq: 1}) {
+		t.Fatalf("stored position %q/%d (%v), kept %+v", epoch, seq, err, s.pos)
 	}
 }
 

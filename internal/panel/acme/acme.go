@@ -10,8 +10,10 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -72,6 +74,11 @@ type Manager struct {
 	// Let's Encrypt while valid. customMod is when its files last changed, as ensure saw.
 	customDir string
 	customMod time.Time
+	// onChange hears of every change of Public: the local node gets that certificate with
+	// its state, which is sent again only on a change. announced is the last one told.
+	annMu     sync.Mutex
+	onChange  func()
+	announced string
 }
 
 func New(dataDir string, holder *tlscert.Holder, fallback *tls.Certificate, set *settings.Settings, log *slog.Logger, now func() time.Time) *Manager {
@@ -114,6 +121,38 @@ func ChallengeListen(v string) (string, error) {
 }
 
 func (m *Manager) Status() Status { return *m.status.Load() }
+
+// OnChange sets what is called after Public changes: a certificate issued, renewed,
+// uploaded or dropped. It is called outside the manager's locks and must not block.
+func (m *Manager) OnChange(f func()) {
+	m.annMu.Lock()
+	defer m.annMu.Unlock()
+	m.onChange = f
+}
+
+// Load serves the best certificate already on disk, with no network: called before the
+// nodes are first synced, so the local node starts with the certificate the links expect.
+func (m *Manager) Load(ctx context.Context) { m.settle(ctx) }
+
+// announce calls onChange when Public is not the certificate last announced.
+func (m *Manager) announce() {
+	key := ""
+	if c := m.Public(); c != nil {
+		sum := sha256.Sum256(c.Leaf.Raw)
+		key = hex.EncodeToString(sum[:])
+	}
+	m.annMu.Lock()
+	if key == m.announced {
+		m.annMu.Unlock()
+		return
+	}
+	m.announced = key
+	f := m.onChange
+	m.annMu.Unlock()
+	if f != nil {
+		f()
+	}
+}
 
 // Trusted says whether the panel serves a certificate browsers trust for its address: one
 // from Let's Encrypt, or the admin's own when it is publicly trusted and covers the address.
@@ -273,6 +312,7 @@ func (m *Manager) ensure(ctx context.Context) (orderFailed bool) {
 		}
 		m.status.Store(&st)
 		m.mu.Unlock()
+		m.announce()
 		return true
 	}
 	m.log.Info("acme: certificate installed", "identifier", id, "not_after", cert.Leaf.NotAfter)
@@ -283,6 +323,7 @@ func (m *Manager) ensure(ctx context.Context) (orderFailed bool) {
 // settle serves the best certificate there already is and says whether a new one has to
 // be ordered for id. It does no network.
 func (m *Manager) settle(ctx context.Context) (id string, order bool) {
+	defer m.announce() // after the lock and the status: Public reads both
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	id, err := m.identifier(ctx)

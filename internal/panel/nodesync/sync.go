@@ -70,6 +70,12 @@ type Syncer struct {
 	lastStored   time.Time // when a batch was last stored
 	epochPush    time.Time // when a new counter epoch last made the policies go out again
 	vetLogged    time.Time
+	pos          counterPos // the stored counters position, once read: only this loop writes it
+	posKnown     bool
+
+	// Only the torrent loop touches this: the blocker's state last recorded for the node
+	// ("0", "1"; "" until read).
+	torrentOn string
 
 	health atomic.Pointer[HealthView]
 	online atomic.Pointer[map[string]nodeapi.Online]
@@ -474,6 +480,11 @@ func userPolicy(u db.User, grants int64, name string, seq int64, now time.Time, 
 	return p
 }
 
+// storeEvery is how often a node's traffic goes to PostgreSQL. The counters are pulled
+// every two seconds for the live view; storing each batch then was a transaction a second
+// with two nodes, and the users' rows rewritten with it.
+const storeEvery = 10 * time.Second
+
 // failedPullsBlank is how many pulls in a row may fail before the node's live view is
 // forgotten: devices a node last reported are not still there once it has gone quiet, and
 // would hold places in the device limit on the other nodes.
@@ -503,11 +514,22 @@ func (s *Syncer) pullCounters(ctx context.Context) {
 	if c.Idle && c.Epoch == epoch {
 		return // no traffic, nothing cut: only the live view above was of use
 	}
+	now := s.m.now()
+	// A stored batch is acknowledged once storeInterval has passed since it was stored.
+	// Until then the node keeps offering it and cuts nothing new, so what comes meanwhile
+	// adds up on the node and goes to PostgreSQL in one batch as soon as it is cut: at most
+	// about one interval late, nothing lost or counted twice. The node enforces the quotas
+	// itself, the batch it holds included.
+	ackDue := now.Sub(s.lastStored) >= s.m.storeInterval
 	if c.Epoch == epoch && c.Seq <= seq {
-		_ = s.node.Ack(ctx, c.Epoch, c.Seq)
+		if ackDue || s.lastStored.IsZero() {
+			_ = s.node.Ack(ctx, c.Epoch, c.Seq)
+		}
 		return
 	}
-	now := s.m.now()
+	if c.Epoch == epoch && !s.lastStored.IsZero() && !ackDue {
+		return // a node that cut a batch anyway (an older one): it keeps it until then
+	}
 	c = s.vet(c, now)
 	names := make([]string, 0, len(c.Slots)+len(c.Pools))
 	for slot := range c.Slots {
@@ -558,20 +580,25 @@ func (s *Syncer) pullCounters(ctx context.Context) {
 		if err := domain.CountTraffic(ctx, q, b, now); err != nil {
 			return err
 		}
-		if err := q.SetNodeState(ctx, db.SetNodeStateParams{Key: stateKeyOf("counters_epoch", s.id), Value: c.Epoch}); err != nil {
-			return err
+		if c.Epoch != epoch {
+			if err := q.SetNodeState(ctx, db.SetNodeStateParams{Key: stateKeyOf("counters_epoch", s.id), Value: c.Epoch}); err != nil {
+				return err
+			}
 		}
 		return q.SetNodeState(ctx, db.SetNodeStateParams{Key: stateKeyOf("counters_seq", s.id), Value: strconv.FormatInt(c.Seq, 10)})
 	})
 	if err != nil {
+		s.posKnown = false // read it again: the transaction may have committed after all
 		s.log.Error("store counters", "err", err)
 		return
 	}
+	s.pos, s.posKnown = counterPos{epoch: c.Epoch, seq: c.Seq}, true
 	s.lastStored = now
 	s.m.noteBatch(s.id)
 	// An idle reply has no batch behind it: there is nothing for the node to drop, and it
-	// would answer the acknowledgement with stale_ack.
-	if !c.Idle {
+	// would answer the acknowledgement with stale_ack. A stored batch otherwise waits for
+	// its acknowledgement until storeInterval is over (above); with none, it goes at once.
+	if !c.Idle && s.m.storeInterval <= 0 {
 		if err := s.node.Ack(ctx, c.Epoch, c.Seq); err != nil {
 			s.log.Warn("ack counters", "err", err)
 		}
@@ -638,7 +665,22 @@ func (s *Syncer) vet(c nodeapi.Counters, now time.Time) nodeapi.Counters {
 	return c
 }
 
+// countersPos is the stored counters position. Only this loop writes it (a removed node's
+// rows go with its syncer), so it is read from PostgreSQL once and then kept, instead of
+// two reads every two seconds per node.
 func (s *Syncer) countersPos(ctx context.Context) (string, int64, error) {
+	if s.posKnown {
+		return s.pos.epoch, s.pos.seq, nil
+	}
+	epoch, seq, err := s.readCountersPos(ctx)
+	if err != nil {
+		return "", 0, err
+	}
+	s.pos, s.posKnown = counterPos{epoch: epoch, seq: seq}, true
+	return epoch, seq, nil
+}
+
+func (s *Syncer) readCountersPos(ctx context.Context) (string, int64, error) {
 	epoch, err := s.m.st.Q.GetNodeState(ctx, stateKeyOf("counters_epoch", s.id))
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return "", 0, err

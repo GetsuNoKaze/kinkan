@@ -52,7 +52,11 @@ export const meQuery = {
 
 /** What the list is asked for: left out, a part of the filter is "any" (hidden: everyone, as
  * the API has it; the Users page asks for "hide"). */
-type UsersFilter = Pick<UsersSearch, "state" | "q" | "folder" | "source"> & { hidden?: "hide" | "show" | "only" };
+type UsersFilter = Pick<UsersSearch, "q" | "folder" | "source"> & {
+  /** "attention": out of traffic, expiring and expired in that order, for the overview. */
+  state: UsersSearch["state"] | "attention";
+  hidden?: "hide" | "show" | "only";
+};
 
 /** The users page lists everyone it can (the API's cap); a card that shows a few asks for just those. */
 const USERS_MAX = 500;
@@ -69,7 +73,8 @@ export function useUsers(f: UsersFilter, o: { limit?: number; refetchInterval?: 
         }),
       ),
     placeholderData: keepPreviousData,
-    refetchInterval: o.refetchInterval ?? 10_000,
+    // Who is online is the only thing in the list that moves on its own; edits refresh it at once.
+    refetchInterval: o.refetchInterval ?? 30_000,
   });
 }
 
@@ -78,7 +83,7 @@ export function useUser(id: number | undefined) {
     queryKey: qk.user(id ?? 0),
     queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}", { params: { path: { id: id! } }, signal })),
     enabled: !!id,
-    refetchInterval: 5_000,
+    refetchInterval: 15_000,
   });
 }
 
@@ -93,7 +98,7 @@ export function useDevices(id: number) {
   return useQuery({
     queryKey: qk.devices(id),
     queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}/devices", { params: { path: { id } }, signal })),
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
   });
 }
 
@@ -102,7 +107,7 @@ export function useBoundDevices(id: number) {
   return useQuery({
     queryKey: qk.boundDevices(id),
     queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}/bound-devices", { params: { path: { id } }, signal })),
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
   });
 }
 
@@ -111,15 +116,25 @@ export function useTariffs() {
 }
 
 export function useInbounds() {
-  return useQuery({ queryKey: qk.inbounds, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/inbounds", { signal })), refetchInterval: 10_000 });
+  // The listeners' state; an edit refreshes the list at once.
+  return useQuery({ queryKey: qk.inbounds, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/inbounds", { signal })), refetchInterval: 30_000 });
 }
 
 export function usePresets() {
   return useQuery({ queryKey: qk.presets, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/presets", { signal })), staleTime: Infinity });
 }
 
-export function useOverview() {
-  return useQuery({ queryKey: qk.overview, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/stats/overview", { signal })), refetchInterval: 10_000 });
+/**
+ * The overview's figures. The overview page polls them; elsewhere (the menu's count of
+ * clients) they are read once and refreshed by edits and on return to the tab: each read
+ * counts every user and sums the month's traffic.
+ */
+export function useOverview(o: { poll?: boolean } = {}) {
+  return useQuery({
+    queryKey: qk.overview,
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/stats/overview", { signal })),
+    refetchInterval: o.poll === false ? false : 15_000,
+  });
 }
 
 export function useServerTraffic(range: "24h" | "7d" | "30d") {
@@ -132,7 +147,7 @@ export function useServerTraffic(range: "24h" | "7d" | "30d") {
 }
 
 export function useNode() {
-  return useQuery({ queryKey: qk.node, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/node", { signal })), refetchInterval: 5_000 });
+  return useQuery({ queryKey: qk.node, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/node", { signal })), refetchInterval: 10_000 });
 }
 
 export function useNodes() {
@@ -140,7 +155,7 @@ export function useNodes() {
     queryKey: qk.nodes,
     queryFn: ({ signal }) => unwrap(api.GET("/api/v1/nodes", { signal })),
     // Closer while a node updates: it goes down and comes back on the new version.
-    refetchInterval: (q) => (q.state.data?.some((n) => n.update?.state === "running") ? 4_000 : 10_000),
+    refetchInterval: (q) => (q.state.data?.some((n) => n.update?.state === "running") ? 4_000 : 30_000),
   });
 }
 
@@ -252,12 +267,13 @@ export function useNodeTraffic(id: number | undefined, range: "24h" | "7d" | "30
 }
 
 /** What every node carried in a range, biggest first: the dashboard's share of each. */
-export function useNodeShares(range: "24h" | "7d" | "30d") {
+export function useNodeShares(range: "24h" | "7d" | "30d", enabled = true) {
   return useQuery({
     queryKey: qk.nodeShares(range),
     queryFn: ({ signal }) => unwrap(api.GET("/api/v1/stats/nodes", { params: { query: { range } }, signal })),
     placeholderData: keepPreviousData,
     refetchInterval: 60_000,
+    enabled,
   });
 }
 

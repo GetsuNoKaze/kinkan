@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"maps"
 	"slices"
 	"sort"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/panel/torrent"
 )
 
 // LocalNode is the id of the panel's own node, reached over the unix socket.
@@ -66,6 +68,20 @@ type Manager struct {
 	snap    *snapshot
 	batchMu sync.Mutex
 	batches map[int64]uint64
+
+	// The torrent blocker's settings for the pullers (torrent.go), read again only after
+	// a change: the whole snapshot for one flag every few seconds kept PostgreSQL busy.
+	torMu      sync.Mutex
+	tor        torrent.Config
+	torChanges uint64
+	torRead    bool
+
+	// When recordDevices last wrote each user ("u<id>") and device ("d<user>/<ip>"); only
+	// the upkeep loop touches it.
+	touched map[string]int64
+
+	// storeInterval is storeEvery; tests that pull batch after batch set it to 0.
+	storeInterval time.Duration
 }
 
 type running struct {
@@ -77,7 +93,7 @@ type running struct {
 
 func NewManager(st *store.Store, set *settings.Settings, pool *domain.Pool, connect Connect, log *slog.Logger, now func() time.Time) *Manager {
 	return &Manager{st: st, set: set, pool: pool, connect: connect, log: log, now: now,
-		nodesDirty: make(chan struct{}, 1), running: map[int64]*running{}, batches: map[int64]uint64{}}
+		nodesDirty: make(chan struct{}, 1), running: map[int64]*running{}, batches: map[int64]uint64{}, storeInterval: storeEvery}
 }
 
 func (m *Manager) Run(ctx context.Context) {
@@ -524,7 +540,10 @@ func (m *Manager) maintainPool(ctx context.Context, now time.Time) {
 	m.SlotsChanged()
 }
 
-func (m *Manager) recordDevices(ctx context.Context, now time.Time) error {
+// touchOnline is how often an online user's online_at and a device's last_seen are written.
+const touchOnline = 2 * time.Minute
+
+func (m *Manager) recordDevices(ctx context.Context, now time.Time) (err error) {
 	online := m.Online()
 	if len(online) == 0 {
 		return nil
@@ -554,16 +573,45 @@ func (m *Manager) recordDevices(ctx context.Context, now time.Time) error {
 			devices = append(devices, device{r.UserID, ip})
 		}
 	}
-	if len(users) == 0 {
+	// "Seen" needs minutes, not the upkeep's 30 s: a user or a device written lately is left
+	// alone, and with nobody to write there is no transaction and no row lock at all.
+	at := now.Unix()
+	if m.touched == nil {
+		m.touched = map[string]int64{}
+	}
+	fresh := func(key string) bool {
+		return at-m.touched[key] < int64(touchOnline/time.Second) && at >= m.touched[key]
+	}
+	users = slices.DeleteFunc(users, func(u int64) bool { return fresh("u" + strconv.FormatInt(u, 10)) })
+	devices = slices.DeleteFunc(devices, func(d device) bool { return fresh("d" + strconv.FormatInt(d.user, 10) + "/" + d.ip) })
+	if len(users) == 0 && len(devices) == 0 {
 		return nil
+	}
+	// A device is upserted under its user's lock: its user is written then too.
+	for _, d := range devices {
+		if !slices.Contains(users, d.user) {
+			users = append(users, d.user)
+		}
 	}
 	slices.Sort(users)
 	slices.SortFunc(devices, func(a, b device) int { return cmp.Or(cmp.Compare(a.user, b.user), strings.Compare(a.ip, b.ip)) })
 	devices = slices.Compact(devices)
-	dp := db.UpsertDevicesParams{Now: now.Unix()}
+	dp := db.UpsertDevicesParams{Now: at}
 	for _, d := range devices {
 		dp.UserIds, dp.Ips = append(dp.UserIds, d.user), append(dp.Ips, d.ip)
 	}
+	defer func() {
+		if err == nil {
+			for _, u := range users {
+				m.touched["u"+strconv.FormatInt(u, 10)] = at
+			}
+			for _, d := range devices {
+				m.touched["d"+strconv.FormatInt(d.user, 10)+"/"+d.ip] = at
+			}
+			// What has not been written for a while is gone from the live view: forgotten.
+			maps.DeleteFunc(m.touched, func(_ string, t int64) bool { return at-t > int64(time.Hour/time.Second) })
+		}
+	}()
 	// Blind writes: READ COMMITTED. The users are locked in id order like the traffic
 	// batches lock them; a user deleted meanwhile is skipped, not an error for the rest.
 	return m.st.TxRC(ctx, func(q *db.Queries) error {

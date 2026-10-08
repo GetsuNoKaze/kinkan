@@ -288,8 +288,9 @@ function ServerCard() {
 function NodeTrafficCard() {
   const nodes = useNodes();
   const [range, setRange] = useState<Range>("24h");
-  const shares = useNodeShares(range);
-  if (!nodes.data || nodes.data.length < 2) return null;
+  const several = (nodes.data?.length ?? 0) >= 2;
+  const shares = useNodeShares(range, several);
+  if (!several) return null;
   const total = shares.data?.total ?? 0;
   return (
     <section className="card glass reveal" style={{ "--i": 8 } as React.CSSProperties} aria-labelledby="node-traffic-title">
@@ -353,19 +354,15 @@ function percent(p: number): string {
 const ATTENTION_ROWS = 5;
 
 function AttentionCard() {
-  // Five rows are shown, so five are asked for, and not every ten seconds.
-  const few = { limit: ATTENTION_ROWS, refetchInterval: 30_000 };
-  const expiring = useUsers({ state: "expiring", q: "" }, few);
-  const limited = useUsers({ state: "limited", q: "" }, few);
-  const expired = useUsers({ state: "expired", q: "" }, few);
+  // Out of traffic, then expiring, then expired: one request, five rows, every half minute.
+  const attention = useUsers({ state: "attention", q: "" }, { limit: ATTENTION_ROWS, refetchInterval: 30_000 });
   const toast = useToast();
   const extend = useUserMutation(userActions.extend);
-  const list: User[] = [...(limited.data?.items ?? []), ...(expiring.data?.items ?? []), ...(expired.data?.items ?? [])].slice(0, ATTENTION_ROWS);
-  const queries = [limited, expiring, expired];
-  // One list that did not load is not "all good": the user it would have shown is missing.
-  const failed = queries.find((q) => q.data === undefined && q.isError);
-  const loading = !failed && queries.some((q) => q.data === undefined);
-  const retry = () => queries.forEach((q) => void q.refetch());
+  const list: User[] = attention.data?.items ?? [];
+  // A list that did not load is not "all good": the users it would have shown are missing.
+  const failed = attention.data === undefined && attention.isError ? attention : undefined;
+  const loading = !failed && attention.data === undefined;
+  const retry = () => void attention.refetch();
   return (
     <section className="card glass reveal flex flex-col" style={{ "--i": 6 } as React.CSSProperties} aria-labelledby="att-title">
       <div className="card-head">

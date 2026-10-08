@@ -29,7 +29,7 @@ pub fn tune() -> Result<()> {
 
 /// HTTPS ports the panel moves a blocked inbound to on its own (internal/panel/autotune
 /// Pool): the node cannot open them in the firewall itself.
-pub const POOL: [u16; 12] = [2053, 2083, 2087, 2096, 2443, 3443, 4443, 5443, 6443, 7443, 8443, 9443];
+pub const POOL: [u16; 15] = [2053, 2083, 2087, 2096, 2443, 3443, 4443, 5443, 6443, 7443, 8443, 9443, 10443, 11443, 12443];
 
 /// The ufw rules of an install: the panel's port (or a node's API port), 80 for Let's
 /// Encrypt, 443 and the pool over TCP and UDP.
@@ -42,11 +42,13 @@ pub fn rules(panel_port: Option<u16>, node_api: Option<u16>) -> Vec<String> {
     if let Some(p) = node_api {
         r.push(format!("{p}/tcp"));
     }
-    for p in std::iter::once(443).chain(POOL) {
-        r.push(format!("{p}/tcp"));
-        r.push(format!("{p}/udp"));
-    }
+    r.extend(pool_rules());
     r
+}
+
+/// 443 and the pool over TCP and UDP: what the protocols and the panel's moves need open.
+pub fn pool_rules() -> Vec<String> {
+    std::iter::once(443).chain(POOL).flat_map(|p| [format!("{p}/tcp"), format!("{p}/udp")]).collect()
 }
 
 /// Opens the rules when ufw is on; returns whether it was.
