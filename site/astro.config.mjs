@@ -79,7 +79,7 @@ export default defineConfig({
 					items: [{ slug: 'nodes/nodes' }, { slug: 'nodes/cascades' }, { slug: 'nodes/warp' }],
 				},
 				{
-					label: 'Подключения',
+					label: 'Протоколы',
 					translations: { en: 'Protocols' },
 					items: [
 						{ slug: 'protocols/presets' },
@@ -122,7 +122,7 @@ export default defineConfig({
 				{
 					label: 'Справка',
 					translations: { en: 'Reference' },
-					items: [{ slug: 'api' }, { slug: 'faq' }, { slug: 'changelog' }],
+					items: [{ slug: 'api' }, { slug: 'faq' }, { slug: 'changelog' }, { slug: 'support' }],
 				},
 			],
 			plugins: [starlightLinksValidator({ errorOnLocalLinks: true })],

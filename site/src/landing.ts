@@ -116,6 +116,7 @@ export const strings = {
 			sponsorTitle: 'Поддержать проект',
 			sponsorText: 'mikan бесплатный и с открытым кодом. Если панель вам пригодилась, автора можно поддержать.',
 			sponsor: 'Поддержать на Tribute',
+			goals: 'На что собираем',
 			github: 'Код на GitHub',
 		},
 		header: {
@@ -228,6 +229,7 @@ export const strings = {
 			sponsorTitle: 'Support the project',
 			sponsorText: 'mikan is free and open source. If the panel is useful to you, you can support its author.',
 			sponsor: 'Support on Tribute',
+			goals: 'What we collect for',
 			github: 'Code on GitHub',
 		},
 		header: {
