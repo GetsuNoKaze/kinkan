@@ -128,7 +128,7 @@ function IngressCard({ v }: { v: View }) {
             ]}
           />
         </Field>
-        <Field label={t("filters.networks")} htmlFor="f-in-networks" hint={t("filters.networksHint")} error={listError(errors, "ingress.networks")}>
+        <Field label={t("filters.networks")} htmlFor="f-in-networks" hint={t("filters.ingressNetworksHint")} error={listError(errors, "ingress.networks")}>
           <textarea id="f-in-networks" className="input mono min-h-[96px]" value={draft.networks} onChange={(ev) => setDraft((d) => ({ ...d, networks: ev.target.value }))} spellCheck={false} placeholder={"203.0.113.0/24\n2001:db8::/32"} />
         </Field>
         <FormActions dirty={dirty} saving={save.isPending} onReset={reset} />
