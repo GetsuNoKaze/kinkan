@@ -56,7 +56,7 @@ export function Shell() {
           <div className="brand">
             <Logo />
             <span className="brand-name">mikan</span>
-            <button type="button" className="icon-btn fold-btn" onClick={fold} aria-label={foldLabel} title={foldLabel} aria-expanded={!folded}>
+            <button type="button" className="icon-btn fold-btn" onClick={fold} aria-label={foldLabel} title={foldLabel}>
               {folded ? <PanelLeftOpen size={18} aria-hidden /> : <PanelLeftClose size={18} aria-hidden />}
             </button>
           </div>
@@ -88,11 +88,14 @@ export function Shell() {
 // The phone's bottom bar has room for four sections; the rest sit under "More".
 const MOBILE_MAIN = 4;
 
+// A section is current on its own page and on the pages below it (/addons/telegram).
+const isIn = (path: string, to: string) => path.endsWith(to) || path.includes(`${to}/`);
+
 function MobileNav() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
   const more = NAV.slice(MOBILE_MAIN);
-  const inMore = more.some((n) => path.endsWith(n.to));
+  const inMore = more.some((n) => isIn(path, n.to));
   return (
     <nav className="mnav glass" aria-label={t("shell.sections")}>
       {NAV.slice(0, MOBILE_MAIN).map((n) => (
@@ -111,7 +114,7 @@ function MobileNav() {
         <Menu.Portal>
           <Menu.Content className="menu glass-strong" side="top" align="end" sideOffset={12}>
             {more.map((n) => (
-              <Menu.Item key={n.to} className="menu-item" onSelect={() => void navigate({ to: n.to })} aria-current={path.endsWith(n.to) ? "page" : undefined}>
+              <Menu.Item key={n.to} className="menu-item" onSelect={() => void navigate({ to: n.to })} aria-current={isIn(path, n.to) ? "page" : undefined}>
                 <n.icon size={16} aria-hidden /> {t(`nav.${n.key}`)}
               </Menu.Item>
             ))}
