@@ -131,7 +131,7 @@ export function RoutingSection({ s, view, onView }: { s: Schemas["SettingsView"]
     e.preventDefault();
     save.mutate({ sub_routing: draft.mode, sub_routes: draft.routes, sub_rules: draft.rules });
   };
-  const nodeName = (n: { name: string; local: boolean }) => t("settings.routesOnServer", { name: n.name || (n.local ? t("settings.routesThisServer") : `#${n.id}`) });
+  const nodeName = (n: { id: number; name: string; local: boolean }) => t("settings.routesOnServer", { name: n.name || (n.local ? t("settings.routesThisServer") : `#${n.id}`) });
   const routed = Object.keys(routes.services ?? {}).length + (routes.direct ?? []).length + (routes.lists ?? []).length;
   const targetSelect = (id: string, value: string, onChange: (v: string) => void, follow = true, label?: string) => (
     <select id={id} className="input max-w-[220px]" value={value} onChange={(e) => onChange(e.target.value)} aria-label={label}>
