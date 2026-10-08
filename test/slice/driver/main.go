@@ -56,13 +56,14 @@ var protos = []struct {
 	{"grpc", "VLESS gRPC", false}, {"trojan", "Trojan", false}, {"anytls", "AnyTLS", false}, {"pq", "VLESS PQ", false},
 	{"trusttunnel", "TrustTunnel", false}, {"shadowquic", "ShadowQUIC", false}, {"mieru", "Mieru", false},
 	{"ss", "Shadowsocks", true}, {"sudoku", "Sudoku", true}, {"snell", "Snell", true},
+	{"tls-xhttp", "VLESS TLS XHTTP", false}, {"tls-vision", "VLESS TLS Vision", false},
 	{"custom-vmess", "Custom", false},
 	{"us-xhttp", "🇺🇸 VLESS XHTTP", false}, {"us-hy2", "🇺🇸 Hysteria2", false},
 }
 
 // localProtos run on the panel's own node; a new node gets remoteInbounds defaults.
 const (
-	localProtos    = 15
+	localProtos    = 17
 	remoteInbounds = 4
 	// clashOnly: local inbounds only Clash apps get (TrustTunnel, ShadowQUIC, Mieru,
 	// Sudoku, Snell); they have no share link.
@@ -175,6 +176,8 @@ func prepare() {
 		{"preset": "shadowsocks_2022"},
 		{"preset": "sudoku"},
 		{"preset": "snell"},
+		{"preset": "vless_tls_xhttp"},
+		{"preset": "vless_tls_vision"},
 		{"preset": "custom", "port": "2097", "config": "type: vmess\nws-path: /vm\nmikan:\n  tls: node\n"},
 	} {
 		p.call("POST", "/api/v1/inbounds", in, nil)

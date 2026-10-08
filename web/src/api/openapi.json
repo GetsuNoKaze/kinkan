@@ -1153,6 +1153,8 @@
               "vless_reality_vision",
               "vless_reality_grpc",
               "trojan_reality",
+              "vless_tls_xhttp",
+              "vless_tls_vision",
               "anytls",
               "vless_reality_xhttp_pq",
               "trusttunnel",
@@ -2077,6 +2079,9 @@
           },
           "default_port": {
             "type": "string"
+          },
+          "domain_cert": {
+            "type": "boolean"
           },
           "id": {
             "type": "string"

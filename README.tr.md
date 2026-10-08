@@ -129,7 +129,7 @@ Mikan ödemeyi iade edebilir.
 
 ## Protokoller
 
-On beş protokol, her biri sizin için üretilmiş anahtarlarla hazır bir ön ayar. Abonelik her uygulamaya yalnızca çalıştırabildiğini verir:
+On yedi protokol, her biri sizin için üretilmiş anahtarlarla hazır bir ön ayar. Abonelik her uygulamaya yalnızca çalıştırabildiğini verir:
 
 | Protokol | Clash uygulamaları<br><sub>mihomo çekirdeği</sub> | Xray uygulamaları<br><sub>Happ, v2RayTun</sub> | sing-box uygulamaları<br><sub>Hiddify, Karing</sub> |
 |---|:---:|:---:|:---:|
@@ -138,6 +138,8 @@ On beş protokol, her biri sizin için üretilmiş anahtarlarla hazır bir ön a
 | VLESS · REALITY · gRPC | ✅ | ✅ | ✅ |
 | VLESS PQ (kuantum sonrası şifreleme) | ✅ | ✅ | — |
 | Trojan · REALITY | ✅ | ✅ | ✅ |
+| VLESS · TLS · XHTTP | ✅ | ✅ | — |
+| VLESS · TLS · Vision | ✅ | ✅ | ✅ |
 | Hysteria2 | ✅ | ✅ | ✅ |
 | TUIC v5 | ✅ | — | ✅ |
 | AnyTLS | ✅ | — | ✅ |
