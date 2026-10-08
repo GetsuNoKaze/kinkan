@@ -177,11 +177,8 @@ func prepare() {
 		{"preset": "shadowsocks_2022"},
 		{"preset": "sudoku"},
 		{"preset": "snell"},
-		// Off the autotune port pool (their defaults, 2443 and 3443, are in it): with every
-		// protocol of the slice on one node the pool would be full, and the autotune phase
-		// would have no port to move XHTTP to.
-		{"preset": "vless_tls_xhttp", "port": "2445"},
-		{"preset": "vless_tls_vision", "port": "3445"},
+		{"preset": "vless_tls_xhttp"},
+		{"preset": "vless_tls_vision"},
 		{"preset": "custom", "port": "2097", "config": "type: vmess\nws-path: /vm\nmikan:\n  tls: node\n"},
 	} {
 		p.call("POST", "/api/v1/inbounds", in, nil)

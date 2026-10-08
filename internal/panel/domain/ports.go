@@ -46,7 +46,7 @@ const sshPort = 22
 // port, a cascade relay. HTTPS runs on these ports too (the alternative ports of CDNs),
 // so the traffic still looks like a web server's. The installer opens them in the
 // firewall.
-var PortPool = []int{2053, 2083, 2087, 2096, 2443, 3443, 4443, 5443, 6443, 7443, 8443, 9443}
+var PortPool = []int{2053, 2083, 2087, 2096, 2443, 3443, 4443, 5443, 6443, 7443, 8443, 9443, 10443, 11443, 12443}
 
 // PortHolder is what holds a port. Name and ID are an inbound's; the other kinds are one
 // per node.

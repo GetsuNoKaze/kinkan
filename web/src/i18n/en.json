@@ -1049,7 +1049,7 @@
     "stuck": {
       "off": "Automatic fixes are off for this protocol.",
       "waiting": "The port or site was just changed. Waiting for clients to update their subscription.",
-      "no_port": "No free HTTPS ports left on the node.",
+      "no_port": "Every port autotune moves a protocol to is taken (2053, 2083, 2087, 2096, 2443–9443 in steps of 1000, 10443–12443). Turn off a protocol you do not need or move one to another port.",
       "no_target": "No other suitable site next to the server.",
       "exhausted": "Changing the port and the site did not help: the protocol itself is probably blocked. Try another one."
     },
