@@ -28,3 +28,6 @@ Thumbs.db
 
 # release artifacts
 /release/
+
+# The donations ledger the pages workflow downloads before a build.
+site/src/data/
