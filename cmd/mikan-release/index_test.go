@@ -187,13 +187,13 @@ func TestGoalsIntoIndex(t *testing.T) {
 	}
 	// A file the readers would not show whole is refused before anything is signed.
 	for name, body := range map[string]string{
-		"no donate link":   `{"items": []}`,
-		"http donate link": `{"donate": "http://x.example", "items": []}`,
-		"unknown field":    `{"donate": "https://x.example", "items": [], "extra": 1}`,
-		"bad id":           `{"donate": "https://x.example", "items": [{"id": "Device", "title": {"ru": "a"}, "target": 1, "currency": "USD", "status": "open"}]}`,
-		"twice":            `{"donate": "https://x.example", "items": [{"id": "a", "title": {"ru": "a"}, "target": 1, "currency": "USD", "status": "open"}, {"id": "a", "title": {"ru": "b"}, "target": 1, "currency": "USD", "status": "open"}]}`,
+		"no donate link":       `{"items": []}`,
+		"http donate link":     `{"donate": "http://x.example", "items": []}`,
+		"unknown field":        `{"donate": "https://x.example", "items": [], "extra": 1}`,
+		"bad id":               `{"donate": "https://x.example", "items": [{"id": "Device", "title": {"ru": "a"}, "target": 1, "currency": "USD", "status": "open"}]}`,
+		"twice":                `{"donate": "https://x.example", "items": [{"id": "a", "title": {"ru": "a"}, "target": 1, "currency": "USD", "status": "open"}, {"id": "a", "title": {"ru": "b"}, "target": 1, "currency": "USD", "status": "open"}]}`,
 		"done without release": `{"donate": "https://x.example", "items": [{"id": "a", "title": {"ru": "a"}, "target": 1, "currency": "USD", "status": "done"}]}`,
-		"markup":           `{"donate": "https://x.example", "items": [{"id": "a", "title": {"ru": "<script>"}, "target": 1, "currency": "USD", "status": "open"}]}`,
+		"markup":               `{"donate": "https://x.example", "items": [{"id": "a", "title": {"ru": "<script>"}, "target": 1, "currency": "USD", "status": "open"}]}`,
 	} {
 		if err := makeGoals([]string{"-file", f.write("bad.json", body), "-in", filepath.Join(first, "index.json"), "-out", filepath.Join(f.dir, "bad")}); err == nil {
 			t.Errorf("%s: accepted", name)
