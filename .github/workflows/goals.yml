@@ -36,5 +36,9 @@ jobs:
         run: |
           # Goals go into an index a release made; with none yet there is nothing to add to.
           gh release download updates -p index.json -p index.json.sig -D updates
-          go run ./cmd/mikan-release goals -file .github/goals.json -in updates/index.json -out dist
+          # What the donations workflow counted is added to the sums of the file.
+          ledger=""
+          if gh release download updates -p donations.json -D updates; then ledger="-ledger updates/donations.json"; fi
+          # shellcheck disable=SC2086 # $ledger is two words or none
+          go run ./cmd/mikan-release goals -file .github/goals.json $ledger -in updates/index.json -out dist
           gh release upload updates dist/index.json dist/index.json.sig --clobber
