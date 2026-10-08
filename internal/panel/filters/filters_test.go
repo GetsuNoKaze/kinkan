@@ -3,6 +3,7 @@ package filters
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"mikan/internal/nodeapi"
@@ -38,15 +39,30 @@ func TestValidate(t *testing.T) {
 		t.Fatalf("ingress: %v", c.Ingress.Networks)
 	}
 
-	for list, bad := range map[string]Config{
-		"egress.ports":     {Egress: Egress{Ports: []string{"0"}}},
-		"egress.networks":  {Egress: Egress{Networks: []string{"300.1.1.1"}}},
-		"egress.domains":   {Egress: Egress{Domains: []string{"bad,REJECT"}}},
-		"ingress.networks": {Ingress: Ingress{Networks: []string{"fe80::1%eth0"}}},
+	for _, bad := range []struct {
+		list string
+		c    Config
+	}{
+		{"egress.ports", Config{Egress: Egress{Ports: []string{"0"}}}},
+		{"egress.ports", Config{Egress: Egress{Ports: []string{"+465"}}}}, // mihomo refuses the sign
+		{"egress.networks", Config{Egress: Egress{Networks: []string{"300.1.1.1"}}}},
+		{"egress.domains", Config{Egress: Egress{Domains: []string{"bad,REJECT"}}}},
+		{"egress.domains", Config{Egress: Egress{Domains: []string{"203.0.113.7"}}}}, // an address goes to the networks
+		{"ingress.networks", Config{Ingress: Ingress{Networks: []string{"fe80::1%eth0"}}}},
 	} {
-		if err := bad.Validate(); !errors.As(err, &p) || p.List != list {
-			t.Errorf("%s: %v", list, err)
+		if err := bad.c.Validate(); !errors.As(err, &p) || p.List != bad.list {
+			t.Errorf("%s: %v", bad.list, err)
 		}
+	}
+	// The answer names a wrong entry without sending a pasted page back whole.
+	huge := Config{Egress: Egress{Domains: []string{strings.Repeat("я", 5000)}}}
+	if err := huge.Validate(); !errors.As(err, &p) || len([]rune(p.Value)) > 65 {
+		t.Fatalf("the wrong entry comes back whole: %d", len(p.Value))
+	}
+	// An IPv4 network written as IPv6 is the IPv4 one: the node sees clients that way.
+	mapped := Config{Ingress: Ingress{Networks: []string{"::ffff:203.0.113.0/120"}}}
+	if err := mapped.Validate(); err != nil || mapped.Ingress.Networks[0] != "203.0.113.0/24" {
+		t.Fatalf("mapped: %v %v", mapped.Ingress.Networks, err)
 	}
 	long := Config{Egress: Egress{Ports: make([]string, MaxItems+1)}}
 	if err := long.Validate(); !errors.Is(err, ErrConfig) {
