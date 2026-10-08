@@ -3,7 +3,7 @@ import { useState, type FormEvent } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../../api/client";
 import { useNodes } from "../../../api/hooks";
 import { Disclosure, FormActions, WithPreview } from "../../../components/layout";
-import { Switch } from "../../../components/switch";
+import { SwitchRow } from "../../../components/switch";
 import { Button, ErrorState, Field, Pill, Segmented, Skeleton } from "../../../components/ui";
 import { t, useLocale } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
@@ -15,6 +15,9 @@ type Routes = Schemas["Routes"];
 type DNS = NonNullable<Routes["dns"]>;
 type List = NonNullable<Routes["lists"]>[number];
 type View = "simple" | "yaml";
+
+// As many own lists as the server takes (subs.MaxLists).
+const MAX_LISTS = 30;
 
 const MODES = [
   { id: "ru_direct", title: "settings.routingRuDirect", sub: "settings.routingRuDirectSub" },
@@ -48,6 +51,18 @@ const DNS_PRESETS: { id: string; dns: DNS }[] = [
   },
 ];
 
+// What is empty is left out, as the server leaves it: a draft that was emptied again is not a change.
+function tidy(r: Routes): Routes {
+  const out = { ...r };
+  if (!Object.keys(out.services ?? {}).length) delete out.services;
+  if (!out.direct?.length) delete out.direct;
+  if (!out.lists?.length) delete out.lists;
+  if (!out.servers?.auto && !out.servers?.interval && !out.servers?.no_countries) delete out.servers;
+  if (!out.tune?.block_quic && !out.tune?.sniffer && !out.tune?.real_ip) delete out.tune;
+  if (!out.dns?.nameserver?.length && !out.dns?.proxy_server_nameserver?.length && !out.dns?.policy?.length) delete out.dns;
+  return out;
+}
+
 const lines = (s: string) =>
   s
     .split("\n")
@@ -71,15 +86,17 @@ export function RoutingSection({ s, view, onView }: { s: Schemas["SettingsView"]
   const catalog = useQuery({ queryKey: ["routes-catalog"], queryFn: ({ signal }) => unwrap(api.GET("/api/v1/settings/routes/catalog", { signal })), staleTime: Infinity });
   const { draft, setDraft, dirty, reset } = useDraft({ mode: s.sub_routing, routes: s.sub_routes, rules: s.sub_rules });
   const routes = draft.routes;
-  const setRoutes = (f: (r: Routes) => Routes) => setDraft((d) => ({ ...d, routes: f(d.routes) }));
-  const [dnsText, setDnsText] = useState(() => ({
-    nameserver: (routes.dns?.nameserver ?? []).join("\n"),
-    proxy: (routes.dns?.proxy_server_nameserver ?? []).join("\n"),
-    policy: policyText(routes.dns?.policy),
-  }));
+  const setRoutes = (f: (r: Routes) => Routes) => setDraft((d) => ({ ...d, routes: tidy(f(d.routes)) }));
+  const dnsTextOf = (dns: DNS | undefined) => ({ nameserver: (dns?.nameserver ?? []).join("\n"), proxy: (dns?.proxy_server_nameserver ?? []).join("\n"), policy: policyText(dns?.policy) });
+  const [dnsText, setDnsText] = useState(() => dnsTextOf(routes.dns));
+  // The DNS fields keep their own text, so they are put back with the rest.
+  const discard = () => {
+    reset();
+    setDnsText(dnsTextOf(s.sub_routes.dns));
+  };
   const setDns = (dns: DNS) => {
     setRoutes((r) => ({ ...r, dns }));
-    setDnsText({ nameserver: (dns.nameserver ?? []).join("\n"), proxy: (dns.proxy_server_nameserver ?? []).join("\n"), policy: policyText(dns.policy) });
+    setDnsText(dnsTextOf(dns));
   };
   const editDns = (k: keyof typeof dnsText) => (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const next = { ...dnsText, [k]: e.target.value };
@@ -114,10 +131,10 @@ export function RoutingSection({ s, view, onView }: { s: Schemas["SettingsView"]
     e.preventDefault();
     save.mutate({ sub_routing: draft.mode, sub_routes: draft.routes, sub_rules: draft.rules });
   };
-  const nodeName = (n: { name: string; local: boolean }) => t("settings.routesOnServer", { name: n.name || (n.local ? t("settings.routesThisServer") : "—") });
+  const nodeName = (n: { name: string; local: boolean }) => t("settings.routesOnServer", { name: n.name || (n.local ? t("settings.routesThisServer") : `#${n.id}`) });
   const routed = Object.keys(routes.services ?? {}).length + (routes.direct ?? []).length + (routes.lists ?? []).length;
-  const targetSelect = (id: string, value: string, onChange: (v: string) => void, follow = true) => (
-    <select id={id} className="input max-w-[220px]" value={value} onChange={(e) => onChange(e.target.value)}>
+  const targetSelect = (id: string, value: string, onChange: (v: string) => void, follow = true, label?: string) => (
+    <select id={id} className="input max-w-[220px]" value={value} onChange={(e) => onChange(e.target.value)} aria-label={label}>
       {TARGETS.filter((x) => follow || x.id).map((x) => (
         <option key={x.id} value={x.id}>
           {t(x.label)}
@@ -215,7 +232,7 @@ export function RoutingSection({ s, view, onView }: { s: Schemas["SettingsView"]
                 {(routes.lists ?? []).map((l, i) => (
                   <div key={i} className="panel-soft grid gap-2 p-3 sm:grid-cols-[140px_minmax(0,1fr)]">
                     <input className="input mono" value={l.name} onChange={(e) => setList(i, { name: e.target.value.toLowerCase() })} maxLength={32} aria-label={t("settings.routesListName")} placeholder="whitelist" />
-                    <input className="input mono" value={l.url} onChange={(e) => setList(i, { url: e.target.value.trim() })} aria-label={t("settings.routesListUrl")} placeholder="https://raw.githubusercontent.com/…/list.yaml" />
+                    <input className="input mono" value={l.url} onChange={(e) => setList(i, { url: e.target.value.trim() })} maxLength={500} inputMode="url" autoComplete="off" spellCheck={false} aria-label={t("settings.routesListUrl")} placeholder="https://raw.githubusercontent.com/…/list.yaml" />
                     <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
                       <select className="input max-w-[170px]" value={l.behavior} onChange={(e) => setList(i, { behavior: e.target.value })} aria-label={t("settings.routesListBehavior")}>
                         <option value="classical">{t("settings.routesListClassical")}</option>
@@ -227,15 +244,15 @@ export function RoutingSection({ s, view, onView }: { s: Schemas["SettingsView"]
                         <option value="text">TXT</option>
                         <option value="mrs">MRS</option>
                       </select>
-                      {targetSelect(`s-list-${i}`, l.target, (v) => setList(i, { target: v }), false)}
-                      <Button variant="ghost" onClick={() => dropList(i)}>
+                      {targetSelect(`s-list-${i}`, l.target, (v) => setList(i, { target: v }), false, t("settings.routesListTarget"))}
+                      <Button variant="ghost" onClick={() => dropList(i)} aria-label={t("settings.routesListRemoveNamed", { name: l.name })}>
                         {t("settings.routesListRemove")}
                       </Button>
                     </div>
                   </div>
                 ))}
                 <div>
-                  <Button variant="ghost" onClick={addList}>
+                  <Button variant="ghost" onClick={addList} disabled={(routes.lists?.length ?? 0) >= MAX_LISTS}>
                     + {t("settings.routesListAdd")}
                   </Button>
                 </div>
@@ -271,20 +288,20 @@ export function RoutingSection({ s, view, onView }: { s: Schemas["SettingsView"]
               </Field>
               <Field label={t("settings.routesInterval")} htmlFor="s-interval" hint={t("settings.routesIntervalHint")}>
                 <select id="s-interval" className="input max-w-[280px]" value={servers.interval ?? 0} onChange={(e) => setServers({ interval: Number(e.target.value) || undefined })}>
-                  {[0, 60, 120, 600, 1800].map((n) => (
+                  {[...new Set([0, 60, 120, 600, 1800, servers.interval ?? 0])].map((n) => (
                     <option key={n} value={n}>
                       {n ? t("settings.routesIntervalSec", { n }) : t("settings.routesIntervalDefault")}
                     </option>
                   ))}
                 </select>
               </Field>
-              <Toggle label={t("settings.routesCountries")} sub={t("settings.routesCountriesSub")} checked={!servers.no_countries} onChange={(v) => setServers({ no_countries: v ? undefined : true })} />
+              <SwitchRow label={t("settings.routesCountries")} sub={t("settings.routesCountriesSub")} checked={!servers.no_countries} onChange={(v) => setServers({ no_countries: v ? undefined : true })} />
             </Disclosure>
 
             <Disclosure title={t("settings.routesTune")} sub={t("common.forExperts")}>
-              <Toggle label={t("settings.routesQuic")} sub={t("settings.routesQuicSub")} checked={!!tune.block_quic} onChange={(v) => setTune({ block_quic: v || undefined })} />
-              <Toggle label={t("settings.routesSniffer")} sub={t("settings.routesSnifferSub")} checked={!!tune.sniffer} onChange={(v) => setTune({ sniffer: v || undefined })} />
-              <Toggle label={t("settings.routesRealIP")} sub={t("settings.routesRealIPSub")} checked={!!tune.real_ip} onChange={(v) => setTune({ real_ip: v || undefined })} />
+              <SwitchRow label={t("settings.routesQuic")} sub={t("settings.routesQuicSub")} checked={!!tune.block_quic} onChange={(v) => setTune({ block_quic: v || undefined })} />
+              <SwitchRow label={t("settings.routesSniffer")} sub={t("settings.routesSnifferSub")} checked={!!tune.sniffer} onChange={(v) => setTune({ sniffer: v || undefined })} />
+              <SwitchRow label={t("settings.routesRealIP")} sub={t("settings.routesRealIPSub")} checked={!!tune.real_ip} onChange={(v) => setTune({ real_ip: v || undefined })} />
             </Disclosure>
 
             <Disclosure title={t("settings.routesDns")} sub={t("common.forExperts")}>
@@ -313,22 +330,10 @@ export function RoutingSection({ s, view, onView }: { s: Schemas["SettingsView"]
               </p>
             ) : null}
             <p className="mt-3 text-xs text-[var(--ink-500)]">{t("settings.routesNote")}</p>
-            <FormActions dirty={dirty} saving={save.isPending} onReset={reset} />
+            <FormActions dirty={dirty} saving={save.isPending} onReset={discard} />
           </form>
         </section>
     </WithPreview>
-  );
-}
-
-function Toggle({ label, sub, checked, onChange }: { label: string; sub: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div className="flex items-start justify-between gap-4 py-3">
-      <div className="min-w-0">
-        <div className="text-[13px] font-medium">{label}</div>
-        <div className="mt-1 text-xs text-[var(--ink-500)]">{sub}</div>
-      </div>
-      <Switch checked={checked} label={label} onChange={onChange} />
-    </div>
   );
 }
 

@@ -547,6 +547,6 @@ html[data-theme="forest"] {
 /* The addons: tiles that lead to a tool or a payment method. */
 .section-title { font: 600 15px/20px var(--font-display-stack); margin: 4px 4px 12px; color: var(--ink-700); }
 .addon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 16px; }
-.addon-tile { display: flex; align-items: center; gap: 14px; padding: 18px 20px; transition: transform 0.15s var(--ease-out), box-shadow 0.2s; }
-.addon-tile:hover { transform: translateY(-1px); box-shadow: var(--shadow-md, var(--shadow-sm)); }
-.addon-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: rgba(240, 122, 46, 0.12); color: var(--mikan-600); flex-shrink: 0; }
+.addon-tile { display: flex; align-items: center; gap: 12px; padding: 16px 20px; transition: border-color 0.2s, background-color 0.2s; }
+.addon-tile:hover { border-color: color-mix(in srgb, var(--mikan-500) 40%, var(--glass-edge)); background: var(--surface-solid); }
+.addon-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: color-mix(in srgb, var(--mikan-500) 14%, transparent); color: var(--mikan-600); flex-shrink: 0; }
