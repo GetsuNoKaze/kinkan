@@ -49,7 +49,7 @@ Every node with this template needs the fork's build, and so does the panel, whi
 Repository settings the workflows need (release setup is in RELEASE-TT.md):
 
 - Actions enabled for the fork, and under Settings, Actions, General: "Read and write permissions" and "Allow GitHub Actions to create and approve pull requests".
-- Optional secret `SYNC_TOKEN`: a fine-grained token with Contents, Pull requests and Workflows write access to this repository. GitHub refuses pushes that change workflow files from the default token, so without it a sync that brings changes to mikan's workflows fails.
+- Optional secret `SYNC_TOKEN`: a fine-grained token with Contents, Pull requests and Workflows write access to this repository. GitHub refuses pushes that change workflow files from the default token, so without it a sync that brings changes to mikan's workflows fails. It also opens the sync pull request: one opened with the default token does not trigger `ci.yml`, so without `SYNC_TOKEN` mikan's full suite does not run on syncs.
 - Optional secrets `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` to get the failure and recovery messages in Telegram.
 
 ## Licence
