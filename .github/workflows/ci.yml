@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-24.04
     services:
       postgres:
-        image: postgres:18-alpine
+        image: mirror.gcr.io/library/postgres:18-alpine # Kinkan: Docker Hub mirror (see the image job)
         env:
           POSTGRES_USER: mikan_test
           POSTGRES_PASSWORD: mikan_test
@@ -136,6 +136,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Kinkan: Docker Hub's anonymous pull limit is shared by the runners' addresses (see
+      # the image job). The e2e images are pulled from Google's mirror of it and tagged with
+      # their Docker Hub names, so compose finds them here; dockerd's registry-mirrors is not
+      # used by the containerd image store of this Docker.
+      - name: Docker Hub images through mirror.gcr.io
+        run: |
+          for img in $(sed -n -E 's/^\s*image:\s*([^ #]+).*/\1/p; s/^FROM\s+([^ ]+).*/\1/p' test/e2e/compose.yaml test/e2e/Dockerfile | sort -u); do
+            case "$img" in
+              */*) case "${img%%/*}" in *.* | *:*) continue ;; esac  # another registry
+                   src="mirror.gcr.io/$img" ;;
+              *) src="mirror.gcr.io/library/$img" ;;
+            esac
+            docker pull -q "$src" && docker tag "$src" "$img"
+          done
+          docker image ls --format '{{.Repository}}:{{.Tag}}'
       - name: authenticated TrustTunnel, cover and restart
         env:
           E2E_RUN: TrustTunnel
@@ -151,6 +166,13 @@ jobs:
       # arm64 too: a wrong-architecture binary fails the build (see the Dockerfile).
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          # Kinkan: Docker Hub's anonymous pull limit is shared by the runners' addresses,
+          # and a build that hits it fails. Its images come through Google's mirror of it
+          # (the same images by the same digests); BuildKit falls back to Docker Hub.
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .

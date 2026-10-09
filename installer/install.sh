@@ -107,12 +107,13 @@ signed() {
 # release in this project, whatever else the entry says.
 newest_stable() {
   { tr -d ' \t\r\n' <"$1" | tr '{' '\n' && echo; } | while IFS= read -r e; do
-    v=$(printf '%s' "$e" | sed -n 's/.*"version":"\([0-9.]*\)".*/\1/p')
+    v=$(printf '%s' "$e" | sed -n 's/.*"version":"\([0-9.]*\(-tt\.[0-9]*\)\{0,1\}\)".*/\1/p')
     c=$(printf '%s' "$e" | sed -n 's/.*"channel":"\([a-z]*\)".*/\1/p')
-    if [ "$c" = stable ] && printf '%s\n' "$v" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?'; then
+    # Kinkan: its releases (0.5.0.5-tt.3) are stable ones too.
+    if [ "$c" = stable ] && printf '%s\n' "$v" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?(-tt\.[0-9]+)?'; then
       printf '%s\n' "$v"
     fi
-  done | sort -t. -k1,1n -k2,2n -k3,3n -k4,4n | tail -n 1
+  done | sed 's/-tt\./.tt./' | sort -t. -k1,1n -k2,2n -k3,3n -k4,4n -k6,6n | sed 's/\.tt\./-tt./' | tail -n 1
 }
 
 # The index first; whatever goes wrong with it, the latest release.

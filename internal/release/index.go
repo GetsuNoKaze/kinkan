@@ -53,7 +53,7 @@ func ValidChannel(s string) bool { return s == Stable || s == Beta }
 
 // ChannelOf is the channel a release of version goes to: a pre-release is beta.
 func ChannelOf(version string) string {
-	if p := versionParts(version); p != nil && p[5] != "" {
+	if p := versionParts(version); p != nil && p[5] != "" && !forkStable(p[5]) {
 		return Beta
 	}
 	return Stable

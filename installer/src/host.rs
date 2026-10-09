@@ -101,6 +101,32 @@ fn ufw(args: &[&str]) -> Result<()> {
 
 pub const BIN: &str = "/usr/local/bin/mikan";
 
+/// Kinkan's name for the server's command: a link to BIN, which the update units and
+/// everything from upstream keep using.
+pub const ALIAS: &str = "/usr/local/bin/kinkan";
+
+/// Points /usr/local/bin/kinkan at the command, unless something else already holds the name.
+pub fn link_alias() -> Result<()> {
+    link_alias_at(Path::new(ALIAS), Path::new(BIN))
+}
+
+fn link_alias_at(alias: &Path, bin: &Path) -> Result<()> {
+    match fs::read_link(alias) {
+        Ok(to) if to == bin => return Ok(()),
+        Ok(_) => fs::remove_file(alias).with_context(|| format!("remove {}", alias.display()))?,
+        Err(_) if alias.symlink_metadata().is_ok() => bail!("{} exists and is not a link to {}", alias.display(), bin.display()),
+        Err(_) => {}
+    }
+    std::os::unix::fs::symlink(bin, alias).with_context(|| format!("link {} to {}", alias.display(), bin.display()))
+}
+
+/// Removes the link, if it is one.
+pub fn unlink_alias() {
+    if fs::read_link(ALIAS).is_ok() {
+        let _ = fs::remove_file(ALIAS);
+    }
+}
+
 /// Puts this binary at /usr/local/bin/mikan, the server's command, unless it runs from there.
 pub fn install_self() -> Result<()> {
     let me = std::env::current_exe()?;
@@ -328,6 +354,29 @@ mod tests {
         let _ = fs::remove_dir_all(&d);
         fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    // kinkan is a link to the command: made once, moved off a stale target, and a file of
+    // someone else's under that name is left alone.
+    #[test]
+    fn the_kinkan_link_points_at_the_command() {
+        let d = tmpdir("alias");
+        let (alias, bin) = (d.join("kinkan"), d.join("mikan"));
+        link_alias_at(&alias, &bin).unwrap();
+        assert_eq!(fs::read_link(&alias).unwrap(), bin);
+        link_alias_at(&alias, &bin).unwrap();
+        assert_eq!(fs::read_link(&alias).unwrap(), bin);
+
+        fs::remove_file(&alias).unwrap();
+        std::os::unix::fs::symlink(d.join("old"), &alias).unwrap();
+        link_alias_at(&alias, &bin).unwrap();
+        assert_eq!(fs::read_link(&alias).unwrap(), bin);
+
+        fs::remove_file(&alias).unwrap();
+        fs::write(&alias, "someone else's").unwrap();
+        assert!(link_alias_at(&alias, &bin).is_err());
+        assert_eq!(fs::read_to_string(&alias).unwrap(), "someone else's");
+        let _ = fs::remove_dir_all(&d);
     }
 
     // The command is replaced only by a file that runs and is the release meant: a
