@@ -2,6 +2,7 @@ package trusttunnel
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"io"
 	"net"
@@ -156,7 +157,12 @@ func (s *Service) Start(tcpListener net.Listener, udpConn net.PacketConn, tlsCon
 		// Note that this usage is limited to our own net/http fork
 		// The standard library also needs to mask the tls.Conn type for the conn returned by the Listener.
 		// see: https://github.com/golang/go/issues/79293#issuecomment-4426393534
-		protocols.SetUnencryptedHTTP2(true)
+		//
+		// With a fallback the listener negotiates ALPN instead (see below), and HTTP/2 is
+		// served only to clients that negotiated h2, as a real HTTPS site does. Prior-knowledge
+		// HTTP/2 over TLS that negotiated http/1.1 or nothing would give the proxy away to a
+		// prober; such a preface is read as an HTTP/1 request and goes to the fallback.
+		protocols.SetUnencryptedHTTP2(s.fallbackProxy == nil)
 		s.httpServer = &http.Server{
 			Handler:     s,
 			IdleTimeout: DefaultSessionTimeout,
@@ -231,6 +237,16 @@ func (s *Service) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	username, loaded := s.verify(authorization)
 	if !loaded {
 		if s.serveFallback(writer, request) {
+			// A request with credentials that do not match is most likely a misconfigured
+			// client, so it is logged as before; one without credentials is a browser or a
+			// prober, which would only flood the log.
+			switch {
+			case s.logger == nil:
+			case authorization != "":
+				s.badRequest(request.Context(), request, E.New("authorization failed, served the fallback"))
+			default:
+				s.logger.DebugContext(request.Context(), "unauthenticated request from ", request.RemoteAddr, " served the fallback")
+			}
 			return
 		}
 		writer.WriteHeader(http.StatusProxyAuthRequired)
@@ -345,7 +361,8 @@ func (s *Service) verify(authorization string) (username string, loaded bool) {
 	if !loaded {
 		return "", false
 	}
-	if password != recordedPassword {
+	// Constant time, so response timing does not tell a prober how much of a guess matched.
+	if subtle.ConstantTimeCompare([]byte(password), []byte(recordedPassword)) != 1 {
 		return "", false
 	}
 	return username, true
