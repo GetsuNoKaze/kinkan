@@ -13,7 +13,7 @@ use serde::Deserialize;
 /// The public half of the release signing key, the same as internal/release.PublicKey.
 pub const PUBLIC_KEY: &str = "hw+dVtEBKEQ2d4f/W50h5ubgiGZkCmDDYhLApQkvE2o=";
 
-pub const REPO: &str = "GetsuNoKaze/mikan-tt";
+pub const REPO: &str = "GetsuNoKaze/kinkan";
 
 /// The project's own namespace on GitHub Packages: ghcr.io/<owner of REPO in lowercase>/,
 /// as internal/release checks it.
@@ -440,7 +440,7 @@ mod tests {
 
     fn manifest(version: &str, image: &str) -> Vec<u8> {
         format!(
-            r#"{{"version":"{version}","published":"2026-09-29T10:00:00Z","image":"{image}","digest":"sha256:{}","installer":{{"x86_64":{{"url":"https://github.com/GetsuNoKaze/mikan-tt/releases/download/v{version}/mikan-x86_64","sha256":"{}"}}}},"notes":{{"en":"- x"}}}}"#,
+            r#"{{"version":"{version}","published":"2026-09-29T10:00:00Z","image":"{image}","digest":"sha256:{}","installer":{{"x86_64":{{"url":"https://github.com/GetsuNoKaze/kinkan/releases/download/v{version}/mikan-x86_64","sha256":"{}"}}}},"notes":{{"en":"- x"}}}}"#,
             "a".repeat(64),
             "b".repeat(64)
         )
@@ -451,10 +451,10 @@ mod tests {
     fn signed_manifests_only() {
         let signer = SigningKey::from_bytes(&[7; 32]);
         let key = signer.verifying_key();
-        let data = manifest("0.3.9", "ghcr.io/getsunokaze/mikan-tt");
+        let data = manifest("0.3.9", "ghcr.io/getsunokaze/kinkan");
         let sig = STANDARD.encode(signer.sign(&data).to_bytes());
         let m = parse(&data, &format!("{sig}\n"), &key).unwrap();
-        assert_eq!(m.reference(), format!("ghcr.io/getsunokaze/mikan-tt@sha256:{}", "a".repeat(64)));
+        assert_eq!(m.reference(), format!("ghcr.io/getsunokaze/kinkan@sha256:{}", "a".repeat(64)));
         assert_eq!(m.installer["x86_64"].sha256, "b".repeat(64));
 
         let mut tampered = data.clone();
@@ -475,7 +475,7 @@ mod tests {
     fn new_fields_do_not_break_old_installers() {
         let signer = SigningKey::from_bytes(&[7; 32]);
         let key = signer.verifying_key();
-        let text = String::from_utf8(manifest("0.4.4", "ghcr.io/getsunokaze/mikan-tt")).unwrap();
+        let text = String::from_utf8(manifest("0.4.4", "ghcr.io/getsunokaze/kinkan")).unwrap();
         let extended = text.replacen("{\"version\"", "{\"min_installer\":\"0.4.4\",\"channel\":\"stable\",\"version\"", 1).replacen(
             "\"sha256\":",
             "\"size\":123,\"sha256\":",
@@ -500,7 +500,7 @@ mod tests {
         let signer = SigningKey::from_bytes(&[7; 32]);
         let key = signer.verifying_key();
         let accept = |data: &[u8]| parse(data, &STANDARD.encode(signer.sign(data).to_bytes()), &key).is_ok();
-        assert!(accept(&manifest("0.4.4", "ghcr.io/getsunokaze/mikan-tt")));
+        assert!(accept(&manifest("0.4.4", "ghcr.io/getsunokaze/kinkan")));
         for bad in [
             "ghcr.io/someone-else/mikan",
             "ghcr.io/getsunokaze/../x",
@@ -510,9 +510,9 @@ mod tests {
         ] {
             assert!(!accept(&manifest("0.4.4", bad)), "{bad}");
         }
-        let short_hash = String::from_utf8(manifest("0.4.4", "ghcr.io/getsunokaze/mikan-tt")).unwrap().replace(&"b".repeat(64), "bb");
+        let short_hash = String::from_utf8(manifest("0.4.4", "ghcr.io/getsunokaze/kinkan")).unwrap().replace(&"b".repeat(64), "bb");
         assert!(!accept(short_hash.as_bytes()));
-        let plain_http = String::from_utf8(manifest("0.4.4", "ghcr.io/getsunokaze/mikan-tt")).unwrap().replace("https://", "http://");
+        let plain_http = String::from_utf8(manifest("0.4.4", "ghcr.io/getsunokaze/kinkan")).unwrap().replace("https://", "http://");
         assert!(!accept(plain_http.as_bytes()));
     }
 
@@ -667,7 +667,7 @@ mod tests {
         }
         fn release(&self, version: &str) -> String {
             let url = format!("https://github.com/{REPO}/releases/download/v{version}/manifest.json");
-            self.put(&url, manifest(version, "ghcr.io/getsunokaze/mikan-tt"));
+            self.put(&url, manifest(version, "ghcr.io/getsunokaze/kinkan"));
             url
         }
         /// An index of "version channel from" entries.
@@ -694,7 +694,7 @@ mod tests {
         for v in ["0.4.5", "0.5.0.0", "0.5.0.1", "0.5.0.2-rc.1", "0.6.0.0"] {
             f.release(v);
         }
-        let latest = manifest("0.5.0.0", "ghcr.io/getsunokaze/mikan-tt");
+        let latest = manifest("0.5.0.0", "ghcr.io/getsunokaze/kinkan");
         f.put(&latest_url(), latest);
         f.index(&[
             "0.4.5 stable 0.4.0",
@@ -735,7 +735,7 @@ mod tests {
         f.index(&["0.5.0.1 stable 0.4.5"]);
         f.put(
             &format!("https://github.com/{REPO}/releases/download/v0.5.0.1/manifest.json"),
-            manifest("0.5.0.2", "ghcr.io/getsunokaze/mikan-tt"),
+            manifest("0.5.0.2", "ghcr.io/getsunokaze/kinkan"),
         );
         fallback("a manifest of another version");
         f.files.borrow_mut().clear();

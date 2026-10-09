@@ -22,7 +22,7 @@ import (
 const PublicKey = "hw+dVtEBKEQ2d4f/W50h5ubgiGZkCmDDYhLApQkvE2o="
 
 // Repo is where releases are published.
-const Repo = "GetsuNoKaze/mikan-tt"
+const Repo = "GetsuNoKaze/kinkan"
 
 // InstallCommand installs mikan from the latest release; run on the server.
 const InstallCommand = "curl -fsSL https://github.com/" + Repo + "/releases/latest/download/install.sh | sudo bash"
@@ -37,7 +37,7 @@ type Manifest struct {
 	Version      string            `json:"version"`
 	MinInstaller string            `json:"min_installer,omitempty"`
 	Published    time.Time         `json:"published"`
-	Image        string            `json:"image" doc:"Образ в GitHub Packages, например ghcr.io/getsunokaze/mikan-tt"`
+	Image        string            `json:"image" doc:"Образ в GitHub Packages, например ghcr.io/getsunokaze/kinkan"`
 	Digest       string            `json:"digest" doc:"sha256 multi-arch образа"`
 	Installer    map[string]Asset  `json:"installer" doc:"Установщик по архитектуре: x86_64, aarch64"`
 	Notes        map[string]string `json:"notes" doc:"Что изменилось, markdown по языкам: en, ru"`

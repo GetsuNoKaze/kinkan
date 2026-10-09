@@ -21,7 +21,7 @@ if [ ! -d web/dist ]; then
 fi
 
 step "build"
-CGO_ENABLED=0 go build -o "${TMPDIR:-/tmp}/mikan-tt-bin/" ./cmd/mikan ./cmd/mikan-node ||
+CGO_ENABLED=0 go build -o "${TMPDIR:-/tmp}/kinkan-bin/" ./cmd/mikan ./cmd/mikan-node ||
 	fail "mikan does not build with third_party/mihomo"
 
 step "vet"

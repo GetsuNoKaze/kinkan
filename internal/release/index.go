@@ -17,7 +17,7 @@ import (
 //
 //	{"schema": 1, "published": "…", "releases": [
 //	  {"version": "0.5.0.1", "channel": "stable", "from": "0.4.5",
-//	   "manifest": "https://github.com/GetsuNoKaze/mikan-tt/releases/download/v0.5.0.1/manifest.json"}]}
+//	   "manifest": "https://github.com/GetsuNoKaze/kinkan/releases/download/v0.5.0.1/manifest.json"}]}
 //
 // An entry only points to its release's manifest, which is fetched and verified exactly
 // as before. from is the lowest installed version that can update to the release directly.

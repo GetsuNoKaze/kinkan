@@ -249,7 +249,7 @@ jobs:
         run: |
           pre=""
           case "$GITHUB_REF_NAME" in *-*) pre="--prerelease" ;; esac
-          gh release create "$GITHUB_REF_NAME" $pre --verify-tag --title "Mikan TT ${GITHUB_REF_NAME#v}" --notes-file dist/notes.md \
+          gh release create "$GITHUB_REF_NAME" $pre --verify-tag --title "Kinkan ${GITHUB_REF_NAME#v}" --notes-file dist/notes.md \
             dist/install.sh dist/mikan-x86_64 dist/mikan-aarch64 dist/manifest.json dist/manifest.json.sig
       # The release index (internal/release/index.go) lives on the "updates" pre-release,
       # which never becomes "latest". The current index is carried on only with a valid

@@ -1,4 +1,4 @@
-> **Mikan TT** — форк с fallback для TrustTunnel. Изменения: [CHANGELOG-TT.md](CHANGELOG-TT.md), порядок выпуска и ручного перехода: [RELEASE-TT.md](RELEASE-TT.md). Релизы: [GetsuNoKaze/mikan-tt](https://github.com/GetsuNoKaze/mikan-tt/releases). Ниже сохранена документация оригинального Mikan; её команды установки обращаются к оригинальному репозиторию.
+> **Kinkan** — форк Mikan про защиту от активного сканирования (fallback для TrustTunnel и не только). Изменения: [CHANGELOG-TT.md](CHANGELOG-TT.md), порядок выпуска и ручного перехода: [RELEASE-TT.md](RELEASE-TT.md). Релизы: [GetsuNoKaze/kinkan](https://github.com/GetsuNoKaze/kinkan/releases). Ниже сохранена документация оригинального Mikan; её команды установки обращаются к оригинальному репозиторию.
 
 <div align="center">
 

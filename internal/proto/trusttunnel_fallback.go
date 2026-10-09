@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// validateFallback checks the TrustTunnel fallback (mikan-tt): the host:port of a site
+// validateFallback checks the TrustTunnel fallback (Kinkan): the host:port of a site
 // that answers plain HTTP, since TLS ends at mihomo. Anyone on the internet reaches it
 // through the inbound without credentials, so a link-local address, where cloud metadata
 // services live (169.254.169.254), is refused. Loopback and private addresses are fine:

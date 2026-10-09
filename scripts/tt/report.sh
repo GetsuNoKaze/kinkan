@@ -42,12 +42,12 @@ fail)
 		gh label create "$label" --color d73a4a --description "Merging upstream mikan fails to merge, build or pass tests" --force >/dev/null
 		gh issue create --title "Sync fails: $ref" --label "$label" --body "$body"
 	fi
-	telegram "mikan-tt: sync with $ref failed. $reason $run_url"
+	telegram "kinkan: sync with $ref failed. $reason $run_url"
 	;;
 ok)
 	if [ -n "$open_issue" ]; then
 		gh issue close "$open_issue" --comment "Sync works again with $ref: $run_url"
-		telegram "mikan-tt: sync with $ref works again. $run_url"
+		telegram "kinkan: sync with $ref works again. $run_url"
 	fi
 	;;
 *)
