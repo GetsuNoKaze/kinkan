@@ -127,7 +127,7 @@ impl Entry {
     /// Whether a reader can use the entry; the others are skipped. A pre-release is never
     /// stable; a beta entry may be a release version (one tried on beta first).
     fn valid(&self) -> bool {
-        let pre = matches!(semver(&self.version), Some((_, Some(_))));
+        let pre = is_prerelease(&self.version);
         semver(&self.version).is_some()
             && Channel::parse(&self.channel).is_some_and(|c| c == Channel::Beta || !pre)
             && self.manifest.starts_with("https://")
@@ -263,9 +263,15 @@ pub fn find_upto_with(current: &str, channel: Channel, upto: &str, key: &Verifyi
     }
 }
 
-/// Whether a version is a pre-release (1.2.3-rc.1).
+/// Whether a version is a pre-release (1.2.3-rc.1). A Kinkan release (0.5.0.5-tt.3) is
+/// not: the fork numbers its stable releases after the upstream version they are built on,
+/// as internal/release.ChannelOf says; more after it (0.5.0.5-tt.4-rc.1) is a pre-release.
 pub fn is_prerelease(v: &str) -> bool {
-    matches!(semver(v), Some((_, Some(_))))
+    matches!(semver(v), Some((_, Some(pre))) if !fork_stable(pre))
+}
+
+fn fork_stable(pre: &str) -> bool {
+    pre.strip_prefix("tt.").is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
 }
 
 /// Whether v is a version of a release, as a request may name it: short, and nothing but a
@@ -445,6 +451,26 @@ mod tests {
             "b".repeat(64)
         )
         .into_bytes()
+    }
+
+    // Kinkan's releases (-tt.N) are its stable releases, as internal/release.ChannelOf
+    // says; anything more after them is a pre-release.
+    #[test]
+    fn kinkan_releases_are_stable() {
+        for v in ["0.5.0.5-tt.3", "0.5.0.5-tt.12", "0.5.0.5"] {
+            assert!(!is_prerelease(v), "{v}");
+        }
+        for v in ["0.5.0.5-tt.4-rc.1", "0.5.0.5-rc.1", "0.5.0.5-tt", "0.5.0.5-tt.x"] {
+            assert!(is_prerelease(v), "{v}");
+        }
+        let entry = |channel: &str| Entry {
+            version: "0.5.0.5-tt.3".into(),
+            channel: channel.into(),
+            manifest: "https://example.com/m.json".into(),
+            from: "0.5.0.4".into(),
+        };
+        assert!(entry("stable").valid());
+        assert!(entry("beta").valid());
     }
 
     #[test]

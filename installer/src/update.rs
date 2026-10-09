@@ -790,6 +790,10 @@ pub fn converge(say: &mut dyn FnMut(&str)) -> Result<()> {
         say("This SQLite installation needs mikan update before its compose file can change.");
         return Ok(());
     }
+    // Kinkan: the kinkan command next to mikan; a server installed before it gets it here.
+    if let Err(e) = host::link_alias() {
+        say(&format!("No kinkan command: {e:#}"));
+    }
     // Where systemd is: a server without it has no units to bring up to date.
     if Path::new("/run/systemd/system").exists() && !host::units_current(!install.node) {
         match host::install_units(!install.node) {

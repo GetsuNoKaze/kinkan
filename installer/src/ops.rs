@@ -275,6 +275,7 @@ pub fn uninstall() -> Result<bool> {
     if fs::remove_file(host::SYSCTL).is_ok() {
         let _ = Command::new("sysctl").arg("--system").stdout(Stdio::null()).stderr(Stdio::null()).status();
     }
+    host::unlink_alias();
     let _ = fs::remove_file(host::BIN);
     Ok(panel)
 }

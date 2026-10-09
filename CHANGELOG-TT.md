@@ -2,6 +2,16 @@
 
 Fork release notes. Upstream history remains in CHANGELOG.md.
 
+## Unreleased
+### en
+- The kinkan command: `kinkan update`, `kinkan status` and the rest; mikan keeps working, kinkan is a link to it. Servers get it on install or after an update.
+- Kinkan's releases (vX-tt.N) are stable releases now: kinkan update and the daily update check take them, GitHub marks them latest and the one-line install works. Builds with more after -tt.N (vX-tt.N-rc.1) stay pre-releases on the beta channel.
+- A server on 0.5.0.5-tt.3 or earlier does not take -tt.N as stable yet: update it once with this release's installer, as in RELEASE-TT.md; later releases arrive by kinkan update.
+### ru
+- Команда kinkan: `kinkan update`, `kinkan status` и остальные; mikan по-прежнему работает, kinkan — ссылка на неё. Серверы получают её при установке или после обновления.
+- Релизы Kinkan (vX-tt.N) теперь стабильные: их берут kinkan update и ежедневная проверка обновлений, GitHub отмечает их как latest, работает установка одной строкой. Сборки с чем-то после -tt.N (vX-tt.N-rc.1) остаются пре-релизами в канале beta.
+- Сервер на 0.5.0.5-tt.3 или раньше ещё не считает -tt.N стабильными: обновите его один раз установщиком этого релиза, как в RELEASE-TT.md; дальше обновления приходят через kinkan update.
+
 ## 0.5.0.5-tt.3
 ### en
 - The fork is now called Kinkan: repository GetsuNoKaze/kinkan, image ghcr.io/getsunokaze/kinkan. On a server it keeps Mikan's names (the mikan command, /opt/mikan) and releases keep the -tt.N suffix. Servers on an earlier fork release update from the new repository; GitHub redirects the old address.

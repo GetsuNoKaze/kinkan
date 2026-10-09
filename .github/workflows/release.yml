@@ -33,7 +33,18 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+    # Kinkan: vX and vX-tt.N are stable releases (internal/release.ChannelOf); anything
+    # else with a pre-release part is a pre-release.
+    outputs:
+      stable: ${{ steps.channel.outputs.stable }}
     steps:
+      - id: channel
+        run: |
+          if [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?(-tt\.[0-9]+)?$ ]]; then
+            echo "stable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "stable=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -45,7 +56,7 @@ jobs:
             exit 1
           fi
           branches="main"
-          case "$GITHUB_REF_NAME" in *-*) branches="main dev" ;; esac
+          [ "${{ steps.channel.outputs.stable }}" = true ] || branches="main dev"
           for b in $branches; do
             git fetch --no-tags origin "$b"
             if git merge-base --is-ancestor "$GITHUB_SHA" "origin/$b"; then
@@ -205,7 +216,7 @@ jobs:
           path: dist/mikan-${{ matrix.arch }}
 
   publish:
-    needs: [image, installer]
+    needs: [guard, image, installer]
     runs-on: ubuntu-24.04
     # One release at a time writes the index: the second waits and carries the first on.
     concurrency:
@@ -213,6 +224,8 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: write
+    env:
+      STABLE: ${{ needs.guard.outputs.stable }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -238,17 +251,16 @@ jobs:
           go run ./cmd/mikan-release verify dist/manifest.json
           # A stable release becomes "latest", which mikan 0.4.5 and 0.5.0.0 read for as
           # long as they run: one they would refuse stops here, before it is published.
-          case "$GITHUB_REF_NAME" in
-            *-*) ;;
-            *) go run ./cmd/mikan-release legacy-check dist/manifest.json ;;
-          esac
+          if [ "$STABLE" = true ]; then
+            go run ./cmd/mikan-release legacy-check dist/manifest.json
+          fi
           cp installer/install.sh dist/install.sh
       - name: release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           pre=""
-          case "$GITHUB_REF_NAME" in *-*) pre="--prerelease" ;; esac
+          [ "$STABLE" = true ] || pre="--prerelease"
           gh release create "$GITHUB_REF_NAME" $pre --verify-tag --title "Kinkan ${GITHUB_REF_NAME#v}" --notes-file dist/notes.md \
             dist/install.sh dist/mikan-x86_64 dist/mikan-aarch64 dist/manifest.json dist/manifest.json.sig
       # The release index (internal/release/index.go) lives on the "updates" pre-release,
@@ -287,8 +299,8 @@ jobs:
   # release exists, and never to a pre-release. The tag points at the pushed digest, so
   # nothing is rebuilt.
   latest:
-    needs: [image, publish]
-    if: ${{ !contains(github.ref_name, '-') }}
+    needs: [guard, image, publish]
+    if: ${{ needs.guard.outputs.stable == 'true' }}
     runs-on: ubuntu-24.04
     permissions:
       packages: write

@@ -467,6 +467,9 @@ fn run(plan: &Plan, tx: &Sender<Event>) -> StepResult<()> {
             });
         }
         host::install_self()?;
+        if let Err(e) = host::link_alias() {
+            done.push(format!("no kinkan command ({e:#})"));
+        }
         done.push(match host::install_units(!node) {
             Ok(()) => "daily update check".into(),
             Err(e) => format!("no update timer ({e})"),
@@ -700,7 +703,7 @@ pub fn wait_ready(node_port: Option<u16>, limit: Duration) -> Result<()> {
 pub fn summary(o: &Outcome, with_password: bool) -> String {
     let mut text = match o.node_port {
         Some(p) => format!(
-            "mikan {} node is running and waits for its panel on port {p}.\nThe panel connects within 30 seconds: see its Nodes page.\nCommands on this server: mikan (menu), mikan status, mikan update",
+            "mikan {} node is running and waits for its panel on port {p}.\nThe panel connects within 30 seconds: see its Nodes page.\nCommands on this server: kinkan (menu), kinkan status, kinkan update (mikan works too)",
             o.version
         ),
         None => {
@@ -712,7 +715,7 @@ pub fn summary(o: &Outcome, with_password: bool) -> String {
                 "shown on the installer's last screen only; a new one: mikan reset-password".to_owned()
             };
             format!(
-                "mikan {} is running.\n\n  Panel     {}\n  Login     {}\n  Password  {password}\n\nCommands on this server: mikan (menu), mikan status, mikan update",
+                "mikan {} is running.\n\n  Panel     {}\n  Login     {}\n  Password  {password}\n\nCommands on this server: kinkan (menu), kinkan status, kinkan update (mikan works too)",
                 o.version, o.url, o.login
             )
         }
