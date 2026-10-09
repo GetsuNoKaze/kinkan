@@ -2,7 +2,7 @@
 
 Fork release notes. Upstream history remains in CHANGELOG.md.
 
-## Unreleased
+## 0.5.0.5-tt.3
 ### en
 - The fork is now called Kinkan: repository GetsuNoKaze/kinkan, image ghcr.io/getsunokaze/kinkan. On a server it keeps Mikan's names (the mikan command, /opt/mikan) and releases keep the -tt.N suffix. Servers on an earlier fork release update from the new repository; GitHub redirects the old address.
 - ROADMAP.md lists what comes next.
