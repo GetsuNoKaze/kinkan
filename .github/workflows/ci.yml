@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-24.04
     services:
       postgres:
-        image: postgres:18-alpine
+        image: mirror.gcr.io/library/postgres:18-alpine # Kinkan: Docker Hub mirror (see the image job)
         env:
           POSTGRES_USER: mikan_test
           POSTGRES_PASSWORD: mikan_test
@@ -136,6 +136,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Kinkan: the containers come through Google's mirror of Docker Hub, whose anonymous
+      # pull limit the runners share (see the image job).
+      - name: Docker Hub through mirror.gcr.io
+        run: |
+          f=/etc/docker/daemon.json
+          { sudo cat "$f" 2>/dev/null || echo '{}'; } | jq '. + {"registry-mirrors": ["https://mirror.gcr.io"]}' | sudo tee "$f.new" >/dev/null
+          sudo mv "$f.new" "$f"
+          sudo systemctl restart docker
+          docker info --format '{{.RegistryConfig.Mirrors}}'
       - name: authenticated TrustTunnel, cover and restart
         env:
           E2E_RUN: TrustTunnel
@@ -151,6 +160,13 @@ jobs:
       # arm64 too: a wrong-architecture binary fails the build (see the Dockerfile).
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          # Kinkan: Docker Hub's anonymous pull limit is shared by the runners' addresses,
+          # and a build that hits it fails. Its images come through Google's mirror of it
+          # (the same images by the same digests); BuildKit falls back to Docker Hub.
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
