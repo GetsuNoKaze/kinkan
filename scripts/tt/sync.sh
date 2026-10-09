@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Merges upstream mikan's main into a sync/upstream-<commit> branch and regenerates
+# Merges upstream mikan's main into the sync/upstream branch and regenerates
 # third_party/mihomo if the merge moved mikan to another mihomo version.
 #
 # Writes to $GITHUB_OUTPUT (when set):
@@ -35,7 +35,9 @@ if git merge-base --is-ancestor "$up" HEAD; then
 fi
 echo "up_to_date=false" >>"$out"
 
-branch="sync/upstream-$short"
+# One branch for every sync: each run rebuilds it from main and force-pushes it, so the
+# open pull request follows upstream instead of a new one opening per upstream commit.
+branch="sync/upstream"
 echo "branch=$branch" >>"$out"
 git checkout --quiet -B "$branch"
 

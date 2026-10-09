@@ -13,6 +13,9 @@ release signing key. Official mikan's installer and updater do not install this 
 |---|---|---|---|
 | TrustTunnel without credentials | answers `407`, which identifies the port as a proxy | requests, `CONNECT` included, go to a real site through `fallback` | done |
 | TrustTunnel ALPN | none negotiated, browsers fall back to HTTP/1.1 | `h2, http/1.1` when `fallback` is set | done |
+| HTTP/2 without ALPN | spoken on TLS that negotiated `http/1.1` or nothing | with `fallback`, only after negotiating `h2`; a bare preface gets an HTTP/1 answer | done |
+| Wrong credentials in the log | logged | logged; requests without credentials at debug level only | done |
+| `fallback` in the panel | | checked when saved: `host:port`, no link-local address (cloud metadata) | done |
 | Stalled clients on the fallback | | idle limit, 256 concurrent requests at most, cancelled on restart | done |
 | `fallback` in a TrustTunnel template | rejected | accepted | done |
 | Cover site | served by the panel only, on its port | served by every node on `127.0.0.1`, no Caddy needed | planned |
@@ -33,12 +36,14 @@ type: trusttunnel
 fallback: 127.0.0.1:8080
 ```
 
+With `fallback` set, HTTP/2 is served only to clients that negotiate `h2` over ALPN, as a real HTTPS site does. mihomo's client always offers it; a client that skips ALPN and speaks HTTP/2 straight away cannot use such an inbound.
+
 Every node with this template needs the fork's build, and so does the panel, which checks templates when they are saved. A node on mikan's build rejects the TrustTunnel inbound with a `fallback` key; its other inbounds keep working.
 
 ## Checks and sync
 
 - `.github/workflows/tt-check.yml` runs `scripts/tt/check.sh` on every push and pull request: `third_party/mihomo` matches its patches, mikan builds, `go vet` passes, and the tests for the fork's changes pass. mikan's own `ci.yml` runs its full suite.
-- `.github/workflows/tt-sync.yml` runs every 6 hours. It merges mikan's `main` into a `sync/upstream-<commit>` branch, regenerates `third_party/mihomo` if needed, runs the checks and opens a pull request. If the merge conflicts or a check fails, it opens an issue labelled `sync-failure`, or comments on the one already open, and the next run that passes closes it.
+- `.github/workflows/tt-sync.yml` runs every 6 hours. It merges mikan's `main` into the `sync/upstream` branch, regenerates `third_party/mihomo` if needed, runs the checks and opens a pull request. If the merge conflicts or a check fails, it opens an issue labelled `sync-failure`, or comments on the one already open, and the next run that passes closes it.
 - Upstream tags are fetched under `upstream/`; they cannot overwrite this fork's release tags.
 
 Repository settings the workflows need (release setup is in RELEASE-TT.md):

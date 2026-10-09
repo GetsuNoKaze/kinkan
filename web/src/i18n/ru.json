@@ -179,6 +179,8 @@
       "xhttp_no_xhttp": "У этого протокола не XHTTP",
       "config_path": "Путь должен начинаться с /",
       "config_masquerade": "masquerade: только https:// на публичный сайт",
+      "config_fallback": "fallback: host:port сайта, который отвечает по обычному HTTP, например 127.0.0.1:8080",
+      "config_fallback_address": "fallback: link-local и нулевой адрес нельзя — там сервис метаданных облака",
       "config_obfs": "obfs: salamander или gecko, и нужен obfs-password",
       "config_fingerprint": "Отпечаток «{value}» не подходит: chrome, firefox, safari, ios, android, edge, 360, qq, random или randomized",
       "fingerprint_no_tls": "У этого протокола нет TLS-отпечатка",

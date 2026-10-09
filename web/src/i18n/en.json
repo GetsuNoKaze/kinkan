@@ -179,6 +179,8 @@
       "xhttp_no_xhttp": "This protocol is not XHTTP",
       "config_path": "The path must start with /",
       "config_masquerade": "masquerade must be https:// to a public site",
+      "config_fallback": "fallback must be host:port of a site that answers plain HTTP, e.g. 127.0.0.1:8080",
+      "config_fallback_address": "fallback cannot be a link-local or unspecified address: the cloud metadata service lives there",
       "config_obfs": "obfs is salamander or gecko, with an obfs-password",
       "config_fingerprint": "Fingerprint «{value}» is not supported: chrome, firefox, safari, ios, android, edge, 360, qq, random or randomized",
       "fingerprint_no_tls": "This protocol has no TLS fingerprint",
