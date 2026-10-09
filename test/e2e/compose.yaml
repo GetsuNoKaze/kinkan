@@ -1,7 +1,7 @@
 name: mikan-e2e
 
 x-client: &client
-  image: metacubex/mihomo:v1.19.31
+  image: metacubex/mihomo:v1.19.32
   command: ["-d", "/tmp/mihomo", "-f", "/work/clients/client.yaml"]
   volumes: ["work:/work:ro"]
   depends_on: [node, target]

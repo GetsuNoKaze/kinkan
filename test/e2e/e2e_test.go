@@ -30,7 +30,7 @@ const (
 	mib     = 1 << 20
 )
 
-var protos = []string{"vision", "xhttp", "hy2", "tuic"}
+var protos = []string{"vision", "xhttp", "hy2", "tuic", "tt"}
 
 func socksPort(slot int, proto string) int {
 	for i, p := range protos {
@@ -145,6 +145,10 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	state.Policies = policies(defaultOverrides)
+	if os.Getenv("MIKAN_E2E_RESTORED") == "1" {
+		// No Apply: the restarted process must restore its saved listener and credentials.
+		os.Exit(m.Run())
+	}
 	var res nodeapi.ApplyResult
 	if err := newNode().call(http.MethodPut, "/v1/state", state, &res); err != nil {
 		fmt.Println("apply:", err)

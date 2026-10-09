@@ -51,6 +51,7 @@ func main() {
 			{Name: "xhttp", Preset: nodeapi.PresetVlessXHTTP, Port: "8444", Settings: raw(nodeapi.VlessXHTTPSettings{Reality: reality, Path: "/x7kq", Mode: "stream-one"})},
 			{Name: "hy2", Preset: nodeapi.PresetHysteria2, Port: "8445", Settings: raw(nodeapi.Hysteria2Settings{ObfsPassword: token()})},
 			{Name: "tuic", Preset: nodeapi.PresetTUIC, Port: "8446", Settings: raw(nodeapi.TUICSettings{CongestionControl: "bbr"})},
+			{Name: "tt", Port: "8447", Config: raw(map[string]any{"type": "trusttunnel", "fallback": "target:8080"})},
 		},
 		TLS: &nodeapi.TLSFiles{CertPEM: certPEM, KeyPEM: keyPEM},
 	}
@@ -62,7 +63,7 @@ func main() {
 
 	must(os.MkdirAll(filepath.Join(*out, "clients"), 0o755))
 	must(writeJSON(filepath.Join(*out, "state.json"), st))
-	// Port plan in client configs: 1<slot><proto>, proto 1=vision 2=xhttp 3=hy2 4=tuic.
+	// Port plan: proto 1=vision 2=xhttp 3=hy2 4=tuic 5=tt.
 	must(os.WriteFile(filepath.Join(*out, "clients", "client.yaml"), []byte(clientConfig(slots, reality, hy2.ObfsPassword)), 0o644))
 }
 
@@ -74,12 +75,13 @@ func clientConfig(slots []slot, r nodeapi.RealitySettings, obfs string) string {
   - {name: xhttp-%[1]d, type: vless, server: node, port: 8444, uuid: %[2]s, network: xhttp, tls: true, udp: false, servername: www.microsoft.com, client-fingerprint: chrome, reality-opts: {public-key: %[3]s, short-id: %[4]s}, xhttp-opts: {path: /x7kq, mode: stream-one}}
   - {name: hy2-%[1]d, type: hysteria2, server: node, port: 8445, password: %[5]s, sni: node, skip-cert-verify: true, obfs: salamander, obfs-password: %[6]s}
   - {name: tuic-%[1]d, type: tuic, server: node, port: 8446, uuid: %[2]s, password: %[5]s, alpn: [h3], sni: node, skip-cert-verify: true, congestion-controller: bbr, udp-relay-mode: native}
-`, n, sl.uuid, r.PublicKey, r.ShortIDs[0], sl.secret, obfs)
+  - {name: tt-%[1]d, type: trusttunnel, server: node, port: 8447, username: %[7]s, password: %[5]s, sni: node, skip-cert-verify: true}
+`, n, sl.uuid, r.PublicKey, r.ShortIDs[0], sl.secret, obfs, sl.name)
 	}
 	s += "listeners:\n"
 	for i := range slots {
 		n := i + 1
-		for p, name := range []string{"vision", "xhttp", "hy2", "tuic"} {
+		for p, name := range []string{"vision", "xhttp", "hy2", "tuic", "tt"} {
 			s += fmt.Sprintf("  - {name: in-%s-%d, type: mixed, port: %d, listen: 0.0.0.0, proxy: %s-%d}\n", name, n, 10000+n*10+p+1, name, n)
 		}
 	}

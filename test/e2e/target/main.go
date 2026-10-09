@@ -14,11 +14,20 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"time"
 )
 
 func main() {
 	go udpEcho()
+	go func() {
+		log.Fatal(http.ListenAndServe(":8080", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodConnect {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+			}
+			_, _ = io.WriteString(w, "MIKAN TT COVER")
+		})))
+	}()
 	ln, err := net.Listen("tcp", ":9000")
 	if err != nil {
 		log.Fatal(err)

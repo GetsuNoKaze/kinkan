@@ -13,7 +13,12 @@ docker compose up -d --build node target client-a client-b
 sleep 3
 
 status=0
-docker compose exec -T driver go test -tags e2e -count=1 -v ./test/e2e/ || status=$?
+docker compose exec -T driver go test -tags e2e -count=1 -timeout=5m -run "${E2E_RUN:-.}" -v ./test/e2e/ || status=$?
+if [ "$status" = 0 ] && [ "${E2E_RESTART:-0}" = 1 ]; then
+  docker compose restart node
+  sleep 3
+  docker compose exec -T -e MIKAN_E2E_RESTORED=1 driver go test -tags e2e -count=1 -timeout=5m -run TrustTunnel -v ./test/e2e/ || status=$?
+fi
 if [ "$status" != 0 ]; then
   docker compose logs --tail 80 node
 fi
