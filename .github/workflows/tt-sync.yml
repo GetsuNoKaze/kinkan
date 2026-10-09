@@ -1,0 +1,84 @@
+name: tt sync
+
+# Every 6 hours: merges upstream mikan's main into a branch, regenerates
+# third_party/mihomo when mikan moves to another mihomo, runs scripts/tt/check.sh and
+# opens a pull request. A conflict or a failed check opens an issue labelled
+# sync-failure (and a Telegram message when the secrets are set) instead.
+#
+# Pushing a merge that touches upstream's workflow files needs a token with the
+# "workflows" permission: add it as the SYNC_TOKEN secret. Without it the default
+# token is used, which GitHub refuses for such pushes.
+on:
+  schedule:
+    - cron: "41 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: tt-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN || github.token }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: false
+
+      - name: merge upstream
+        id: sync
+        run: |
+          set -o pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          scripts/tt/sync.sh 2>&1 | tee sync.log
+
+      - name: checks
+        if: steps.sync.outputs.up_to_date == 'false'
+        run: |
+          set -o pipefail
+          scripts/tt/check.sh 2>&1 | tee -a sync.log
+
+      - name: pull request
+        if: steps.sync.outputs.up_to_date == 'false'
+        env:
+          BRANCH: ${{ steps.sync.outputs.branch }}
+          WHAT: ${{ steps.sync.outputs.what }}
+        run: |
+          git push --force origin "$BRANCH"
+          if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')" ]; then
+            gh pr create --base main --head "$BRANCH" --title "Sync with $WHAT" \
+              --body "Merges upstream $WHAT. The merge applied cleanly and scripts/tt/check.sh passed: third_party/mihomo matches its patches, mikan builds, go vet and the fork's tests pass."
+          fi
+
+      - name: report failure
+        if: failure()
+        env:
+          WHAT: ${{ steps.sync.outputs.what || 'upstream mikan' }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          touch sync.log
+          scripts/tt/report.sh fail "$WHAT" sync.log
+
+      - name: report recovery
+        if: success() && steps.sync.outputs.up_to_date == 'false'
+        env:
+          WHAT: ${{ steps.sync.outputs.what }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: scripts/tt/report.sh ok "$WHAT"
