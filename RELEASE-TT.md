@@ -20,6 +20,11 @@ This file is a runbook; commands below have not been run on production nodes.
 4. After all jobs pass, create and push the candidate tag. Release signing preflight
    must pass. The release workflow publishes versioned images, installers and signed
    manifests. This candidate is a prerelease; it does not move the image's `latest` tag.
+   The default install.sh and installer select stable releases, so they cannot bootstrap
+   this first candidate through the usual latest-release URL. Download the installer
+   from this candidate's assets, verify its signed manifest and checksum, then use its
+   `install --image ghcr.io/getsunokaze/mikan-tt@sha256:RELEASED_DIGEST` option on the
+   disposable canary. Obtain RELEASED_DIGEST from the verified release manifest.
 5. Set the package visibility to public if anonymous server pulls are required. Check
    that both architecture images and all release assets can be downloaded anonymously.
    Use the released digest for testing; never deploy a locally substituted test image.
