@@ -1,7 +1,7 @@
 #!/bin/sh
 # mikan: one-line install.
 #
-#   curl -fsSL https://github.com/GetsuNoKaze/mikan-tt/releases/latest/download/install.sh | sudo bash
+#   curl -fsSL https://github.com/GetsuNoKaze/kinkan/releases/latest/download/install.sh | sudo bash
 #
 # Finds the newest stable release in the signed release index (an asset of the "updates"
 # pre-release, which does not depend on what GitHub calls the latest release), or takes
@@ -19,7 +19,7 @@
 # after that is checked by the installer against the key it carries.
 set -eu
 
-REPO="GetsuNoKaze/mikan-tt"
+REPO="GetsuNoKaze/kinkan"
 BASE="https://github.com/$REPO/releases/latest/download"
 INDEX="https://github.com/$REPO/releases/download/updates/index.json"
 

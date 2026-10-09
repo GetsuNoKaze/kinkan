@@ -1,15 +1,18 @@
-# mikan-tt
+# Kinkan
 
-An unofficial fork of [mikan](https://github.com/Miroshka000/mikan). It is not affiliated with the mikan or mihomo authors, and everything not listed here is mikan as released. The fork follows mikan's releases: a workflow merges them and opens a pull request.
+Kinkan (金柑, kumquat — a small golden relative of the mikan) is an unofficial fork of [mikan](https://github.com/Miroshka000/mikan). It is not affiliated with the mikan or mihomo authors, and everything not listed here is mikan as released. The fork follows mikan's releases: a workflow merges them and opens a pull request.
 
 mikan's docs are kept as upstream reference; this file describes what the fork adds.
 Use [RELEASE-TT.md](RELEASE-TT.md) for this fork's installation and release procedure.
-The fork publishes to `GetsuNoKaze/mikan-tt`, with image `ghcr.io/getsunokaze/mikan-tt` and its own
+The fork publishes to `GetsuNoKaze/kinkan`, with image `ghcr.io/getsunokaze/kinkan` and its own
 release signing key. Official mikan's installer and updater do not install this fork.
+On a server the fork keeps mikan's names (the `mikan` command, `/opt/mikan`, `MIKAN_*` settings) so merges from upstream stay simple. Fork releases keep the `-tt.N` suffix: versions compare it alphabetically, and a new suffix would sort below the releases already out.
+
+Plans: [ROADMAP.md](ROADMAP.md).
 
 ## What is different
 
-| | mikan | mikan-tt | State |
+| | mikan | Kinkan | State |
 |---|---|---|---|
 | TrustTunnel without credentials | answers `407`, which identifies the port as a proxy | requests, `CONNECT` included, go to a real site through `fallback` | done |
 | TrustTunnel ALPN | none negotiated, browsers fall back to HTTP/1.1 | `h2, http/1.1` when `fallback` is set | done |

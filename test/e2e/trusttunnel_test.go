@@ -63,7 +63,7 @@ func TestTrustTunnelCover(t *testing.T) {
 			if h2 {
 				major = 2
 			}
-			if err != nil || resp.StatusCode != probe.status || resp.ProtoMajor != major || string(body) != "MIKAN TT COVER" || resp.Header.Get("Proxy-Authenticate") != "" {
+			if err != nil || resp.StatusCode != probe.status || resp.ProtoMajor != major || string(body) != "KINKAN COVER" || resp.Header.Get("Proxy-Authenticate") != "" {
 				t.Fatalf("h2=%v %s: %d %s %q %v", h2, probe.method, resp.StatusCode, resp.Proto, body, err)
 			}
 		}

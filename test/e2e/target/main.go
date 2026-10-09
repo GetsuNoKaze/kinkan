@@ -25,7 +25,7 @@ func main() {
 			if r.Method == http.MethodConnect {
 				w.WriteHeader(http.StatusMethodNotAllowed)
 			}
-			_, _ = io.WriteString(w, "MIKAN TT COVER")
+			_, _ = io.WriteString(w, "KINKAN COVER")
 		})))
 	}()
 	ln, err := net.Listen("tcp", ":9000")

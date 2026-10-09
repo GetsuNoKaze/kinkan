@@ -1,13 +1,13 @@
-# First Mikan TT release
+# Kinkan releases (first release: 0.5.0.5-tt.1, as Mikan TT)
 
-Repository: `GetsuNoKaze/mikan-tt`. Image: `ghcr.io/getsunokaze/mikan-tt`.
+Repository: `GetsuNoKaze/kinkan`. Image: `ghcr.io/getsunokaze/kinkan`.
 First candidate: `v0.5.0.5-tt.1`, based on upstream Mikan 0.5.0.4.
 This file is a runbook; commands below have not been run on production nodes.
 
 ## Publish and check
 
 1. Create the GitHub repository with no generated README or licence. Keep `upstream`
-   pointing at Miroshka000/mikan; add `origin` pointing at GetsuNoKaze/mikan-tt.
+   pointing at Miroshka000/mikan; add `origin` pointing at GetsuNoKaze/kinkan.
    Push `main` only, not upstream tags. Upstream tags can trigger the release workflow.
 2. Enable Actions. Add the fork's private PEM key as the `RELEASE_SIGNING_KEY` Actions
    secret. The matching public key is embedded in Go, Rust and install.sh. Keep a backup
@@ -23,7 +23,7 @@ This file is a runbook; commands below have not been run on production nodes.
    The default install.sh and installer select stable releases, so they cannot bootstrap
    this first candidate through the usual latest-release URL. Download the installer
    from this candidate's assets, verify its signed manifest and checksum, then use its
-   `install --image ghcr.io/getsunokaze/mikan-tt@sha256:RELEASED_DIGEST` option on the
+   `install --image ghcr.io/getsunokaze/kinkan@sha256:RELEASED_DIGEST` option on the
    disposable canary. Obtain RELEASED_DIGEST from the verified release manifest.
 5. Set the package visibility to public if anonymous server pulls are required. Check
    that both architecture images and all release assets can be downloaded anonymously.
