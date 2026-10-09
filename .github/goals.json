@@ -182,6 +182,15 @@
       "target": 100, "raised": 0, "currency": "USD", "status": "open"
     },
     {
+      "id": "xray-auto",
+      "title": {"ru": "Автовыбор в Happ и приложениях на Xray", "en": "Auto choice in Happ and Xray apps"},
+      "about": {
+        "ru": "Группа автовыбора со своим названием, как в Clash-приложениях, и для Happ, v2RayTun и других приложений на Xray: приложение само держит самый быстрый рабочий сервер.",
+        "en": "An auto choice group with your own name, as in Clash apps, for Happ, v2RayTun and other Xray apps too: the app keeps the fastest working server by itself."
+      },
+      "target": 150, "raised": 0, "currency": "USD", "status": "open"
+    },
+    {
       "id": "vless-tls",
       "title": {"ru": "VLESS TLS на домене панели", "en": "VLESS TLS on the panel's domain"},
       "about": {
