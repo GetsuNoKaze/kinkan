@@ -17,11 +17,14 @@ fail() {
 	exit 1
 }
 
-git fetch --quiet --force --tags "$upstream" "+refs/heads/main:refs/remotes/upstream/main" ||
+# Upstream tags have their own namespace: fetching upstream must never replace a
+# fork release tag with the same version number.
+git fetch --quiet --no-tags "$upstream" "+refs/heads/main:refs/remotes/upstream/main" "+refs/tags/*:refs/tags/upstream/*" ||
 	fail "cannot fetch upstream mikan"
 up="$(git rev-parse upstream/main)"
 short="$(git rev-parse --short=7 "$up")"
-tag="$(git describe --tags --abbrev=0 "$up" 2>/dev/null || true)"
+tag="$(git describe --tags --match 'upstream/*' --abbrev=0 "$up" 2>/dev/null || true)"
+tag="${tag#upstream/}"
 what="mikan ${tag:-main} ($short)"
 echo "what=$what" >>"$out"
 

@@ -39,6 +39,7 @@ Every node with this template needs the fork's build, and so does the panel, whi
 
 - `.github/workflows/tt-check.yml` runs `scripts/tt/check.sh` on every push and pull request: `third_party/mihomo` matches its patches, mikan builds, `go vet` passes, and the tests for the fork's changes pass. mikan's own `ci.yml` runs its full suite.
 - `.github/workflows/tt-sync.yml` runs every 6 hours. It merges mikan's `main` into a `sync/upstream-<commit>` branch, regenerates `third_party/mihomo` if needed, runs the checks and opens a pull request. If the merge conflicts or a check fails, it opens an issue labelled `sync-failure`, or comments on the one already open, and the next run that passes closes it.
+- Upstream tags are fetched under `upstream/`; they cannot overwrite this fork's release tags.
 
 Repository settings the workflows need (release setup is in RELEASE-TT.md):
 

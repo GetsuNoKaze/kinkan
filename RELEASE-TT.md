@@ -14,7 +14,9 @@ This file is a runbook; commands below have not been run on production nodes.
    of the private key outside the checkout; it must never enter Git or a Docker context.
 3. Run `ci` on main (push or workflow_dispatch). It checks the real web bundle, all Go
    tests with PostgreSQL and race detection, Rust tests, installer fault injection,
-   dependency advisories and Docker builds for amd64 and arm64. Run `tt check` too.
+   dependency advisories and Docker builds for amd64 and arm64. It also runs real
+   TrustTunnel client traffic and cover probes before and after a node restart in
+   disposable containers. Run `tt check` too.
 4. After all jobs pass, create and push the candidate tag. Release signing preflight
    must pass. The release workflow publishes versioned images, installers and signed
    manifests. This candidate is a prerelease; it does not move the image's `latest` tag.
