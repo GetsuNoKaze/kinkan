@@ -1,6 +1,6 @@
 name: tt sync
 
-# Every 6 hours: merges upstream mikan's main into a branch, regenerates
+# Every 6 hours: merges upstream mikan's main into the sync/upstream branch, regenerates
 # third_party/mihomo when mikan moves to another mihomo, runs scripts/tt/check.sh and
 # opens a pull request. A conflict or a failed check opens an issue labelled
 # sync-failure (and a Telegram message when the secrets are set) instead.
@@ -27,14 +27,16 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
-      GH_TOKEN: ${{ github.token }}
+      # A pull request opened with the default token does not trigger ci.yml, so the sync
+      # would go unchecked by mikan's full suite; SYNC_TOKEN opens it as its owner instead.
+      GH_TOKEN: ${{ secrets.SYNC_TOKEN || github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           token: ${{ secrets.SYNC_TOKEN || github.token }}
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27"
           cache: false
@@ -60,9 +62,12 @@ jobs:
           WHAT: ${{ steps.sync.outputs.what }}
         run: |
           git push --force origin "$BRANCH"
-          if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')" ]; then
-            gh pr create --base main --head "$BRANCH" --title "Sync with $WHAT" \
-              --body "Merges upstream $WHAT. The merge applied cleanly and scripts/tt/check.sh passed: third_party/mihomo matches its patches, mikan builds, go vet and the fork's tests pass."
+          body="Merges upstream $WHAT. The merge applied cleanly and scripts/tt/check.sh passed: third_party/mihomo matches its patches, mikan builds, go vet and the fork's tests pass."
+          pr="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+          if [ -z "$pr" ]; then
+            gh pr create --base main --head "$BRANCH" --title "Sync with $WHAT" --body "$body"
+          else
+            gh pr edit "$pr" --title "Sync with $WHAT" --body "$body"
           fi
 
       - name: report failure

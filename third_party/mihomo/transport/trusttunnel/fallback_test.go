@@ -19,6 +19,7 @@ import (
 
 	"github.com/metacubex/http"
 	"github.com/metacubex/http/httptest"
+	"github.com/metacubex/http/httptrace"
 	"github.com/metacubex/quic-go/http3"
 	"github.com/metacubex/sing/common/logger"
 	"github.com/metacubex/tls"
@@ -495,6 +496,12 @@ func TestFallbackUploadsReuseConnection(t *testing.T) {
 					t.Fatal(err)
 				}
 				request.Host = "cover.example"
+				// The transport redials silently when the server drops the connection, so
+				// reuse is checked explicitly. The HTTP/3 transport does not report it.
+				reused := false
+				request = request.WithContext(httptrace.WithClientTrace(request.Context(), &httptrace.ClientTrace{
+					GotConn: func(info httptrace.GotConnInfo) { reused = info.Reused },
+				}))
 				response, err := transport.RoundTrip(request)
 				if err != nil {
 					t.Fatalf("request %d: %v", i, err)
@@ -504,8 +511,42 @@ func TestFallbackUploadsReuseConnection(t *testing.T) {
 				if err != nil || string(body) != payload {
 					t.Fatalf("request %d: echoed %d bytes, err=%v", i, len(body), err)
 				}
+				if i > 0 && name != "HTTP/3" && !reused {
+					t.Errorf("request %d opened a new connection instead of reusing the first", i)
+				}
 			}
 		})
+	}
+}
+
+// TestFallbackRefusesPriorKnowledgeH2 checks that with a fallback the server speaks
+// HTTP/2 only after negotiating h2, as a real HTTPS site does: a prober that sends the
+// HTTP/2 preface over TLS that negotiated http/1.1, or nothing, gets an HTTP/1 answer.
+func TestFallbackRefusesPriorKnowledgeH2(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer backend.Close()
+	_, address := startFallbackServer(t, backend, time.Minute)
+
+	// The client connection preface followed by an empty SETTINGS frame.
+	preface := "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n" + "\x00\x00\x00\x04\x00\x00\x00\x00\x00"
+	for _, offer := range [][]string{{"http/1.1"}, nil} {
+		conn, err := tls.Dial("tcp", address, &tls.Config{InsecureSkipVerify: true, NextProtos: offer})
+		if err != nil {
+			t.Fatalf("offer %v: %v", offer, err)
+		}
+		_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+		if _, err = io.WriteString(conn, preface); err != nil {
+			t.Fatalf("offer %v: %v", offer, err)
+		}
+		head := make([]byte, 9)
+		_, err = io.ReadFull(conn, head)
+		_ = conn.Close()
+		if err != nil {
+			t.Fatalf("offer %v: no answer to the preface: %v", offer, err)
+		}
+		if !strings.HasPrefix(string(head), "HTTP/1.") {
+			t.Errorf("offer %v: answered %q, want an HTTP/1 response, not HTTP/2 frames", offer, head)
+		}
 	}
 }
 

@@ -281,6 +281,9 @@ func Validate(t Template, o Options) error {
 			return err
 		}
 	}
+	if err := validateFallback(t); err != nil {
+		return err
+	}
 	if _, set := t["decryption"]; set {
 		if _, isString := t["decryption"].(string); !isString {
 			return fail("vless_decryption", "decryption")
