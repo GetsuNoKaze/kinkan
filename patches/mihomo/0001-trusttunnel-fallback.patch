@@ -1,0 +1,1031 @@
+diff --git a/listener/config/trusttunnel.go b/listener/config/trusttunnel.go
+index cee8b0e..57d713d 100644
+--- a/listener/config/trusttunnel.go
++++ b/listener/config/trusttunnel.go
+@@ -17,6 +17,7 @@ type TrustTunnelServer struct {
+ 	CongestionController string            `yaml:"congestion-controller" json:"congestion-controller,omitempty"`
+ 	CWND                 int               `yaml:"cwnd" json:"cwnd,omitempty"`
+ 	BBRProfile           string            `yaml:"bbr-profile" json:"bbr-profile,omitempty"`
++	Fallback             string            `yaml:"fallback" json:"fallback,omitempty"`
+ }
+ 
+ func (t TrustTunnelServer) String() string {
+diff --git a/listener/inbound/trusttunnel.go b/listener/inbound/trusttunnel.go
+index d90ad61..2565697 100644
+--- a/listener/inbound/trusttunnel.go
++++ b/listener/inbound/trusttunnel.go
+@@ -21,6 +21,7 @@ type TrustTunnelOption struct {
+ 	CongestionController string    `inbound:"congestion-controller,omitempty"`
+ 	CWND                 int       `inbound:"cwnd,omitempty"`
+ 	BBRProfile           string    `inbound:"bbr-profile,omitempty"`
++	Fallback             string    `inbound:"fallback,omitempty"`
+ }
+ 
+ func (o TrustTunnelOption) Equal(config C.InboundConfig) bool {
+@@ -59,6 +60,7 @@ func NewTrustTunnel(options *TrustTunnelOption) (*TrustTunnel, error) {
+ 			CongestionController: options.CongestionController,
+ 			CWND:                 options.CWND,
+ 			BBRProfile:           options.BBRProfile,
++			Fallback:             options.Fallback,
+ 		},
+ 	}, nil
+ }
+diff --git a/listener/inbound/trusttunnel_test.go b/listener/inbound/trusttunnel_test.go
+index 947b12e..91674a3 100644
+--- a/listener/inbound/trusttunnel_test.go
++++ b/listener/inbound/trusttunnel_test.go
+@@ -112,3 +112,18 @@ func TestInboundTrustTunnel_H2(t *testing.T) {
+ func TestInboundTrustTunnel_QUIC(t *testing.T) {
+ 	testInboundTrustTunnelTLS(t, true)
+ }
++
++// TestInboundTrustTunnel_Fallback checks that authenticated tunnels keep working
++// when a fallback is set, which also makes the server negotiate ALPN.
++func TestInboundTrustTunnel_Fallback(t *testing.T) {
++	inboundOptions := inbound.TrustTunnelOption{
++		Certificate: tlsCertificate,
++		PrivateKey:  tlsPrivateKey,
++		Fallback:    "127.0.0.1:1",
++	}
++	outboundOptions := outbound.TrustTunnelOption{
++		Fingerprint: tlsFingerprint,
++		HealthCheck: true,
++	}
++	testInboundTrustTunnel(t, inboundOptions, outboundOptions)
++}
+diff --git a/listener/trusttunnel/server.go b/listener/trusttunnel/server.go
+index daa2aac..98a0fdc 100644
+--- a/listener/trusttunnel/server.go
++++ b/listener/trusttunnel/server.go
+@@ -135,6 +135,7 @@ func New(config LC.TrustTunnelServer, lc C.InboundListenConfig, tunnel C.Tunnel,
+ 			ICMPHandler:           nil,
+ 			QUICCongestionControl: config.CongestionController,
+ 			QUICCwnd:              config.CWND,
++			Fallback:              config.Fallback,
+ 			QUICBBRProfile:        config.BBRProfile,
+ 		})
+ 		service.UpdateUsers(config.Users)
+diff --git a/transport/trusttunnel/fallback_test.go b/transport/trusttunnel/fallback_test.go
+new file mode 100644
+index 0000000..45007a2
+--- /dev/null
++++ b/transport/trusttunnel/fallback_test.go
+@@ -0,0 +1,598 @@
++package trusttunnel
++
++import (
++	"bufio"
++	"context"
++	"crypto/ecdsa"
++	"crypto/elliptic"
++	"crypto/rand"
++	"crypto/x509"
++	"crypto/x509/pkix"
++	"encoding/pem"
++	"io"
++	"math/big"
++	"net"
++	"net/url"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/metacubex/http"
++	"github.com/metacubex/http/httptest"
++	"github.com/metacubex/quic-go/http3"
++	"github.com/metacubex/sing/common/logger"
++	"github.com/metacubex/tls"
++)
++
++func newFallbackService(t *testing.T, backend *httptest.Server) *Service {
++	t.Helper()
++	s := NewService(ServiceOptions{Ctx: context.Background(), Fallback: strings.TrimPrefix(backend.URL, "http://")})
++	t.Cleanup(func() { _ = s.Close() })
++	return s
++}
++
++// serveFallbackAsync runs serveFallback the way a server would, treating an
++// http.ErrAbortHandler panic as an aborted response, and reports whether the
++// response was aborted.
++func serveFallbackAsync(s *Service, writer http.ResponseWriter, request *http.Request) <-chan bool {
++	done := make(chan bool, 1)
++	go func() {
++		aborted := false
++		defer func() {
++			if recovered := recover(); recovered != nil {
++				if recovered != http.ErrAbortHandler {
++					panic(recovered)
++				}
++				aborted = true
++			}
++			done <- aborted
++		}()
++		s.serveFallback(writer, request)
++	}()
++	return done
++}
++
++func TestFallbackForwardedHeaders(t *testing.T) {
++	var header http.Header
++	var host string
++	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		header = r.Header.Clone()
++		host = r.Host
++	}))
++	defer backend.Close()
++	s := newFallbackService(t, backend)
++
++	request := httptest.NewRequest("GET", "https://cover.example/", nil)
++	request.Header.Set("Forwarded", "for=198.51.100.77;proto=http")
++	request.Header.Set("X-Forwarded-For", "198.51.100.77")
++	request.Header.Set("X-Forwarded-Proto", "http")
++	request.Header.Set("X-Forwarded-Host", "attacker.example")
++	request.Header.Set("Proxy-Authorization", "Basic invalid")
++	request.Header.Set("Connection", "X-Probe")
++	request.Header.Set("X-Probe", "should disappear")
++	recorder := httptest.NewRecorder()
++	s.serveFallback(recorder, request)
++
++	if recorder.Code != http.StatusOK {
++		t.Fatalf("status = %d, want 200", recorder.Code)
++	}
++	if host != "cover.example" {
++		t.Errorf("Host = %q, want cover.example", host)
++	}
++	for _, name := range []string{"Forwarded", "Proxy-Authorization", "X-Probe"} {
++		if value := header.Get(name); value != "" {
++			t.Errorf("%s reached backend: %q", name, value)
++		}
++	}
++	// httptest.NewRequest uses 192.0.2.1 as the client address and sets TLS for https.
++	want := map[string]string{
++		"X-Forwarded-For":   "192.0.2.1",
++		"X-Forwarded-Proto": "https",
++		"X-Forwarded-Host":  "cover.example",
++	}
++	for name, value := range want {
++		if got := header.Get(name); got != value {
++			t.Errorf("%s = %q, want %q", name, got, value)
++		}
++	}
++}
++
++func TestFallbackResponseBodyStall(t *testing.T) {
++	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		w.WriteHeader(http.StatusOK)
++		_, _ = w.Write([]byte("partial"))
++		w.(http.Flusher).Flush()
++		<-r.Context().Done()
++	}))
++	defer backend.Close()
++	s := newFallbackService(t, backend)
++	s.fallbackIdleTimeout = 100 * time.Millisecond
++
++	recorder := httptest.NewRecorder()
++	select {
++	case aborted := <-serveFallbackAsync(s, recorder, httptest.NewRequest("GET", "https://cover.example/", nil)):
++		if !aborted {
++			t.Error("truncated response was not aborted")
++		}
++	case <-time.After(5 * time.Second):
++		t.Fatal("stalled response body was not aborted")
++	}
++	if recorder.Body.String() != "partial" {
++		t.Errorf("body = %q, want the bytes sent before the stall", recorder.Body.String())
++	}
++}
++
++func TestFallbackRequestBodyStall(t *testing.T) {
++	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		_, _ = io.Copy(io.Discard, r.Body)
++	}))
++	defer backend.Close()
++	s := newFallbackService(t, backend)
++	s.fallbackIdleTimeout = 100 * time.Millisecond
++
++	t.Run("handler", func(t *testing.T) {
++		body, bodyWriter := io.Pipe()
++		defer bodyWriter.Close()
++		recorder := httptest.NewRecorder()
++		select {
++		case aborted := <-serveFallbackAsync(s, recorder, httptest.NewRequest("POST", "https://cover.example/", body)):
++			if aborted {
++				t.Error("request that stalled before the response was aborted instead of answered")
++			}
++		case <-time.After(5 * time.Second):
++			t.Fatal("stalled request body was not aborted")
++		}
++		if recorder.Code != http.StatusBadGateway {
++			t.Errorf("status = %d, want 502", recorder.Code)
++		}
++	})
++
++	t.Run("server", func(t *testing.T) {
++		front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++			s.serveFallback(w, r)
++		}))
++		defer front.Close()
++		conn, err := net.Dial("tcp", strings.TrimPrefix(front.URL, "http://"))
++		if err != nil {
++			t.Fatal(err)
++		}
++		defer conn.Close()
++		_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
++		// Promise 100 bytes, send 5, then go quiet.
++		_, err = conn.Write([]byte("POST / HTTP/1.1\r\nHost: cover.example\r\nContent-Length: 100\r\n\r\nhello"))
++		if err != nil {
++			t.Fatal(err)
++		}
++		response, err := http.ReadResponse(bufio.NewReader(conn), nil)
++		if err != nil {
++			t.Fatalf("no response for stalled upload: %v", err)
++		}
++		if response.StatusCode != http.StatusBadGateway {
++			t.Errorf("status = %d, want 502", response.StatusCode)
++		}
++	})
++}
++
++func TestFallbackSlowStreamKeepsWorking(t *testing.T) {
++	const chunks = 5
++	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		for i := 0; i < chunks; i++ {
++			_, _ = w.Write([]byte("x"))
++			w.(http.Flusher).Flush()
++			time.Sleep(50 * time.Millisecond)
++		}
++	}))
++	defer backend.Close()
++	s := newFallbackService(t, backend)
++	// The stream lasts longer than the idle limit, but no single gap exceeds it.
++	s.fallbackIdleTimeout = 150 * time.Millisecond
++
++	recorder := httptest.NewRecorder()
++	s.serveFallback(recorder, httptest.NewRequest("GET", "https://cover.example/", nil))
++	if recorder.Body.String() != strings.Repeat("x", chunks) {
++		t.Errorf("body = %q, want %d chunks", recorder.Body.String(), chunks)
++	}
++}
++
++func TestFallbackConcurrencyLimit(t *testing.T) {
++	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
++	defer backend.Close()
++	s := newFallbackService(t, backend)
++	for i := 0; i < cap(s.fallbackSlots); i++ {
++		s.fallbackSlots <- struct{}{}
++	}
++
++	recorder := httptest.NewRecorder()
++	s.serveFallback(recorder, httptest.NewRequest("GET", "https://cover.example/", nil))
++	if recorder.Code != http.StatusServiceUnavailable {
++		t.Fatalf("status = %d, want 503", recorder.Code)
++	}
++
++	<-s.fallbackSlots
++	recorder = httptest.NewRecorder()
++	s.serveFallback(recorder, httptest.NewRequest("GET", "https://cover.example/", nil))
++	if recorder.Code != http.StatusOK {
++		t.Fatalf("status after a slot freed = %d, want 200", recorder.Code)
++	}
++}
++
++func TestFallbackUpgradeOutlivesIdleTimeout(t *testing.T) {
++	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		conn, rw, err := w.(http.Hijacker).Hijack()
++		if err != nil {
++			return
++		}
++		defer conn.Close()
++		_, _ = rw.WriteString("HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n")
++		_ = rw.Flush()
++		line, err := rw.ReadString('\n')
++		if err != nil {
++			return
++		}
++		_, _ = rw.WriteString(line)
++		_ = rw.Flush()
++	}))
++	defer backend.Close()
++	s := newFallbackService(t, backend)
++	s.fallbackIdleTimeout = 100 * time.Millisecond
++	front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		s.serveFallback(w, r)
++	}))
++	defer front.Close()
++
++	conn, err := net.Dial("tcp", strings.TrimPrefix(front.URL, "http://"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer conn.Close()
++	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
++	_, err = conn.Write([]byte("GET / HTTP/1.1\r\nHost: cover.example\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	reader := bufio.NewReader(conn)
++	response, err := http.ReadResponse(reader, nil)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if response.StatusCode != http.StatusSwitchingProtocols {
++		t.Fatalf("status = %d, want 101", response.StatusCode)
++	}
++
++	// Stay quiet for longer than the idle limit; the upgraded connection must survive.
++	time.Sleep(300 * time.Millisecond)
++	_, err = conn.Write([]byte("ping\n"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	line, err := reader.ReadString('\n')
++	if err != nil {
++		t.Fatalf("upgraded connection closed after idle period: %v", err)
++	}
++	if line != "ping\n" {
++		t.Errorf("echo = %q, want %q", line, "ping\n")
++	}
++}
++
++// startFallbackServer runs the real TrustTunnel service (HTTP/1.1 and HTTP/2 over
++// TLS, HTTP/3 over QUIC) with the given fallback backend and returns its address.
++func startFallbackServer(t *testing.T, backend *httptest.Server, idleTimeout time.Duration) (*Service, string) {
++	t.Helper()
++	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
++	if err != nil {
++		t.Fatal(err)
++	}
++	template := &x509.Certificate{
++		SerialNumber: big.NewInt(1),
++		Subject:      pkix.Name{CommonName: "cover.example"},
++		DNSNames:     []string{"cover.example"},
++		NotBefore:    time.Now().Add(-time.Hour),
++		NotAfter:     time.Now().Add(time.Hour),
++	}
++	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
++	if err != nil {
++		t.Fatal(err)
++	}
++	keyDER, err := x509.MarshalECPrivateKey(key)
++	if err != nil {
++		t.Fatal(err)
++	}
++	certificate, err := tls.X509KeyPair(
++		pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}),
++		pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}),
++	)
++	if err != nil {
++		t.Fatal(err)
++	}
++
++	tcpListener, err := net.Listen("tcp", "127.0.0.1:0")
++	if err != nil {
++		t.Fatal(err)
++	}
++	udpConn, err := net.ListenPacket("udp", tcpListener.Addr().String())
++	if err != nil {
++		_ = tcpListener.Close()
++		t.Fatal(err)
++	}
++	s := NewService(ServiceOptions{
++		Ctx:      context.Background(),
++		Logger:   logger.NOP(),
++		Fallback: strings.TrimPrefix(backend.URL, "http://"),
++	})
++	s.fallbackIdleTimeout = idleTimeout
++	// Like listener/trusttunnel: a certificate and no NextProtos.
++	err = s.Start(tcpListener, udpConn, &tls.Config{
++		Certificates: []tls.Certificate{certificate},
++	})
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() { _ = s.Close() })
++	return s, tcpListener.Addr().String()
++}
++
++func fallbackClients(t *testing.T) map[string]http.RoundTripper {
++	clientTLS := &tls.Config{InsecureSkipVerify: true, ServerName: "cover.example"}
++	h1 := new(http.Protocols)
++	h1.SetHTTP1(true)
++	h2 := new(http.Protocols)
++	h2.SetHTTP2(true)
++	h1Transport := &http.Transport{TLSClientConfig: clientTLS.Clone(), Protocols: h1}
++	h2Transport := &http.Transport{TLSClientConfig: clientTLS.Clone(), Protocols: h2}
++	h3Transport := &http3.Transport{TLSClientConfig: clientTLS.Clone()}
++	t.Cleanup(func() {
++		h1Transport.CloseIdleConnections()
++		h2Transport.CloseIdleConnections()
++		_ = h3Transport.Close()
++	})
++	return map[string]http.RoundTripper{"HTTP/1.1": h1Transport, "HTTP/2": h2Transport, "HTTP/3": h3Transport}
++}
++
++func waitSlotsFree(s *Service, timeout time.Duration) bool {
++	deadline := time.Now().Add(timeout)
++	for time.Now().Before(deadline) {
++		if len(s.fallbackSlots) == 0 {
++			return true
++		}
++		time.Sleep(10 * time.Millisecond)
++	}
++	return false
++}
++
++func TestFallbackClientStopsReading(t *testing.T) {
++	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		chunk := []byte(strings.Repeat("x", 64<<10))
++		for i := 0; i < 4096; i++ {
++			if _, err := w.Write(chunk); err != nil {
++				return
++			}
++		}
++	}))
++	defer backend.Close()
++	s, address := startFallbackServer(t, backend, 100*time.Millisecond)
++
++	for name, transport := range fallbackClients(t) {
++		t.Run(name, func(t *testing.T) {
++			request, err := http.NewRequest("GET", "https://"+address+"/", nil)
++			if err != nil {
++				t.Fatal(err)
++			}
++			request.Host = "cover.example"
++			response, err := transport.RoundTrip(request)
++			if err != nil {
++				t.Fatal(err)
++			}
++			defer response.Body.Close()
++			if response.ProtoMajor != int(name[5]-'0') {
++				t.Fatalf("negotiated %s, want %s", response.Proto, name)
++			}
++			// Read the headers only, then stop reading; the server's writes block
++			// once the flow-control windows and socket buffers fill up.
++			if len(s.fallbackSlots) == 0 {
++				t.Fatal("fallback request is not in flight")
++			}
++			// HTTP/1.1 over TLS may take up to 5s more after the abort: closing the
++			// connection makes crypto/tls try to send close_notify with its own 5s
++			// write deadline to a client that is not reading.
++			if !waitSlotsFree(s, 8*time.Second) {
++				t.Fatalf("handler still holds a slot after the idle timeout (slots=%d)", len(s.fallbackSlots))
++			}
++		})
++	}
++}
++
++func TestFallbackConnectReachesBackend(t *testing.T) {
++	var method, host string
++	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		method, host = r.Method, r.Host
++		w.Header().Set("Server", "cover")
++		w.WriteHeader(http.StatusMethodNotAllowed)
++		_, _ = io.WriteString(w, "not here")
++	}))
++	defer backend.Close()
++	_, address := startFallbackServer(t, backend, time.Minute)
++
++	for name, transport := range fallbackClients(t) {
++		if name == "HTTP/3" {
++			continue // the HTTP/3 client does not send plain CONNECT requests
++		}
++		t.Run(name, func(t *testing.T) {
++			method, host = "", ""
++			request := &http.Request{
++				Method: http.MethodConnect,
++				URL:    &url.URL{Scheme: "https", Host: address},
++				Host:   "cover.example:443",
++				Header: make(http.Header),
++			}
++			response, err := transport.RoundTrip(request)
++			if err != nil {
++				t.Fatal(err)
++			}
++			defer response.Body.Close()
++			body, _ := io.ReadAll(response.Body)
++			if response.StatusCode != http.StatusMethodNotAllowed || response.Header.Get("Server") != "cover" || string(body) != "not here" {
++				t.Errorf("got %d Server=%q body=%q, want the backend's own response", response.StatusCode, response.Header.Get("Server"), body)
++			}
++			if method != http.MethodConnect || host != "cover.example:443" {
++				t.Errorf("backend saw %s %q, want CONNECT cover.example:443", method, host)
++			}
++		})
++	}
++}
++
++func TestFallbackEarlyAnswerToStalledUpload(t *testing.T) {
++	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		w.Header().Set("Connection", "close")
++		w.WriteHeader(http.StatusRequestEntityTooLarge)
++	}))
++	defer backend.Close()
++	s := newFallbackService(t, backend)
++	s.fallbackIdleTimeout = 100 * time.Millisecond
++	front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		s.serveFallback(w, r)
++	}))
++	defer front.Close()
++
++	conn, err := net.Dial("tcp", strings.TrimPrefix(front.URL, "http://"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer conn.Close()
++	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
++	// Promise a large body, send a few bytes, then go quiet. The server drains
++	// the body before it can send the early answer, so the answer must survive
++	// the idle timeout instead of being aborted with it.
++	_, err = conn.Write([]byte("POST / HTTP/1.1\r\nHost: cover.example\r\nContent-Length: 1000000\r\n\r\nhello"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	response, err := http.ReadResponse(bufio.NewReader(conn), nil)
++	if err != nil {
++		t.Fatalf("early answer lost: %v", err)
++	}
++	if response.StatusCode != http.StatusRequestEntityTooLarge {
++		t.Errorf("status = %d, want 413", response.StatusCode)
++	}
++	if !waitSlotsFree(s, 2*time.Second) {
++		t.Errorf("handler still holds a slot (slots=%d)", len(s.fallbackSlots))
++	}
++}
++
++func TestFallbackUploadsReuseConnection(t *testing.T) {
++	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		body, _ := io.ReadAll(r.Body)
++		_, _ = w.Write(body)
++	}))
++	defer backend.Close()
++	_, address := startFallbackServer(t, backend, time.Minute)
++
++	for name, transport := range fallbackClients(t) {
++		t.Run(name, func(t *testing.T) {
++			for i := 0; i < 3; i++ {
++				payload := strings.Repeat("y", 100<<10)
++				request, err := http.NewRequest("POST", "https://"+address+"/", strings.NewReader(payload))
++				if err != nil {
++					t.Fatal(err)
++				}
++				request.Host = "cover.example"
++				response, err := transport.RoundTrip(request)
++				if err != nil {
++					t.Fatalf("request %d: %v", i, err)
++				}
++				body, err := io.ReadAll(response.Body)
++				_ = response.Body.Close()
++				if err != nil || string(body) != payload {
++					t.Fatalf("request %d: echoed %d bytes, err=%v", i, len(body), err)
++				}
++			}
++		})
++	}
++}
++
++func TestFallbackCloseStopsUpgrade(t *testing.T) {
++	backendClosed := make(chan struct{})
++	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		conn, rw, err := w.(http.Hijacker).Hijack()
++		if err != nil {
++			return
++		}
++		defer conn.Close()
++		defer close(backendClosed)
++		_, _ = rw.WriteString("HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n")
++		_ = rw.Flush()
++		for {
++			line, err := rw.ReadString('\n')
++			if err != nil {
++				return
++			}
++			_, _ = rw.WriteString(line)
++			_ = rw.Flush()
++		}
++	}))
++	defer backend.Close()
++	s, address := startFallbackServer(t, backend, time.Minute)
++
++	conn, err := tls.Dial("tcp", address, &tls.Config{InsecureSkipVerify: true, NextProtos: []string{"http/1.1"}})
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer conn.Close()
++	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
++	_, err = io.WriteString(conn, "GET / HTTP/1.1\r\nHost: cover.example\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n")
++	if err != nil {
++		t.Fatal(err)
++	}
++	reader := bufio.NewReader(conn)
++	response, err := http.ReadResponse(reader, nil)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if response.StatusCode != http.StatusSwitchingProtocols {
++		t.Fatalf("status = %d, want 101", response.StatusCode)
++	}
++	_, _ = io.WriteString(conn, "before-close\n")
++	if line, err := reader.ReadString('\n'); err != nil || line != "before-close\n" {
++		t.Fatalf("echo before close: %q, %v", line, err)
++	}
++
++	_ = s.Close()
++	_ = s.Close() // a second Close must be harmless
++
++	select {
++	case <-backendClosed:
++	case <-time.After(3 * time.Second):
++		t.Fatal("backend connection still open after Service.Close")
++	}
++	if !waitSlotsFree(s, 3*time.Second) {
++		t.Errorf("handler still holds a slot after Service.Close (slots=%d)", len(s.fallbackSlots))
++	}
++	_, _ = io.WriteString(conn, "after-close\n")
++	if line, err := reader.ReadString('\n'); err == nil && line == "after-close\n" {
++		t.Error("upgraded connection still forwards traffic after Service.Close")
++	}
++}
++
++func TestFallbackNegotiatesALPN(t *testing.T) {
++	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
++	defer backend.Close()
++	_, address := startFallbackServer(t, backend, time.Minute)
++
++	for _, test := range []struct {
++		offer []string
++		want  string
++	}{
++		{[]string{"h2", "http/1.1"}, "h2"},
++		{[]string{"http/1.1"}, "http/1.1"},
++		{[]string{"h2"}, "h2"},
++		{nil, ""},
++	} {
++		conn, err := tls.Dial("tcp", address, &tls.Config{InsecureSkipVerify: true, NextProtos: test.offer})
++		if err != nil {
++			t.Fatalf("offer %v: %v", test.offer, err)
++		}
++		if got := conn.ConnectionState().NegotiatedProtocol; got != test.want {
++			t.Errorf("offer %v: negotiated %q, want %q", test.offer, got, test.want)
++		}
++		_ = conn.Close()
++	}
++}
+diff --git a/transport/trusttunnel/service.go b/transport/trusttunnel/service.go
+index c6d0ee5..1c01d06 100644
+--- a/transport/trusttunnel/service.go
++++ b/transport/trusttunnel/service.go
+@@ -3,14 +3,17 @@ package trusttunnel
+ import (
+ 	"context"
+ 	"errors"
++	"io"
+ 	"net"
+ 	"sync"
++	"sync/atomic"
+ 	"time"
+ 
+ 	"github.com/metacubex/mihomo/common/httputils"
+ 	N "github.com/metacubex/mihomo/common/net"
+ 
+ 	"github.com/metacubex/http"
++	"github.com/metacubex/http/httputil"
+ 	"github.com/metacubex/quic-go/http3"
+ 	"github.com/metacubex/sing/common"
+ 	"github.com/metacubex/sing/common/auth"
+@@ -40,6 +43,9 @@ type ServiceOptions struct {
+ 	QUICCongestionControl string
+ 	QUICCwnd              int
+ 	QUICBBRProfile        string
++	// Fallback is an optional backend (host:port) that unauthenticated requests are
++	// served from, so active probing sees an ordinary web server instead of a proxy.
++	Fallback string
+ }
+ 
+ type Service struct {
+@@ -56,10 +62,31 @@ type Service struct {
+ 	tcpListener           net.Listener
+ 	tlsListener           net.Listener
+ 	udpConn               net.PacketConn
++	fallbackProxy         *httputil.ReverseProxy
++	fallbackTransport     *http.Transport
++	fallbackSlots         chan struct{}
++	fallbackIdleTimeout   time.Duration
++	// fallbackCtx is cancelled on Close so in-flight fallback requests stop too,
++	// including upgraded connections that the HTTP servers no longer track.
++	fallbackCtx    context.Context
++	fallbackCancel context.CancelFunc
+ }
+ 
++const (
++	// fallbackIdleTimeout bounds how long a fallback request may go without any
++	// body bytes moving in either direction, like nginx's proxy_read_timeout.
++	// It is an idle limit, not a total one, so long downloads and SSE streams
++	// that keep sending keep working.
++	fallbackIdleTimeout = 60 * time.Second
++	// fallbackMaxConcurrent caps in-flight fallback requests so a slow or hung
++	// backend cannot pin an unbounded number of handlers and backend connections.
++	fallbackMaxConcurrent = 256
++)
++
++type fallbackWatchdogKey struct{}
++
+ func NewService(options ServiceOptions) *Service {
+-	return &Service{
++	s := &Service{
+ 		ctx:                   options.Ctx,
+ 		logger:                options.Logger,
+ 		handler:               options.Handler,
+@@ -68,6 +95,55 @@ func NewService(options ServiceOptions) *Service {
+ 		quicCwnd:              options.QUICCwnd,
+ 		quicBBRProfile:        options.QUICBBRProfile,
+ 	}
++	if options.Fallback != "" {
++		// A dedicated transport with timeouts for connecting and for the response
++		// headers; stalled bodies are handled by the idle watchdog in serveFallback.
++		s.fallbackTransport = &http.Transport{
++			DialContext:           (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
++			ResponseHeaderTimeout: 10 * time.Second,
++			IdleConnTimeout:       30 * time.Second,
++		}
++		s.fallbackCtx, s.fallbackCancel = context.WithCancel(context.Background())
++		s.fallbackSlots = make(chan struct{}, fallbackMaxConcurrent)
++		s.fallbackIdleTimeout = fallbackIdleTimeout
++		target := options.Fallback
++		s.fallbackProxy = &httputil.ReverseProxy{
++			Transport:     s.fallbackTransport,
++			FlushInterval: -1, // flush each write so SSE and streaming are not buffered
++			// Rewrite (unlike Director) drops any Forwarded/X-Forwarded-* the client
++			// sent, so a prober cannot spoof the IP, scheme or host the backend sees.
++			Rewrite: func(r *httputil.ProxyRequest) {
++				r.Out.URL.Scheme = "http"
++				r.Out.URL.Host = target
++				// Keep the client's Host header: named virtual hosts keep working and
++				// the internal backend address is not leaked in redirects.
++				r.Out.Host = r.In.Host
++				r.SetXForwarded()
++			},
++			ModifyResponse: func(response *http.Response) error {
++				watchdog, loaded := response.Request.Context().Value(fallbackWatchdogKey{}).(*idleWatchdog)
++				if !loaded {
++					return nil
++				}
++				// An upgraded (WebSocket) connection may legitimately stay quiet for
++				// long, so it is left to the concurrency cap instead of the idle limit.
++				if response.StatusCode == http.StatusSwitchingProtocols {
++					watchdog.stop()
++					return nil
++				}
++				watchdog.startResponse()
++				response.Body = &idleReadCloser{ReadCloser: response.Body, watchdog: watchdog, response: true}
++				return nil
++			},
++			ErrorHandler: func(writer http.ResponseWriter, request *http.Request, err error) {
++				if s.logger != nil {
++					s.logger.DebugContext(request.Context(), E.Cause(err, "fallback request from ", request.RemoteAddr))
++				}
++				writer.WriteHeader(http.StatusBadGateway)
++			},
++		}
++	}
++	return s
+ }
+ 
+ func (s *Service) Start(tcpListener net.Listener, udpConn net.PacketConn, tlsConfig *tls.Config) error {
+@@ -92,7 +168,15 @@ func (s *Service) Start(tcpListener net.Listener, udpConn net.PacketConn, tlsCon
+ 		listener := tcpListener
+ 		s.tcpListener = tcpListener
+ 		if tlsConfig != nil {
+-			listener = tls.NewListener(listener, tlsConfig)
++			tcpTLSConfig := tlsConfig
++			if s.fallbackProxy != nil && len(tlsConfig.NextProtos) == 0 {
++				// A real HTTPS site negotiates ALPN, so a browser or scanner offering
++				// h2 gets h2 instead of no protocol at all. TrustTunnel clients offer
++				// h2 and keep working.
++				tcpTLSConfig = tlsConfig.Clone()
++				tcpTLSConfig.NextProtos = []string{"h2", "http/1.1"}
++			}
++			listener = tls.NewListener(listener, tcpTLSConfig)
+ 			s.tlsListener = listener
+ 		}
+ 		go func() {
+@@ -116,6 +200,9 @@ func (s *Service) UpdateUsers(users map[string]string) {
+ }
+ 
+ func (s *Service) Close() error {
++	if s.fallbackCancel != nil {
++		s.fallbackCancel()
++	}
+ 	var shutdownErr error
+ 	if s.httpServer != nil {
+ 		const shutdownTimeout = 5 * time.Second
+@@ -126,6 +213,9 @@ func (s *Service) Close() error {
+ 			shutdownErr = nil
+ 		}
+ 	}
++	if s.fallbackTransport != nil {
++		s.fallbackTransport.CloseIdleConnections()
++	}
+ 	closeErr := common.Close(
+ 		common.PtrOrNil(s.httpServer),
+ 		s.tlsListener,
+@@ -140,6 +230,9 @@ func (s *Service) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+ 	authorization := request.Header.Get("Proxy-Authorization")
+ 	username, loaded := s.verify(authorization)
+ 	if !loaded {
++		if s.serveFallback(writer, request) {
++			return
++		}
+ 		writer.WriteHeader(http.StatusProxyAuthRequired)
+ 		s.badRequest(request.Context(), request, E.New("authorization failed"))
+ 		return
+@@ -262,6 +355,191 @@ func (s *Service) badRequest(ctx context.Context, request *http.Request, err err
+ 	s.logger.ErrorContext(ctx, E.Cause(err, "process connection from ", request.RemoteAddr))
+ }
+ 
++// serveFallback serves an unauthenticated request from the configured backend
++// instead of answering with proxy-specific status codes, which makes the port
++// harder to identify with a single probe. It runs only when a fallback backend
++// is configured; otherwise the caller keeps the previous 407 response. It
++// returns true when it has handled the request.
++//
++// Every method goes to the backend, CONNECT included, so the backend's own
++// answer (status, headers, body) is what a prober sees for it too, instead of a
++// response the backend would never produce.
++//
++// The reverse proxy strips hop-by-hop headers, carries WebSocket upgrades, and
++// flushes streaming responses. A backend that fails to connect or to send
++// headers in time yields 502. Once headers have been sent the status can no
++// longer change, so a body that stalls for fallbackIdleTimeout in either
++// direction aborts the response instead, the way a reverse proxy drops a dead
++// upstream or a client that stopped reading.
++func (s *Service) serveFallback(writer http.ResponseWriter, request *http.Request) bool {
++	if s.fallbackProxy == nil {
++		return false
++	}
++	select {
++	case s.fallbackSlots <- struct{}{}:
++		defer func() { <-s.fallbackSlots }()
++	default:
++		writer.WriteHeader(http.StatusServiceUnavailable)
++		return true
++	}
++	ctx, cancel := context.WithCancel(request.Context())
++	defer cancel()
++	go func() {
++		select {
++		case <-s.fallbackCtx.Done():
++			cancel()
++		case <-ctx.Done():
++		}
++	}()
++	controller := http.NewResponseController(writer)
++	watchdog := newIdleWatchdog(s.fallbackIdleTimeout, func() {
++		// Stop the backend side and release a read stuck on a client that stopped
++		// uploading. Writes are left alone here: an HTTP/1 server may still be
++		// draining the request body before it sends an early answer such as 413.
++		cancel()
++		_ = controller.SetReadDeadline(time.Now())
++	}, func() {
++		// Still running a full idle period later, so the handler is stuck writing
++		// to a client that stopped reading. Deadlines are per stream on HTTP/2
++		// and HTTP/3, and HTTP/1 carries one request at a time, so other requests
++		// are not affected.
++		err := controller.SetWriteDeadline(time.Now())
++		if err != nil && s.logger != nil {
++			s.logger.WarnContext(ctx, E.Cause(err, "abort stalled fallback response to ", request.RemoteAddr))
++		}
++	})
++	defer watchdog.stop()
++	request = request.WithContext(context.WithValue(ctx, fallbackWatchdogKey{}, watchdog))
++	if request.Body != nil && request.Body != http.NoBody {
++		var bodyFinished *atomic.Bool
++		request.Body, bodyFinished = newFallbackRequestBody(ctx, request.Body, watchdog)
++		defer func() {
++			if !bodyFinished.Load() {
++				// The backend answered before the whole body arrived (an early 413,
++				// say). The server drains the rest before it sends the answer, so
++				// release that read instead of waiting on a client that may never
++				// send more; the server then answers and closes the connection.
++				_ = controller.SetReadDeadline(time.Now())
++			}
++		}()
++	}
++	s.fallbackProxy.ServeHTTP(writer, request)
++	if watchdog.stop() {
++		// The response was cut short. Abort it so the client sees a reset rather
++		// than a body that looks complete; the proxy does this itself only when
++		// it recognises the server it runs under.
++		panic(http.ErrAbortHandler)
++	}
++	return true
++}
++
++// newFallbackRequestBody feeds the inbound body through a pipe that is closed as
++// soon as the request is cancelled. The transport waits for the body writer
++// before RoundTrip returns, so without this a client that stops uploading would
++// keep the handler and the backend connection even after cancellation.
++// The returned flag reports whether the whole inbound body has been read.
++func newFallbackRequestBody(ctx context.Context, body io.ReadCloser, watchdog *idleWatchdog) (io.ReadCloser, *atomic.Bool) {
++	reader, writer := io.Pipe()
++	finished := new(atomic.Bool)
++	go func() {
++		_, err := io.Copy(writer, &idleReadCloser{ReadCloser: body, watchdog: watchdog})
++		finished.Store(err == nil)
++		_ = writer.CloseWithError(err)
++	}()
++	go func() {
++		<-ctx.Done()
++		_ = writer.CloseWithError(ctx.Err())
++	}()
++	return reader, finished
++}
++
++// idleWatchdog calls onIdle once no body data has moved for timeout, and
++// onStuck if the request is still running a further timeout after that.
++type idleWatchdog struct {
++	access       sync.Mutex
++	timer        *time.Timer
++	timeout      time.Duration
++	onIdle       func()
++	onStuck      func()
++	responding   bool
++	responseDone bool
++	stopped      bool
++	fired        bool
++	stuck        bool
++}
++
++func newIdleWatchdog(timeout time.Duration, onIdle func(), onStuck func()) *idleWatchdog {
++	w := &idleWatchdog{timeout: timeout, onIdle: onIdle, onStuck: onStuck}
++	w.timer = time.AfterFunc(timeout, w.fire)
++	return w
++}
++
++func (w *idleWatchdog) fire() {
++	w.access.Lock()
++	defer w.access.Unlock()
++	if w.stopped {
++		return
++	}
++	if !w.fired {
++		w.fired = true
++		w.onIdle()
++		w.timer.Reset(w.timeout)
++		return
++	}
++	w.stuck = true
++	w.onStuck()
++}
++
++func (w *idleWatchdog) touch() {
++	w.access.Lock()
++	defer w.access.Unlock()
++	if !w.stopped && !w.fired {
++		w.timer.Reset(w.timeout)
++	}
++}
++
++// startResponse records that the response is being written to the client.
++func (w *idleWatchdog) startResponse() {
++	w.access.Lock()
++	defer w.access.Unlock()
++	w.responding = true
++}
++
++// finishResponse records that the whole backend response body has been read.
++func (w *idleWatchdog) finishResponse() {
++	w.access.Lock()
++	defer w.access.Unlock()
++	w.responseDone = true
++}
++
++// stop disarms the watchdog; once it returns, no callback will run. It reports
++// whether the response was cut short: either writes were aborted, or the body
++// was still incomplete when the backend side was cancelled.
++func (w *idleWatchdog) stop() (truncated bool) {
++	w.access.Lock()
++	defer w.access.Unlock()
++	w.stopped = true
++	w.timer.Stop()
++	return w.stuck || (w.fired && w.responding && !w.responseDone)
++}
++
++type idleReadCloser struct {
++	io.ReadCloser
++	watchdog *idleWatchdog
++	response bool
++}
++
++func (r *idleReadCloser) Read(p []byte) (n int, err error) {
++	n, err = r.ReadCloser.Read(p)
++	if n > 0 {
++		r.watchdog.touch()
++	}
++	if err == io.EOF && r.response {
++		r.watchdog.finishResponse()
++	}
++	return
++}
++
+ // h2ConnWrapper used to avoid "panic: Write called after Handler finished" for gun.Conn
+ type h2ConnWrapper struct {
+ 	N.ExtendedConn

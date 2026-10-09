@@ -75,7 +75,7 @@ var rules = map[string]rule{
 		"initial-connection-receive-window", "max-connection-receive-window"}, network: "udp", cert: true},
 	"tuic":        {keys: []string{"congestion-controller", "max-idle-time", "authentication-timeout", "alpn", "max-udp-relay-packet-size", "cwnd", "bbr-profile"}, network: "udp", cert: true},
 	"anytls":      {keys: []string{"padding-scheme"}, network: "tcp", cert: true},
-	"trusttunnel": {keys: []string{"congestion-controller", "cwnd", "bbr-profile"}, network: "tcp", cert: true},
+	"trusttunnel": {keys: []string{"congestion-controller", "cwnd", "bbr-profile", "fallback"}, network: "tcp", cert: true},
 	"shadowquic": {keys: []string{"jls-upstream", "alpn", "quic-versions", "congestion-controller", "up", "down", "ignore-client-bandwidth",
 		"max-idle-time", "cwnd", "bbr-profile", "max-datagram-frame-size", "recv-window-conn", "recv-window", "disable-mtu-discovery"}, network: "udp"},
 	"mieru":       {keys: []string{"transport"}, network: "tcp"},

@@ -2,3 +2,6 @@
 *.sh text eol=lf
 *.go text eol=lf
 Dockerfile text eol=lf
+
+# The patched mihomo is kept byte for byte as scripts/tt/mihomo.sh generates it.
+third_party/** -text
