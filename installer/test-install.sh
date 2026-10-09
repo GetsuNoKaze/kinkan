@@ -40,7 +40,7 @@ chmod +x "$tmp/bin/curl"
 # The release key of this test, in the script instead of the real one.
 openssl genpkey -algorithm ed25519 -out "$tmp/key.pem" 2>/dev/null
 pub=$(openssl pkey -in "$tmp/key.pem" -pubout | sed -n 2p)
-sed "s|^MCowBQYDK2VwAyEAhw+dVtEBKEQ2d4f/W50h5ubgiGZkCmDDYhLApQkvE2o=\$|$pub|" "$here/install.sh" >"$tmp/install.sh"
+sed "s|^MCowBQYDK2VwAyEAxiAw+bpFbGHMuRWMHSwFaqQhQHhsgTgvwpx0GLNjr4Q=\$|$pub|" "$here/install.sh" >"$tmp/install.sh"
 grep -q "^$pub\$" "$tmp/install.sh"
 
 releases="$tmp/www/github.com/GetsuNoKaze/kinkan/releases"

@@ -6,9 +6,11 @@ Fork release notes. Upstream history remains in CHANGELOG.md.
 ### en
 - The fork is now called Kinkan: repository GetsuNoKaze/kinkan, image ghcr.io/getsunokaze/kinkan. On a server it keeps Mikan's names (the mikan command, /opt/mikan) and releases keep the -tt.N suffix. Servers on an earlier fork release update from the new repository; GitHub redirects the old address.
 - ROADMAP.md lists what comes next.
+- New release signing key. Servers on 0.5.0.5-tt.1 or tt.2 trust the old key and do not take updates signed with the new one: reinstall them from this release.
 ### ru
 - Форк теперь называется Kinkan: репозиторий GetsuNoKaze/kinkan, образ ghcr.io/getsunokaze/kinkan. На сервере остаются имена Mikan (команда mikan, /opt/mikan), у релизов остаётся суффикс -tt.N. Серверы на прежних релизах форка обновляются из нового репозитория; старый адрес GitHub перенаправляет.
 - План — в ROADMAP.md.
+- Новый ключ подписи релизов. Серверы на 0.5.0.5-tt.1 и tt.2 доверяют старому ключу и обновления с новой подписью не примут: их нужно переустановить из этого релиза.
 
 ## 0.5.0.5-tt.2
 ### en
