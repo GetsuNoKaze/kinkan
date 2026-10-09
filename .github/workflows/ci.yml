@@ -136,15 +136,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # Kinkan: the containers come through Google's mirror of Docker Hub, whose anonymous
-      # pull limit the runners share (see the image job).
-      - name: Docker Hub through mirror.gcr.io
+      # Kinkan: Docker Hub's anonymous pull limit is shared by the runners' addresses (see
+      # the image job). The e2e images are pulled from Google's mirror of it and tagged with
+      # their Docker Hub names, so compose finds them here; dockerd's registry-mirrors is not
+      # used by the containerd image store of this Docker.
+      - name: Docker Hub images through mirror.gcr.io
         run: |
-          f=/etc/docker/daemon.json
-          { sudo cat "$f" 2>/dev/null || echo '{}'; } | jq '. + {"registry-mirrors": ["https://mirror.gcr.io"]}' | sudo tee "$f.new" >/dev/null
-          sudo mv "$f.new" "$f"
-          sudo systemctl restart docker
-          docker info --format '{{.RegistryConfig.Mirrors}}'
+          for img in $(sed -n -E 's/^\s*image:\s*([^ #]+).*/\1/p; s/^FROM\s+([^ ]+).*/\1/p' test/e2e/compose.yaml test/e2e/Dockerfile | sort -u); do
+            case "$img" in
+              */*) case "${img%%/*}" in *.* | *:*) continue ;; esac  # another registry
+                   src="mirror.gcr.io/$img" ;;
+              *) src="mirror.gcr.io/library/$img" ;;
+            esac
+            docker pull -q "$src" && docker tag "$src" "$img"
+          done
+          docker image ls --format '{{.Repository}}:{{.Tag}}'
       - name: authenticated TrustTunnel, cover and restart
         env:
           E2E_RUN: TrustTunnel
