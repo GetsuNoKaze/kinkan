@@ -4,7 +4,7 @@
 //
 //	mikan-release keygen -out release-signing.pem
 //	RELEASE_SIGNING_KEY="$(cat key.pem)" mikan-release manifest -version 0.3.9 \
-//	    -image ghcr.io/miroshka000/mikan -digest sha256:… \
+//	    -image ghcr.io/getsunokaze/mikan-tt -digest sha256:… \
 //	    -asset x86_64=dist/mikan-x86_64 -asset aarch64=dist/mikan-aarch64 \
 //	    -min-installer-file .github/min-installer -out dist
 //	mikan-release verify dist/manifest.json
@@ -44,9 +44,11 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: mikan-release keygen|manifest|verify|legacy-check|index|goals …")
+		return errors.New("usage: mikan-release fork-check|keygen|manifest|verify|legacy-check|index|goals …")
 	}
 	switch args[0] {
+	case "fork-check":
+		return forkCheck(args[1:])
 	case "keygen":
 		return keygen(args[1:])
 	case "manifest":
@@ -134,7 +136,7 @@ func makeManifest(args []string) error {
 	version := fs.String("version", "", "release version, e.g. 0.5.0.1")
 	minInstaller := fs.String("min-installer", "", "minimum host installer version, only for a release that cannot run with an older one")
 	minInstallerFile := fs.String("min-installer-file", "", "file with the minimum installer version (# comments allowed); a missing file asks for none")
-	image := fs.String("image", "", "image repository, e.g. ghcr.io/miroshka000/mikan")
+	image := fs.String("image", "", "image repository, e.g. ghcr.io/getsunokaze/mikan-tt")
 	digest := fs.String("digest", "", "sha256 digest of the pushed multi-arch image")
 	changelog := fs.String("changelog", "CHANGELOG.md", "where the release notes are")
 	out := fs.String("out", "dist", "output directory")

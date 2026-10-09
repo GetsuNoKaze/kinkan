@@ -54,6 +54,13 @@ jobs:
           done
           echo "::error::$GITHUB_REF_NAME is on a commit that is not on $branches: a release is made from main, a pre-release from main or dev"
           exit 1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27"
+      - name: fork repository and signing key
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: go run ./cmd/mikan-release fork-check -signing-key
 
   test:
     needs: guard
@@ -126,7 +133,7 @@ jobs:
           persist-credentials: false
       - id: name
         run: |
-          echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/mikan" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
           echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -224,6 +231,7 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           go run ./cmd/mikan-release manifest -version "$version" \
+            -changelog CHANGELOG-TT.md \
             -image "${{ needs.image.outputs.image }}" -digest "${{ needs.image.outputs.digest }}" \
             -asset x86_64=dist/mikan-x86_64 -asset aarch64=dist/mikan-aarch64 \
             -min-installer-file .github/min-installer -out dist
@@ -241,7 +249,7 @@ jobs:
         run: |
           pre=""
           case "$GITHUB_REF_NAME" in *-*) pre="--prerelease" ;; esac
-          gh release create "$GITHUB_REF_NAME" $pre --verify-tag --title "mikan ${GITHUB_REF_NAME#v}" --notes-file dist/notes.md \
+          gh release create "$GITHUB_REF_NAME" $pre --verify-tag --title "Mikan TT ${GITHUB_REF_NAME#v}" --notes-file dist/notes.md \
             dist/install.sh dist/mikan-x86_64 dist/mikan-aarch64 dist/manifest.json dist/manifest.json.sig
       # The release index (internal/release/index.go) lives on the "updates" pre-release,
       # which never becomes "latest". The current index is carried on only with a valid

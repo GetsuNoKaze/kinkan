@@ -28,7 +28,11 @@ step "vet"
 go vet ./... || fail "go vet fails"
 
 step "test mikan"
-go test ./internal/proto/... || fail "internal/proto tests fail"
+go run ./cmd/mikan-release fork-check || fail "release repository differs"
+go test ./internal/proto/... ./internal/release/... ./cmd/mikan-release/... ||
+	fail "protocol or release tests fail"
+go test -run TestTrustTunnelFallbackOnNode ./internal/node ||
+	fail "embedded TrustTunnel fallback test fails"
 
 step "test mihomo"
 (cd third_party/mihomo && go test ./transport/trusttunnel/ && go test -run TrustTunnel ./listener/inbound/) ||

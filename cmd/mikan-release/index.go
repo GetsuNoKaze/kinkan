@@ -15,13 +15,9 @@ import (
 	"mikan/internal/release"
 )
 
-// seed is the index the first release that keeps one starts from, when the "updates"
-// release has none yet: the releases before it, each with the lowest version it updates
-// from directly.
-var seed = []release.Entry{
-	{Version: "0.4.5", Channel: release.Stable, Manifest: manifestURL("v0.4.5"), From: "0.4.0"},
-	{Version: "0.5.0.0", Channel: release.Stable, Manifest: manifestURL("v0.5.0.0"), From: "0.4.5"},
-}
+// This fork has no releases before its first index. Upstream's historical releases
+// are neither published here nor signed with this key, so they must not be seeded.
+var seed = []release.Entry{}
 
 func manifestURL(tag string) string {
 	return fmt.Sprintf("https://github.com/%s/releases/download/%s/manifest.json", release.Repo, tag)
@@ -301,6 +297,6 @@ func legacyCheckFile(args []string) error {
 	if err := legacyCheck(data, string(sig), pub); err != nil {
 		return fmt.Errorf("%s would not be read by mikan 0.4.5 and 0.5.0.0, which read the latest release: %w", args[0], err)
 	}
-	fmt.Println("ok: mikan 0.4.5 and 0.5.0.0 read this manifest")
+	fmt.Println("ok: manifest satisfies the fork's inherited parser contract")
 	return nil
 }

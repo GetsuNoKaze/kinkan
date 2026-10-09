@@ -30,7 +30,9 @@ import (
 //
 // Where they differ, the stricter one is the rule (serde wants the fields Go lets go
 // missing, Go wants an RFC 3339 date where serde takes any string). This contract is
-// frozen: it must never be loosened, whatever the current internal/release accepts. A
+// frozen: it must never be loosened, whatever the current internal/release accepts. The
+// fork uses its own image namespace and signing key; official clients cannot update to
+// it automatically. Only the manifest shape and parser limits are inherited here. A
 // new client may only add a contract of its own, for the day it is the oldest one out.
 
 // legacyArchitectures are the installers every release carried when these clients were
@@ -52,7 +54,7 @@ const (
 	// serde_json's recursion limit, which unknown fields are parsed under too.
 	legacyMaxDepth = 100
 	// installer/src/release.rs IMAGE_PREFIX (0.5.0.0), the literal in valid_image (0.4.5).
-	legacyImagePrefix = "ghcr.io/miroshka000/"
+	legacyImagePrefix = "ghcr.io/getsunokaze/"
 )
 
 // legacyCheck says whether every client still in the field takes data with sig as the

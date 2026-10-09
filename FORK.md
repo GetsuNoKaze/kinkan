@@ -2,7 +2,10 @@
 
 An unofficial fork of [mikan](https://github.com/Miroshka000/mikan). It is not affiliated with the mikan or mihomo authors, and everything not listed here is mikan as released. The fork follows mikan's releases: a workflow merges them and opens a pull request.
 
-mikan's README and docs are kept unchanged so that upstream merges stay clean; this file describes what the fork adds.
+mikan's docs are kept as upstream reference; this file describes what the fork adds.
+Use [RELEASE-TT.md](RELEASE-TT.md) for this fork's installation and release procedure.
+The fork publishes to `GetsuNoKaze/mikan-tt`, with image `ghcr.io/getsunokaze/mikan-tt` and its own
+release signing key. Official mikan's installer and updater do not install this fork.
 
 ## What is different
 
@@ -37,7 +40,7 @@ Every node with this template needs the fork's build, and so does the panel, whi
 - `.github/workflows/tt-check.yml` runs `scripts/tt/check.sh` on every push and pull request: `third_party/mihomo` matches its patches, mikan builds, `go vet` passes, and the tests for the fork's changes pass. mikan's own `ci.yml` runs its full suite.
 - `.github/workflows/tt-sync.yml` runs every 6 hours. It merges mikan's `main` into a `sync/upstream-<commit>` branch, regenerates `third_party/mihomo` if needed, runs the checks and opens a pull request. If the merge conflicts or a check fails, it opens an issue labelled `sync-failure`, or comments on the one already open, and the next run that passes closes it.
 
-Repository settings the workflows need:
+Repository settings the workflows need (release setup is in RELEASE-TT.md):
 
 - Actions enabled for the fork, and under Settings, Actions, General: "Read and write permissions" and "Allow GitHub Actions to create and approve pull requests".
 - Optional secret `SYNC_TOKEN`: a fine-grained token with Contents, Pull requests and Workflows write access to this repository. GitHub refuses pushes that change workflow files from the default token, so without it a sync that brings changes to mikan's workflows fails.

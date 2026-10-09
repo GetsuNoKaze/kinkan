@@ -1,0 +1,8 @@
+# Append this block to the existing Caddyfile, then validate before reloading.
+# Keep the existing HTTPS site and its certificates: REALITY still needs them.
+# The existing Caddy container mounts /var/www/site as /srv/site.
+http://:8080 {
+	bind 127.0.0.1
+	root * /srv/site
+	file_server
+}

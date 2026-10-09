@@ -7,12 +7,15 @@ name: ci
 # tag cannot change what runs; dependabot (.github/dependabot.yml) proposes the updates.
 on:
   pull_request:
+  push:
+    branches: [main, dev]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:

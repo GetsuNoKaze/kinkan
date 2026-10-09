@@ -38,7 +38,7 @@ func versions(ix release.Index) string {
 	return strings.Join(v, " ")
 }
 
-// The first index starts from the releases before it; each next one carries the last on.
+// The fork's first index names only its first release; each next one carries the last on.
 func TestIndexSeedsThenGrows(t *testing.T) {
 	f := newFixture(t, changelog)
 	from := f.write("upgrade-from", "# the lowest version\n0.4.5\n")
@@ -47,10 +47,10 @@ func TestIndexSeedsThenGrows(t *testing.T) {
 		t.Fatal(err)
 	}
 	ix := f.readIndex(first)
-	if got := versions(ix); got != "0.4.5/stable/0.4.0 0.5.0.0/stable/0.4.5 0.5.0.1/stable/0.4.5" {
+	if got := versions(ix); got != "0.5.0.1/stable/0.4.5" {
 		t.Fatalf("seeded: %s", got)
 	}
-	if ix.Schema != release.IndexSchema || ix.Releases[2].Manifest != "https://github.com/Miroshka000/mikan/releases/download/v0.5.0.1/manifest.json" {
+	if ix.Schema != release.IndexSchema || ix.Releases[0].Manifest != "https://github.com/GetsuNoKaze/mikan-tt/releases/download/v0.5.0.1/manifest.json" {
 		t.Fatalf("seeded: %+v", ix)
 	}
 	// A pre-release goes to beta, and "latest" is none of the index's business.
@@ -59,14 +59,14 @@ func TestIndexSeedsThenGrows(t *testing.T) {
 	if err := makeIndex([]string{"-version", "0.5.0.2-rc.1", "-from", "0.5.0.0", "-in", in, "-out", second}); err != nil {
 		t.Fatal(err)
 	}
-	if got := versions(f.readIndex(second)); got != "0.4.5/stable/0.4.0 0.5.0.0/stable/0.4.5 0.5.0.1/stable/0.4.5 0.5.0.2-rc.1/beta/0.5.0.0" {
+	if got := versions(f.readIndex(second)); got != "0.5.0.1/stable/0.4.5 0.5.0.2-rc.1/beta/0.5.0.0" {
 		t.Fatalf("with the pre-release: %s", got)
 	}
 	// The same release again (a workflow run again) replaces its entry.
 	if err := makeIndex([]string{"-version", "0.5.0.1", "-from", "0.5.0.0", "-in", filepath.Join(second, "index.json"), "-out", second}); err != nil {
 		t.Fatal(err)
 	}
-	if got := versions(f.readIndex(second)); got != "0.4.5/stable/0.4.0 0.5.0.0/stable/0.4.5 0.5.0.1/stable/0.5.0.0 0.5.0.2-rc.1/beta/0.5.0.0" {
+	if got := versions(f.readIndex(second)); got != "0.5.0.1/stable/0.5.0.0 0.5.0.2-rc.1/beta/0.5.0.0" {
 		t.Fatalf("again: %s", got)
 	}
 }
@@ -175,7 +175,7 @@ func TestGoalsIntoIndex(t *testing.T) {
 	if len(ix.Goals.Items) != 2 || ix.Goals.Items[0].Raised != 40 || ix.Goals.Items[1].Version != "0.5.0.3" || ix.Goals.Donate != "https://web.tribute.tg/d/REA" {
 		t.Fatalf("goals: %+v", ix.Goals)
 	}
-	if got := versions(ix); got != "0.4.5/stable/0.4.0 0.5.0.0/stable/0.4.5 0.5.0.1/stable/0.4.5" {
+	if got := versions(ix); got != "0.5.0.1/stable/0.4.5" {
 		t.Fatalf("releases changed: %s", got)
 	}
 	next := filepath.Join(f.dir, "next")

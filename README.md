@@ -1,3 +1,7 @@
+> **Mikan TT fork:** TrustTunnel fallback support. See [FORK.md](FORK.md) for differences
+> and [RELEASE-TT.md](RELEASE-TT.md) for the fork's installation and release procedure.
+> The upstream installation commands below install official Mikan.
+
 <div align="center">
 
 <picture>
