@@ -161,7 +161,7 @@
         "ru": "AmneziaWG (AWG) как протокол на нодах: WireGuard с маскировкой от блокировок, ключи создаются сами, как у остальных протоколов.",
         "en": "AmneziaWG (AWG) as a protocol on the nodes: WireGuard disguised against blocking, with keys made automatically like for the other protocols."
       },
-      "target": 300, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6rX"
+      "target": 200, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6rX"
     },
     {
       "id": "vk-turn",
@@ -170,7 +170,7 @@
         "ru": "Подключение через TURN-серверы звонков VK: трафик выглядит как обычный звонок и проходит там, где режут всё остальное.",
         "en": "A connection through the TURN servers of VK calls: the traffic looks like an ordinary call and gets through where everything else is cut."
       },
-      "target": 300, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6rY"
+      "target": 200, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6rY"
     },
     {
       "id": "cascade-routes",
@@ -179,7 +179,7 @@
         "ru": "Заранее заданные цепочки нод и быстрое переключение: заблокировали ноду, выбираете другой маршрут одной кнопкой, без перенастройки протоколов.",
         "en": "Chains of nodes set up in advance and a quick switch: when a node is blocked, pick another route with one button instead of reconfiguring protocols."
       },
-      "target": 100, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6rZ"
+      "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6rZ"
     },
     {
       "id": "xray-auto",
@@ -188,7 +188,7 @@
         "ru": "Группа автовыбора со своим названием, как в Clash-приложениях, и для Happ, v2RayTun и других приложений на Xray: приложение само держит самый быстрый рабочий сервер.",
         "en": "An auto choice group with your own name, as in Clash apps, for Happ, v2RayTun and other Xray apps too: the app keeps the fastest working server by itself."
       },
-      "target": 150, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6s0"
+      "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6s0"
     },
     {
       "id": "vless-tls",
