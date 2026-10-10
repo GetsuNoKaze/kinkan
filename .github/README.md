@@ -1,70 +1,172 @@
 <div align="center">
 
-# 🍊 Kinkan
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../.github/assets/kinkan/banner-ru-dark.svg">
+  <img src="../.github/assets/kinkan/banner-ru-light.svg" alt="Kinkan — свой сайт, измерения, меньше догадок" width="100%">
+</picture>
 
-**A Mikan fork whose nodes answer probes like ordinary websites.**
+**VPN-панель на [mihomo](https://github.com/MetaCubeX/mihomo), которая помогает понять, что выдаёт вашу ноду при сканировании.**
 
-[![Release](https://img.shields.io/github/v/release/GetsuNoKaze/kinkan?color=f0a020&label=release&style=flat-square)](https://github.com/GetsuNoKaze/kinkan/releases)
-[![CI](https://img.shields.io/github/actions/workflow/status/GetsuNoKaze/kinkan/ci.yml?branch=main&label=ci&style=flat-square)](https://github.com/GetsuNoKaze/kinkan/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-GPL--3.0-2f9e6b?style=flat-square)](../LICENSE)
+[![Релиз](https://img.shields.io/github/v/release/GetsuNoKaze/kinkan?color=f0a020&label=релиз&style=flat-square)](https://github.com/GetsuNoKaze/kinkan/releases)
+[![Проверки](https://img.shields.io/github/actions/workflow/status/GetsuNoKaze/kinkan/tt-check.yml?branch=main&label=проверки&style=flat-square)](https://github.com/GetsuNoKaze/kinkan/actions/workflows/tt-check.yml)
+[![Образ](https://img.shields.io/badge/ghcr.io-getsunokaze%2Fkinkan-2b8c9e?style=flat-square&logo=docker&logoColor=white)](https://github.com/GetsuNoKaze/kinkan/pkgs/container/kinkan)
+[![Лицензия](https://img.shields.io/badge/license-GPL--3.0-52886d?style=flat-square)](../LICENSE)
 
-English · [Русский](README.ru.md)
+**Русский** · [English](../README.en.md)
+
+[Установить](#установка) · [Что добавляет Kinkan](#что-добавляет-kinkan) · [Посмотреть интерфейс](#как-это-выглядит) · [Документация](#документация)
 
 </div>
 
-Kinkan (金柑, kumquat — a small golden relative of the mikan) is an unofficial fork of
-[Mikan](https://github.com/Miroshka000/mikan), the VPN panel on the mihomo core. Everything
-Mikan does, Kinkan does: the panel, nodes, subscriptions, billing, the same protocols.
-A workflow merges every Mikan release, checks it and opens a pull request.
+Kinkan — неофициальный форк [Mikan](https://github.com/Miroshka000/mikan). Здесь есть привычная панель: пользователи, тарифы, подписки, Telegram-бот и несколько серверов под одним управлением. Мы развиваем её в сторону **«тихой ноды»**: своего сайта на сервере, проверки ответов без пароля и журнала посторонних обращений.
 
-What the fork adds is one idea: **a proxy is usually found not by its traffic but by
-asking it**. A scanner connects without a password and looks at the answer; once one
-protocol on a server gives itself away, the whole address tends to be blocked, with
-every other protocol on it. Kinkan makes a node answer such questions the way an
-ordinary website would.
+Идея простая: сканер может прийти на VPN-порт как обычный посетитель. Ответ «нужна авторизация прокси» выдаёт назначение порта. Kinkan помогает убрать такие ответы там, где это уже реализовано, и измерить остальные подключения. Решение о том, какой протокол оставить, вы принимаете по отчёту.
 
-## What is different
+## Что добавляет Kinkan
 
-| | |
-|---|---|
-| **TrustTunnel with a cover site** | Requests without valid credentials are served by your own website instead of a proxy's error. HTTP/2 behaves like a regular web server's. |
-| **A scanner check, built in** | The panel (Nodes → Check TrustTunnel) and `kinkan probe` look at a node the way a scanner would and say what gives it away. |
-| **Safer settings** | The panel refuses settings that would expose the server, such as a cover site address that leads to the cloud metadata service. |
-| **Its own signed releases** | Releases are signed with the fork's key; `kinkan update` and the daily update check install them. |
+<table>
+<tr>
+<td width="50%" valign="top">
 
-The full list is in [FORK.md](../FORK.md), the changes in [CHANGELOG-TT.md](../CHANGELOG-TT.md),
-the plan in [ROADMAP.md](../ROADMAP.md): a quiet node mode, a cover site uploaded from the
-panel and set up on every node, traffic per device.
+### 🌐 Ваш сайт на каждой ноде
+Загрузите ZIP со статическим сайтом, выберите ноду — панель передаст ей архив. Нода сама отдаёт сайт, отдельный Caddy для этого не нужен. Можно использовать разные страницы на разных серверах; панель предупреждает об одинаковых сайтах и заголовках.
 
-## Install
+</td>
+<td width="50%" valign="top">
 
-On a fresh Debian or Ubuntu server, as root:
+### 🍊 TrustTunnel с обычной страницей
+С настроенным fallback посетитель без верных учётных данных получает ваш сайт вместо `407 Proxy Authentication Required`. Учтены ALPN и поведение HTTP/2. После подтверждения готовности сайта панель подключает его к TrustTunnel автоматически.
 
-```sh
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### 🔎 Проверка глазами сканера
+Один запуск в панели проверяет включённые подключения: TLS, HTTP, QUIC и реакцию на случайные байты. Для каждого — свой результат: «Тихий», «Заметный», «Палится» или «Недостаточно данных». Отчёт можно скачать в JSON; та же проверка доступна из командной строки.
+
+</td>
+<td valign="top">
+
+### 📊 Кто стучался без пароля
+Журнал показывает адрес, подключение, время и число отказов. При доступных данных добавляет страну, сеть, организацию и подсказку об известном сканере. Есть график по дням и предупреждение о всплеске. Ошибки вероятных своих клиентов отмечаются отдельно.
+
+</td>
+</tr>
+</table>
+
+<p align="center"><img src="../.github/assets/kinkan/flow-ru.svg" alt="Неверная авторизация TrustTunnel ведёт на сайт; проверка протоколов собирает ответы и сравнивает их с эталоном" width="100%"></p>
+
+**Что важно знать.** Эти возможности не делают любой VPN невидимым. Журнал сейчас охватывает TrustTunnel, отказы REALITY, TUIC, неверную авторизацию AnyTLS и запросы авторизации Hysteria2. Маскировка obfs, часть ошибок и остальные протоколы ещё не имеют полного покрытия. Таймаут не считается признаком скрытности; для итога «Тихий» нужен сайт для сравнения. [Подробности замеров и ограничений →](../PROBE-PROTOCOLS.md)
+
+Журнал хранит метаданные отказов, без паролей и содержимого пользовательского трафика. Записи агрегируются по IP, хранятся 30 дней и ограничены по количеству. Название сканера — оценка по доступным признакам, а не доказанная личность посетителя.
+
+## Как это выглядит
+
+Это демо-скриншоты базового интерфейса, унаследованного от Mikan. В Kinkan к нему добавлены сайт ноды, проверка протоколов и журнал сканеров; эти новые экраны ниже не показаны.
+
+<table>
+<tr>
+<td width="50%"><img src="../.github/assets/screens/ru/dashboard.webp" alt="Обзор: состояние панели и статистика трафика"><br><b>Всё важное на одном экране</b></td>
+<td width="50%"><img src="../.github/assets/screens/ru/users.webp" alt="Список пользователей и состояние их подписок"><br><b>Пользователи и подписки</b></td>
+</tr>
+<tr>
+<td><img src="../.github/assets/screens/ru/inbounds.webp" alt="Настройка подключений и протоколов"><br><b>Подключения на ваших нодах</b></td>
+<td><img src="../.github/assets/screens/ru/telegram.webp" alt="Настройки встроенного Telegram-бота"><br><b>Telegram-бот в панели</b></td>
+</tr>
+</table>
+
+<p align="center">
+<img src="../.github/assets/screens/ru/phone-subscription.webp" alt="Страница подписки на телефоне" width="250">
+&nbsp;&nbsp;
+<img src="../.github/assets/screens/ru/phone-dashboard.webp" alt="Панель управления на телефоне" width="250">
+</p>
+
+### Короткий видеообзор
+
+[![Обзор интерфейса: панель, пользователи, подключения и Telegram](../.github/assets/kinkan/tour-ru.gif)](../.github/assets/kinkan/tour-ru.mp4)
+
+[Открыть видео MP4 · 16 секунд, без звука](../.github/assets/kinkan/tour-ru.mp4). Это обзор по демо-скриншотам, а не запись работающего сервера. Анимация выше показывает те же четыре экрана прямо в README.
+
+## Установка
+
+На новом сервере с **Ubuntu 22.04+ или Debian 12+**, архитектура **amd64 или arm64**:
+
+```bash
 curl -fsSL https://github.com/GetsuNoKaze/kinkan/releases/latest/download/install.sh | sudo bash
 ```
 
-The script checks the signed release index and the installer's checksum before it runs
-anything. A node of an existing panel is installed with the key from the panel's Nodes page:
+Установщик проверяет подпись релиза и контрольную сумму, проводит через настройку и выдаёт ссылку администратора. Это команда установки **Kinkan**, с образом `ghcr.io/getsunokaze/kinkan`.
 
-```sh
-curl -fsSL https://github.com/GetsuNoKaze/kinkan/releases/latest/download/install.sh | sudo bash -s -- --join <key>
+Чтобы добавить отдельную ноду, откройте **«Ноды»** в панели и скопируйте команду подключения с её ключом. Общий вид команды:
+
+```bash
+curl -fsSL https://github.com/GetsuNoKaze/kinkan/releases/latest/download/install.sh | sudo bash -s -- --join YOUR_JOIN_KEY
 ```
 
-Afterwards the server has the `kinkan` command (`kinkan`, `kinkan status`, `kinkan update`);
-`mikan` keeps working. Moving an existing Mikan server is a manual step:
-[RELEASE-TT.md](../RELEASE-TT.md).
+`YOUR_JOIN_KEY` замените ключом из панели. На панели и нодах нужен Kinkan, чтобы настройки форка работали везде.
 
-## Good to know
+Уже пользуетесь Mikan или ранним Kinkan? Сначала сохраните бэкап и прочитайте [порядок перехода и обновления](../RELEASE-TT.md). Для существующей установки есть особенности совместимости; обратный переход требует учитывать добавленные форком данные.
 
-- Panel and nodes should all run Kinkan: Mikan's panel rejects the fork's settings.
-- One protocol that gives itself away is enough to expose a server. Run the check after
-  changing a node, and keep only the protocols you need open.
-- Give every node its own cover site, or at least its own name: the same site on several
-  servers ties them together.
+## Первый запуск: от панели к своей ноде
 
-## Credits and licence
+1. Откройте ссылку администратора, которую выдал установщик, и настройте пользователей и подключения.
+2. В разделе **«Сайт ноды»** загрузите свой статический сайт. Нужны `index.html`, `404.html`, `robots.txt` и favicon; конкретные требования показаны в панели. Выберите его для нужной ноды и дождитесь статуса готовности.
+3. Откройте **«Ноды → Проверка протоколов»**. Для сравнения укажите HTTPS-порт эталонного сайта, который показывает ту же страницу. Если его TLS-имя отличается, задайте его отдельно. Не используйте случайный чужой сайт как эталон.
+4. Посмотрите результаты по каждому подключению и **«Журнал сканеров»**. Отмеченные различия стоит разобрать; «Недостаточно данных» означает, что измерений для вывода не хватило.
 
-Kinkan stands on [Mikan](https://github.com/Miroshka000/mikan) by Miroshka000 and on
-[mihomo](https://github.com/MetaCubeX/mihomo) by MetaCubeX. It is not affiliated with
-either: report problems with the fork here, not to them. GPL-3.0, like both.
+Запросы из панели идут с сервера панели. Если важен результат из другой сети, запустите CLI оттуда:
+
+```bash
+kinkan probe --protocol tuic --json https://node.example.com:8443
+kinkan probe --protocol vless --reference https://cover.example.com:8444 https://node.example.com:443
+```
+
+CLI подключается к адресам, которые вы указали. Примеры, проверка нескольких inbound'ов и закрепление IP — в [руководстве по сканеру](../PROBE-PROTOCOLS.md).
+
+## Всё привычное из Mikan
+
+- **Пользователи и тарифы:** время, трафик, устройства и ограничения доступа.
+- **Подписки под приложение:** клиент получает совместимые с ним подключения.
+- **Telegram-бот и Mini App:** подписка, уведомления, покупка и продление с поддерживаемыми способами оплаты.
+- **Несколько нод, WARP и каскады:** управление серверами и маршрутами из одной панели.
+- **Безопасность и обслуживание:** HTTPS, двухфакторная авторизация, аудит, бэкапы и API для интеграций.
+
+Поддерживаются VLESS/REALITY с Vision, XHTTP и gRPC, Trojan, Hysteria2, TUIC, AnyTLS, TrustTunnel, ShadowQUIC и другие протоколы Mikan. Совместимость зависит от приложения и версии его ядра. У протоколов с общим ключом есть ограничения учёта по пользователям — [таблица совместимости Mikan](https://github.com/Miroshka000/mikan#protocols).
+
+## Управление сервером
+
+Команда `kinkan` открывает меню. Привычная команда `mikan` тоже продолжает работать.
+
+| Команда | Для чего |
+|---|---|
+| `kinkan status` | Состояние сервисов и версии |
+| `kinkan update` | Обновление из релизов Kinkan |
+| `kinkan backup` | Сохранение резервной копии |
+| `kinkan logs panel` / `kinkan logs node` | Логи панели или ноды |
+| `kinkan url` | Ссылка администратора |
+| `kinkan probe …` | Активная проверка подключений |
+
+У форка свои подписанные релизы и ключ проверки. Изменения Mikan регулярно проходят автоматическую синхронизацию в отдельном pull request, с проверками перед слиянием.
+
+## Документация
+
+| Хочу… | Куда смотреть |
+|---|---|
+| Понять отличия от Mikan | [FORK.md](../FORK.md) |
+| Установить, обновить или перейти с Mikan | [RELEASE-TT.md](../RELEASE-TT.md) |
+| Разобраться с проверками и журналом | [PROBE-PROTOCOLS.md](../PROBE-PROTOCOLS.md) |
+| Проверить TrustTunnel подробнее | [PROBE-TT.md](../PROBE-TT.md) |
+| Узнать, что изменилось | [CHANGELOG-TT.md](../CHANGELOG-TT.md) |
+| Посмотреть планы | [ROADMAP.md](../ROADMAP.md) |
+| Сообщить об ошибке | [Issues Kinkan](https://github.com/GetsuNoKaze/kinkan/issues) |
+
+Для разработчиков: `scripts/tt/check.sh` проверяет изменения форка; полному Go-набору тестов нужна одноразовая PostgreSQL. Патчи ядра хранятся в `patches/mihomo/`, копия пересобирается через `scripts/tt/mihomo.sh`.
+
+## Авторы и лицензия
+
+Kinkan (金柑 — кумкват) построен на [Mikan](https://github.com/Miroshka000/mikan) от Miroshka000 и [mihomo](https://github.com/MetaCubeX/mihomo) от MetaCubeX. Спасибо авторам за основу проекта и интерфейс. Форк независимый: вопросы об изменениях Kinkan направляйте в этот репозиторий.
+
+Код распространяется по [GNU GPL v3](../LICENSE). Демо-скриншоты взяты из Mikan; баннеры, схема и видеообзор собраны для Kinkan. Другие языковые README в репозитории пока сохраняют документацию исходного Mikan, включая его команды установки.
+
+<div align="center"><sub>🍊 Свой сайт на ноде. Измерения перед выводами.</sub></div>
