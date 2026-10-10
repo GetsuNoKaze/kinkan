@@ -677,6 +677,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/nodes/{id}/site": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Сайт ноды */
+        put: operations["set-node-site"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/nodes/{id}/speedtest": {
         parameters: {
             query?: never;
@@ -1148,6 +1165,41 @@ export interface paths {
         /** Профиль Clash с этой маршрутизацией, без сохранения */
         post: operations["routes-preview"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Сайты нод */
+        get: operations["list-sites"];
+        put?: never;
+        /** Загрузить сайт (zip) */
+        post: operations["upload-site"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sites/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Удалить сайт */
+        delete: operations["delete-site"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2727,6 +2779,8 @@ export interface components {
             proc_cpu_percent?: number;
             /** @description Публичное имя для канала состояния; пустое — нода скрыта из списка */
             public_name: string;
+            /** @description Сайт, который отдаёт нода: хеш, адреса на 127.0.0.1 и ошибка (например, порт занят) */
+            site?: components["schemas"]["SiteStatus"];
             /** @enum {string} */
             status: "ok" | "error" | "unknown";
             /**
@@ -2770,6 +2824,19 @@ export interface components {
              * @description Сколько унесли все ноды вместе
              */
             total: number;
+        };
+        NodeSiteInputBody: {
+            /**
+             * Format: int64
+             * @description Сайт ноды; 0 — без сайта
+             */
+            site_id: number;
+        };
+        NodeSiteOutputBody: {
+            /** Format: int64 */
+            node_id: number;
+            /** Format: int64 */
+            site_id: number;
         };
         NodeView: {
             /** Format: date-time */
@@ -3730,6 +3797,45 @@ export interface components {
             /** @description Название подписки в приложениях (заголовок profile-title); пусто — бренд. Переменные: {brand} — бренд, {name} — имя пользователя, {date} — дата окончания (ДД.ММ.ГГГГ, МСК), {days} — дней осталось, {used} — израсходовано, {left} — осталось трафика, {total} — всего; без срока или лимита — ∞ */
             sub_title: string;
             support_url: string;
+        };
+        SiteOutputBody: {
+            /** Format: int64 */
+            created_at: number;
+            existing: boolean;
+            /** Format: int64 */
+            files: number;
+            hash: string;
+            /** Format: int64 */
+            id: number;
+            name: string;
+            nodes: number[];
+            same_title: boolean;
+            several_nodes: boolean;
+            /** Format: int64 */
+            size: number;
+            title: string;
+        };
+        SiteStatus: {
+            error?: string;
+            hash: string;
+            http?: string;
+            https?: string;
+        };
+        SiteView: {
+            /** Format: int64 */
+            created_at: number;
+            /** Format: int64 */
+            files: number;
+            hash: string;
+            /** Format: int64 */
+            id: number;
+            name: string;
+            nodes: number[];
+            same_title: boolean;
+            several_nodes: boolean;
+            /** Format: int64 */
+            size: number;
+            title: string;
         };
         SpeedTestView: {
             /** Format: date-time */
@@ -6005,6 +6111,41 @@ export interface operations {
             };
         };
     };
+    "set-node-site": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NodeSiteInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeSiteOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "run-node-speedtest": {
         parameters: {
             query?: never;
@@ -7199,6 +7340,100 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RoutesPreviewOutputBody"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-sites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteView"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "upload-site": {
+        parameters: {
+            query?: {
+                /** @description Имя сайта в панели; пусто — заголовок главной страницы */
+                name?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/zip": string;
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-site": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {
