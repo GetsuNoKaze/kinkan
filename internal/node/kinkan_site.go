@@ -157,6 +157,15 @@ func (e *Engine) pruneSites(keep string) {
 	}
 }
 
+// sitePort is the node's website over TLS that REALITY may aim at, 0 when the state names
+// no site.
+func sitePort(st nodeapi.DesiredState) int {
+	if st.Site == nil {
+		return 0
+	}
+	return st.Site.HTTPSPort
+}
+
 func (e *Engine) siteStatus() *nodeapi.SiteStatus {
 	if e.site == nil {
 		return nil

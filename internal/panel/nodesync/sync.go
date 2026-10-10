@@ -208,6 +208,9 @@ func (s *Syncer) desired(ctx context.Context) (nodeapi.DesiredState, error) {
 			return st, err
 		}
 	}
+	if st.Site, err = s.site(ctx); err != nil { // Kinkan: the node's site (kinkan_site.go)
+		return st, err
+	}
 	var bad []string
 	for _, in := range inbounds {
 		// A disabled node keeps running but serves nothing.
@@ -220,12 +223,13 @@ func (s *Syncer) desired(ctx context.Context) (nodeapi.DesiredState, error) {
 		// others, the new users and the policies still reach the node.
 		t, err := proto.Parse(in.Config)
 		if err == nil {
-			err = proto.Validate(t, proto.Options{SelfStealPort: st.SelfStealPort})
+			err = proto.Validate(t, proto.Options{SelfStealPort: st.SelfStealPort, SitePort: sitePortOf(st.Site)})
 		}
 		if err != nil {
 			bad = append(bad, in.Name+": "+err.Error())
 			continue
 		}
+		t = s.fitToSite(t, st) // Kinkan: TrustTunnel's fallback and REALITY on the node's site
 		ni := nodeapi.Inbound{Name: in.Name, Listen: in.Listen, Port: in.Port, Config: t.JSON()}
 		if in.PoolID.Valid {
 			ni.Pool = strconv.FormatInt(in.PoolID.Int64, 10)
@@ -242,9 +246,6 @@ func (s *Syncer) desired(ctx context.Context) (nodeapi.DesiredState, error) {
 	st.Torrent = snap.torrent.Block()
 	st.Filters = snap.filters.State()
 	st.Epoch, st.Policies, _ = s.policiesFrom(snap)
-	if st.Site, err = s.site(ctx); err != nil { // Kinkan: the node's site (kinkan_site.go)
-		return st, err
-	}
 	return st, nil
 }
 
@@ -723,6 +724,9 @@ func (s *Syncer) refreshHealth(ctx context.Context) {
 		return
 	}
 	view.OK, view.Health, view.Listeners = true, h, h.Listeners
+	if servedSite(s.health.Load()) != servedSite(view) {
+		signal(s.stateDirty) // Kinkan: the inbounds fitted to the site follow what the node serves
+	}
 	s.mu.Lock()
 	applied := s.lastApplied.Revision
 	if applied != 0 && h.Revision == applied {

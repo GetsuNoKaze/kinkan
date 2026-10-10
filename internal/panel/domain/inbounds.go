@@ -425,7 +425,11 @@ func (s *Inbounds) CheckTemplate(ctx context.Context, node db.Node, config, port
 	if err != nil {
 		return nil, err
 	}
-	if err := proto.Validate(t, proto.Options{SelfStealPort: selfSteal}); err != nil {
+	site, err := s.sitePort(ctx, node) // Kinkan: the node's website as a REALITY target
+	if err != nil {
+		return nil, err
+	}
+	if err := proto.Validate(t, proto.Options{SelfStealPort: selfSteal, SitePort: site}); err != nil {
 		return nil, err
 	}
 	// Checked here, not in proto.Validate: nodes keep applying templates saved before.
@@ -440,7 +444,7 @@ func (s *Inbounds) CheckTemplate(ctx context.Context, node db.Node, config, port
 	if err := s.checkDestResolves(ctx, t); err != nil {
 		return nil, err
 	}
-	if err := s.dryRun(ctx, node, t, port, selfSteal); err != nil {
+	if err := s.dryRun(ctx, node, t, port, selfSteal, site); err != nil {
 		return nil, err
 	}
 	return t, nil
@@ -505,14 +509,18 @@ func (s *Inbounds) tryOnNode(ctx context.Context, node db.Node, config, port str
 	if err != nil {
 		return err
 	}
-	return s.dryRun(ctx, node, t, port, selfSteal)
+	site, err := s.sitePort(ctx, node) // Kinkan
+	if err != nil {
+		return err
+	}
+	return s.dryRun(ctx, node, t, port, selfSteal, site)
 }
 
-func (s *Inbounds) dryRun(ctx context.Context, node db.Node, t proto.Template, port string, selfSteal int) error {
+func (s *Inbounds) dryRun(ctx context.Context, node db.Node, t proto.Template, port string, selfSteal, site int) error {
 	if s.dry == nil {
 		return nil
 	}
-	err := s.dry.Validate(ctx, node.ID, nodeapi.ValidateRequest{Inbound: nodeapi.Inbound{Name: "validate", Port: port, Config: t.JSON()}, SelfStealPort: selfSteal})
+	err := s.dry.Validate(ctx, node.ID, nodeapi.ValidateRequest{Inbound: nodeapi.Inbound{Name: "validate", Port: port, Config: t.JSON()}, SelfStealPort: selfSteal, SitePort: site})
 	if errors.Is(err, nodeapi.ErrUnavailable) {
 		return nil
 	}

@@ -327,7 +327,7 @@ func (e *Engine) Validate(req nodeapi.ValidateRequest) error {
 	in := req.Inbound
 	in.Name = "mikan-validate"
 	probe := []nodeapi.Slot{{Name: "validate", UUID: "00000000-0000-4000-8000-000000000000", Secret: "validate"}}
-	l, err := listenerFor(in, probe, cert, proto.Options{SelfStealPort: req.SelfStealPort})
+	l, err := listenerFor(in, probe, cert, proto.Options{SelfStealPort: req.SelfStealPort, SitePort: req.SitePort})
 	if err != nil {
 		return err
 	}
@@ -347,7 +347,11 @@ func (e *Engine) TargetAllowed(dest string) bool {
 	}
 	e.mu.Lock()
 	self := e.applied.SelfStealPort
+	own := sitePort(e.applied) // Kinkan: the node's website
 	e.mu.Unlock()
+	if own > 0 && (host == "127.0.0.1" || host == "localhost") && port == strconv.Itoa(own) {
+		return true
+	}
 	return self > 0 && (host == "127.0.0.1" || host == "localhost") && port == strconv.Itoa(self)
 }
 

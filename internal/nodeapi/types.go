@@ -89,6 +89,7 @@ type Slot = proto.Slot
 type ValidateRequest struct {
 	Inbound       Inbound `json:"inbound"`
 	SelfStealPort int     `json:"self_steal_port,omitempty"`
+	SitePort      int     `json:"site_port,omitempty"` // Kinkan: the node's website over TLS
 }
 
 type Policy struct {
