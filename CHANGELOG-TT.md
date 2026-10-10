@@ -2,10 +2,14 @@
 
 Fork release notes. Upstream history remains in CHANGELOG.md.
 
-## Unreleased
+## 0.5.0.5-tt.6
 ### en
+- The panel's check now covers all of a node's inbounds, not only TrustTunnel (Nodes → the check, and `kinkan probe --protocol` / `--inbounds`), with one report per inbound. What it does not cover yet is listed in PROBE-PROTOCOLS.md.
+- Scanner journal: a node records who was refused on its inbounds — address, network, country and confirmed reverse DNS, the inbound and the reason, counted per day — never credentials, URLs or users' traffic. The panel shows it as a table and a chart with spikes and marks addresses its own clients use; 30 days, at most 10,000 records per node.
 - The node's own site announces Caddy's header limit over HTTP/2 (MAX_HEADER_LIST_SIZE 16704), as the TrustTunnel front does: checked on the test node, REALITY's own site and the TrustTunnel port now give the same HTTP/2 fingerprint.
 ### ru
+- Проверка в панели охватывает все подключения ноды, а не только TrustTunnel (Ноды → проверка, `kinkan probe --protocol` / `--inbounds`), с отчётом по каждому. Что ещё не покрыто — в PROBE-PROTOCOLS.md.
+- Журнал сканеров: нода записывает, кому было отказано на её подключениях — адрес, сеть, страну и подтверждённый обратный DNS, подключение и причину, по дням; без паролей, URL и трафика пользователей. В панели — таблица и график со всплесками, адреса своих клиентов помечаются; 30 дней, не больше 10 000 записей на ноду.
 - Сайт ноды объявляет по HTTP/2 тот же лимит заголовков, что Caddy (MAX_HEADER_LIST_SIZE 16704), как и фронт TrustTunnel: на тестовой ноде сайт за REALITY и порт TrustTunnel теперь дают одинаковый отпечаток HTTP/2.
 
 ## 0.5.0.5-tt.5
