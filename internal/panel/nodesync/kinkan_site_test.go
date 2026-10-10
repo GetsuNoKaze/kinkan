@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"mikan/internal/nodeapi"
+	"mikan/internal/proto"
 	"mikan/internal/site"
 )
 
@@ -73,7 +74,7 @@ func TestNodeGetsItsSite(t *testing.T) {
 		t.Fatalf("puts=%d applies=%d, want the site sent once and the state applied twice", n.puts, n.applies)
 	}
 	last := fake.applied[len(fake.applied)-1]
-	if last.Site == nil || last.Site.Hash != kept.Hash || last.Site.HTTPPort != SiteHTTPPort || last.Site.HTTPSPort != SiteHTTPSPort {
+	if last.Site == nil || last.Site.Hash != kept.Hash || last.Site.HTTPPort != nodeapi.SiteHTTPPort || last.Site.HTTPSPort != nodeapi.SiteHTTPSPort {
 		t.Fatalf("applied site = %+v", last.Site)
 	}
 	s.applyState(ctx)
@@ -106,5 +107,58 @@ func TestNodeWithoutSitesIsLeftAlone(t *testing.T) {
 	s.applyState(ctx)
 	if len(fake.applied) != 1 {
 		t.Fatalf("applied %d states, want 1", len(fake.applied))
+	}
+}
+
+// Templates point at the site only once the node says it serves it; an admin's own
+// fallback and REALITY aimed elsewhere stay; the saved template is not changed.
+func TestFitToSite(t *testing.T) {
+	site := &nodeapi.SiteState{Hash: "h1", HTTPPort: nodeapi.SiteHTTPPort, HTTPSPort: nodeapi.SiteHTTPSPort}
+	st := nodeapi.DesiredState{Site: site, SelfStealPort: 21973}
+	tt := proto.Template{"type": "trusttunnel"}
+	own := proto.Template{"type": "trusttunnel", "fallback": "127.0.0.1:8080"}
+	selfSteal := proto.Template{"type": "vless", "reality-config": map[string]any{"dest": "127.0.0.1:21973", "server-names": []any{"node.example"}}}
+	foreign := proto.Template{"type": "vless", "reality-config": map[string]any{"dest": "www.example.com:443"}}
+	s := &Syncer{}
+	health := func(served *nodeapi.SiteStatus) {
+		s.health.Store(&HealthView{OK: true, Health: nodeapi.Health{Site: served}})
+	}
+
+	health(nil)
+	if got := s.fitToSite(tt, st); got["fallback"] != nil {
+		t.Error("fallback before the node serves the site")
+	}
+	health(&nodeapi.SiteStatus{Hash: "other", HTTP: "127.0.0.1:17080", HTTPS: "127.0.0.1:17443"})
+	if got := s.fitToSite(tt, st); got["fallback"] != nil {
+		t.Error("fallback while the node serves another site")
+	}
+
+	health(&nodeapi.SiteStatus{Hash: "h1", HTTP: "127.0.0.1:17080"})
+	if got := s.fitToSite(tt, st); got["fallback"] != "127.0.0.1:17080" {
+		t.Errorf("TrustTunnel fallback = %v", got["fallback"])
+	}
+	if tt["fallback"] != nil {
+		t.Error("the saved template was changed")
+	}
+	if got := s.fitToSite(own, st); got["fallback"] != "127.0.0.1:8080" {
+		t.Errorf("the admin's own fallback was replaced: %v", got["fallback"])
+	}
+	if got := s.fitToSite(selfSteal, st); got["reality-config"].(map[string]any)["dest"] != "127.0.0.1:21973" {
+		t.Error("REALITY moved to a site served without TLS")
+	}
+
+	health(&nodeapi.SiteStatus{Hash: "h1", HTTP: "127.0.0.1:17080", HTTPS: "127.0.0.1:17443"})
+	got := s.fitToSite(selfSteal, st)["reality-config"].(map[string]any)
+	if got["dest"] != "127.0.0.1:17443" || got["server-names"] == nil {
+		t.Errorf("self-steal REALITY = %v", got)
+	}
+	if selfSteal["reality-config"].(map[string]any)["dest"] != "127.0.0.1:21973" {
+		t.Error("the saved REALITY section was changed")
+	}
+	if s.fitToSite(foreign, st)["reality-config"].(map[string]any)["dest"] != "www.example.com:443" {
+		t.Error("REALITY aimed at another site was moved")
+	}
+	if got := s.fitToSite(tt, nodeapi.DesiredState{SelfStealPort: 21973}); got["fallback"] != nil {
+		t.Error("fallback for a node without a site")
 	}
 }

@@ -81,7 +81,7 @@ func buildConfig(st nodeapi.DesiredState, cert proto.Cert, allowPrivate bool) (r
 		listeners = append(listeners, l)
 	}
 	for _, in := range st.Inbounds {
-		l, err := listenerFor(in, st.Slots, cert, proto.Options{SelfStealPort: st.SelfStealPort})
+		l, err := listenerFor(in, st.Slots, cert, proto.Options{SelfStealPort: st.SelfStealPort, SitePort: sitePort(st)})
 		keep(in.Name, l, err)
 	}
 	if st.Relay != nil {

@@ -32,6 +32,14 @@ type SiteStatus struct {
 	Error string `json:"error,omitempty"`
 }
 
+// The ports a node serves its site on, on 127.0.0.1: below the panel's random ports
+// (20000-60000) and off the inbound port pool. A node that finds one taken says so in
+// its health.
+const (
+	SiteHTTPPort  = 17080
+	SiteHTTPSPort = 17443
+)
+
 // SiteHash is the form of a site's hash (internal/site): lower-case sha256 hex.
 var SiteHash = regexp.MustCompile(`^[0-9a-f]{64}$`)
 

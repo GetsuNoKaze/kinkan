@@ -19,6 +19,9 @@ type Options struct {
 	SelfStealPort int
 	// AnyDest skips the dest check (rendering clients of an already accepted template).
 	AnyDest bool
+	// SitePort allows REALITY dest 127.0.0.1:<port> too: the node's own website over TLS
+	// with the node's certificate (Kinkan, nodeapi.SiteHTTPSPort). 0 for a node without one.
+	SitePort int
 }
 
 func validateReality(r map[string]any, o Options) error {
@@ -32,7 +35,7 @@ func validateReality(r map[string]any, o Options) error {
 	}
 	// The node dials dest for every probe of the port, so an internal address here would
 	// publish that service to the internet.
-	if !o.AnyDest && !PublicHost(host) && !(o.SelfStealPort > 0 && (host == "127.0.0.1" || host == "localhost") && port == strconv.Itoa(o.SelfStealPort)) {
+	if !o.AnyDest && !PublicHost(host) && !ownTarget(host, port, o) {
 		return fail("reality_dest_private", "reality-config.dest")
 	}
 	if _, err := RealityPublicKey(str(r["private-key"])); err != nil {
