@@ -438,6 +438,7 @@ func (m *Manager) prune(ctx context.Context, now time.Time) {
 	if !m.lastPrune.IsZero() && now.Sub(m.lastPrune) < pruneEvery {
 		return
 	}
+	m.pruneKinkan(ctx, now) // Kinkan (kinkan.go)
 	if err := m.st.Q.PruneTrafficHourly(ctx, now.Add(-hourlyKeep).Unix()/3600); err != nil {
 		m.log.Error("prune traffic", "err", err)
 		return
@@ -452,10 +453,6 @@ func (m *Manager) prune(ctx context.Context, now time.Time) {
 	}
 	if err := m.st.Q.PruneTorrentHits(ctx, now.Add(-torrentKeep).Unix()); err != nil {
 		m.log.Error("prune torrent hits", "err", err)
-		return
-	}
-	if err := m.st.PruneScanners(ctx, now); err != nil {
-		m.log.Error("prune scanner journal", "err", err)
 		return
 	}
 	m.lastPrune = now

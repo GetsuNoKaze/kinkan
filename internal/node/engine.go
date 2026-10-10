@@ -19,7 +19,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	C "github.com/metacubex/mihomo/constant"
@@ -28,12 +27,10 @@ import (
 	mlog "github.com/metacubex/mihomo/log"
 	"github.com/metacubex/mihomo/tunnel"
 
-	"github.com/metacubex/mihomo/component/authevent"
 	"mikan/internal/fsutil"
 	"mikan/internal/nodeapi"
 	"mikan/internal/proto"
 	"mikan/internal/scan"
-	"mikan/internal/scannerlog"
 )
 
 const (
@@ -62,16 +59,14 @@ type Engine struct {
 	Reg *Registry
 	tun *Tunnel
 
-	mu             sync.Mutex // serializes Apply
-	savedShape     string     // policyShape of the policies in the state file
-	savedAt        time.Time  // when the state file was written
-	applied        nodeapi.DesiredState
-	cert           proto.Cert // node certificate files written by the last Apply
-	listeners      map[string]nodeapi.ListenerStatus
-	site           *siteServer // Kinkan: the website the node shows (kinkan_site.go)
-	scanners       *scannerlog.Journal
-	scannerEvents  chan authevent.Event
-	scannerDropped atomic.Int64
+	kinkanEngine // Kinkan: the node's site and scanner journal (kinkan.go)
+
+	mu         sync.Mutex // serializes Apply
+	savedShape string     // policyShape of the policies in the state file
+	savedAt    time.Time  // when the state file was written
+	applied    nodeapi.DesiredState
+	cert       proto.Cert // node certificate files written by the last Apply
+	listeners  map[string]nodeapi.ListenerStatus
 
 	errsMu sync.Mutex
 	errs   map[string]string // listener name → last listen error
@@ -182,7 +177,7 @@ func Start(o Options) (*Engine, error) {
 	}
 	e.Reg = NewRegistry(cs.Epoch, cs.Seq, o.DeviceRelease, time.Now)
 	e.tun = &Tunnel{inner: tunnel.Tunnel, reg: e.Reg}
-	e.startScannerJournal()
+	e.startScannerJournal() // Kinkan
 
 	base, _, err := buildConfig(nodeapi.DesiredState{}, proto.Cert{}, o.AllowPrivate)
 	if err != nil {
@@ -224,9 +219,10 @@ func (e *Engine) restoreCounters(cs counterState) {
 
 // Apply renders the desired state into mihomo listeners. Unchanged listeners keep their
 // connections; policies and slots are updated in place.
-func (e *Engine) Apply(st nodeapi.DesiredState) (nodeapi.ApplyResult, error) {
+func (e *Engine) Apply(st nodeapi.DesiredState) (res nodeapi.ApplyResult, err error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	defer e.kinkanApply(st, &res, &err) // Kinkan: under e.mu, after the state is applied
 	var cert proto.Cert
 	if st.TLS != nil && st.TLS.CertPEM != "" {
 		cert = proto.Cert{CertPath: filepath.Join(e.home, "tls", "node.crt"), KeyPath: filepath.Join(e.home, "tls", "node.key")}
@@ -320,9 +316,7 @@ func (e *Engine) Apply(st nodeapi.DesiredState) (nodeapi.ApplyResult, error) {
 	if err := e.saveState(st); err != nil {
 		e.log.Error("save state", "err", err)
 	}
-	res := nodeapi.ApplyResult{Revision: st.Revision, Recreated: recreated, Listeners: statuses}
-	res.SiteMissing = e.applySite(st) // Kinkan
-	return res, nil
+	return nodeapi.ApplyResult{Revision: st.Revision, Recreated: recreated, Listeners: statuses}, nil
 }
 
 // Validate parses one inbound with mihomo's own parser without applying it, so the
@@ -352,13 +346,12 @@ func (e *Engine) TargetAllowed(dest string) bool {
 	if e.allowPrivate || proto.PublicHost(host) {
 		return true
 	}
-	e.mu.Lock()
-	self := e.applied.SelfStealPort
-	own := sitePort(e.applied) // Kinkan: the node's website
-	e.mu.Unlock()
-	if own > 0 && (host == "127.0.0.1" || host == "localhost") && port == strconv.Itoa(own) {
+	if e.ownSite(host, port) { // Kinkan: the node's website
 		return true
 	}
+	e.mu.Lock()
+	self := e.applied.SelfStealPort
+	e.mu.Unlock()
 	return self > 0 && (host == "127.0.0.1" || host == "localhost") && port == strconv.Itoa(self)
 }
 
@@ -407,31 +400,26 @@ func policyShape(ps []nodeapi.Policy) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func (e *Engine) Health() nodeapi.Health {
+func (e *Engine) Health() (h nodeapi.Health) {
+	defer e.kinkanHealth(&h) // Kinkan
 	e.mu.Lock()
 	ls := make([]nodeapi.ListenerStatus, 0, len(e.listeners))
 	for _, s := range e.listeners {
 		ls = append(ls, s)
 	}
 	rev := e.applied.Revision
-	site := e.siteStatus() // Kinkan
 	e.mu.Unlock()
 	sort.Slice(ls, func(i, j int) bool { return ls[i].Name < ls[j].Name })
 	return nodeapi.Health{
 		Version: e.version, Core: "mihomo " + mihomoVersion(), Revision: rev, StartedAt: e.started,
 		Listeners: ls, Conns: e.Reg.ConnCount(), System: e.sys.last(), Update: e.UpdateStatus(), Host: e.host.get(),
-		Site: site,
 	}
 }
 
 // PersistCounters is called periodically and on shutdown; at most the last interval
 // of traffic is lost if the process dies.
 func (e *Engine) PersistCounters() error {
-	if e.scanners != nil {
-		if err := e.scanners.Persist(time.Now()); err != nil {
-			e.log.Warn("persist scanner journal", "err", err)
-		}
-	}
+	e.persistScanners() // Kinkan
 	raw, err := json.Marshal(e.Reg.snapshot())
 	if err != nil {
 		return err

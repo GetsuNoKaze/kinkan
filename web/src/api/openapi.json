@@ -2752,10 +2752,6 @@
             "description": "Публичное имя для канала состояния; пустое — нода скрыта из списка",
             "type": "string"
           },
-          "site": {
-            "$ref": "#/components/schemas/SiteStatus",
-            "description": "Сайт, который отдаёт нода: хеш, адреса на 127.0.0.1 и ошибка (например, порт занят)"
-          },
           "status": {
             "enum": [
               "ok",
@@ -2977,6 +2973,16 @@
           "node_id",
           "site_id"
         ],
+        "type": "object"
+      },
+      "NodeSiteServedOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "served": {
+            "$ref": "#/components/schemas/SiteStatus",
+            "description": "Сайт, который отдаёт нода: хеш, адреса на 127.0.0.1 и ошибка (например, порт занят); нет поля — ничего"
+          }
+        },
         "type": "object"
       },
       "NodeView": {
@@ -9935,6 +9941,47 @@
       }
     },
     "/api/v1/nodes/{id}/site": {
+      "get": {
+        "operationId": "node-site-served",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeSiteServedOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Что отдаёт нода",
+        "tags": [
+          "sites"
+        ]
+      },
       "put": {
         "operationId": "set-node-site",
         "parameters": [

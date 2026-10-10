@@ -46,6 +46,20 @@ With `fallback` set, HTTP/2 is served only to clients that negotiate `h2` over A
 
 Every node with this template needs the fork's build, and so does the panel, which checks templates when they are saved. A node on mikan's build rejects the TrustTunnel inbound with a `fallback` key; its other inbounds keep working.
 
+## Как форк вписан в Mikan
+
+Чтобы синхронизация с Mikan проходила без ручной работы, код форка не вписывается в файлы апстрима, а живёт рядом и подключается одной строкой. Каждая такая строка помечена `// Kinkan`.
+
+- **Поля в общих структурах Go** (`nodeapi.DesiredState`, `Health`, `ValidateRequest`, `ApplyResult`, `api.Deps`, `app.Options`, `app.Panel`, `node.Engine`) — встроенная структура форка (`KinkanState`, `KinkanDeps`…) **первой строкой** структуры. JSON не меняется: поля встроенной структуры выходят на верхний уровень, и ноды и панели прошлых релизов их понимают (`internal/nodeapi/kinkan_test.go`).
+- **Не встраивать в структуры, которые отдаются в API и выровнены `gofmt` одним блоком** (как `api.NodeInfo`): длинное новое поле апстрима перевыравнивает весь блок, и строка форка попадает в конфликт. Такие данные форк отдаёт своим запросом (`GET /api/v1/nodes/{id}/site`).
+- **Хуки в функциях** — одной строкой рядом со стабильным местом: `defer e.kinkanApply(…)` и `defer e.kinkanHealth(…)` (именованные результаты), `defer s.runKinkan(ctx)()` в начале цикла синхронизации, `h.registerKinkan()` сразу после создания обработчиков, `p.newKinkan(…)` и `p.kinkanWorkers()` в панели. Своё «следить и реагировать» — в собственных циклах форка, а не в функциях апстрима (`watchSite`).
+- **Интерфейс:** кнопки и панели форка — компонент `KinkanNodeButtons` (одна строка в карточке ноды). Его импорт стоит **в конце** `nodes.tsx`: импорты в ES поднимаются, а начало файла апстрим меняет часто.
+- **Тексты** — `web/src/i18n/kinkan.ru.json` / `kinkan.en.json`, накладываются на словари Mikan при загрузке (`kinkan.ts`). Форк только добавляет ключи; тест не даёт переопределить ключ Mikan.
+- **Схема API** (`openapi.json`, `schema.d.ts`) генерируется: конфликт только в ней синхронизация решает сама, пересоздавая её из слитого кода (`scripts/tt/sync.sh`).
+- **CI форка** — в своих workflow (`tt-check.yml`: проверки и e2e TrustTunnel). В `ci.yml` апстрима — только триггеры. Совпадающие с апстримом изменения (зеркало `mirror.gcr.io`) записаны его же текстом: одинаковые правки git сливает без конфликта.
+- **Конфликт, который нужен:** строка с именем образа в `release.yml`. Апстрим пишет `ghcr.io/<владелец>/mikan`, у форка образ `kinkan`. Молчаливое слияние отправило бы релизы форка на чужой образ, поэтому здесь синхронизация останавливается и зовёт человека.
+- **Проверка перед большим слиянием:** склонировать ветку в отдельный каталог и запустить `MIKAN_REPO=<репозиторий, где main = ветка апстрима> scripts/tt/sync.sh`. Скрипт покажет, какие файлы конфликтуют.
+
 ## Checks and sync
 
 - `.github/workflows/tt-check.yml` runs `scripts/tt/check.sh` on every push and pull request: `third_party/mihomo` matches its patches, mikan builds, `go vet` passes, and the tests for the fork's changes pass. mikan's own `ci.yml` runs its full suite.

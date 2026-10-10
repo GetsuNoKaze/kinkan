@@ -437,6 +437,9 @@ fn update_to(a: &UpdateArgs, say: &mut dyn FnMut(&str), progress: &mut dyn FnMut
             }
             if already_current(&m.version, &current, a.check || install.node || docker::panel_healthy()) {
                 say(&format!("mikan {current} is the latest release."));
+                if let Some(note) = release::kinkan_behind(&current, &m.version) {
+                    say(&note); // Kinkan: a Mikan newer than the fork stays Mikan for now
+                }
                 if !a.check && self_update(&m, say) {
                     follow_new_command(say);
                 }

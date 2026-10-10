@@ -270,6 +270,19 @@ pub fn is_prerelease(v: &str) -> bool {
     matches!(semver(v), Some((_, Some(pre))) if !fork_stable(pre))
 }
 
+/// What to tell a server on Mikan newer than Kinkan's newest release (Mikan 0.5.0.5 and
+/// Kinkan 0.5.0.5-tt.7, made on 0.5.0.4): it stays on Mikan, since a server does not go
+/// back, until Kinkan has a release made on that Mikan or a later one. None otherwise.
+pub fn kinkan_behind(current: &str, latest: &str) -> Option<String> {
+    if current.contains("-tt.") || !newer(current, latest) {
+        return None;
+    }
+    Some(format!(
+        "This server runs Mikan {current}, newer than Kinkan's latest release {latest}: it stays on Mikan, since a server never goes back. \
+         It moves to Kinkan with the first Kinkan release made on Mikan {current} or later: kinkan update then, or by itself when automatic updates are on."
+    ))
+}
+
 fn fork_stable(pre: &str) -> bool {
     pre.strip_prefix("tt.").is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
 }
@@ -796,5 +809,19 @@ mod tests {
         for v in &table.invalid {
             assert!(semver(v).is_none(), "{v:?} accepted");
         }
+    }
+}
+
+#[cfg(test)]
+mod kinkan_tests {
+    use super::kinkan_behind;
+
+    #[test]
+    fn a_mikan_newer_than_the_fork_is_told_it_stays() {
+        let note = kinkan_behind("0.5.0.5", "0.5.0.5-tt.7").expect("Mikan 0.5.0.5 is newer than 0.5.0.5-tt.7");
+        assert!(note.contains("stays on Mikan") && note.contains("0.5.0.5-tt.7"));
+        assert_eq!(kinkan_behind("0.5.0.4", "0.5.0.5-tt.7"), None, "an older Mikan moves to Kinkan");
+        assert_eq!(kinkan_behind("0.5.0.5-tt.7", "0.5.0.5-tt.7"), None, "Kinkan already");
+        assert_eq!(kinkan_behind("0.5.0.5-tt.8", "0.5.0.5-tt.7"), None, "a newer Kinkan is not Mikan");
     }
 }

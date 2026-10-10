@@ -36,7 +36,9 @@ Checked on the test node on 10.10.2026, both ways, with the database kept:
   2. Download Mikan's installer for the target release and check its signed manifest
      with Mikan's key and the installer's sha256, as install.sh does.
   3. `./mikan-official update ghcr.io/miroshka000/mikan@sha256:<digest from its manifest>`.
-     The database is kept: Kinkan adds no migrations of its own so far.
+     The database is kept. Kinkan's own tables (`kinkan_*`, with their own goose table
+     `kinkan_db_version`) stay in it; Mikan neither reads nor migrates them, and a later
+     move back to Kinkan finds them as they were.
   4. **Replace the command too:** `install -m 755 mikan-official /usr/local/bin/mikan`,
      `rm -f /usr/local/bin/kinkan`, `mikan post-update`. Without it Kinkan's command
      stays, and since Kinkan's releases are stable it moves the server back to Kinkan on
@@ -46,8 +48,9 @@ Checked on the test node on 10.10.2026, both ways, with the database kept:
      other protocols keep working. Remove `fallback` from the template to get TT back on
      Mikan, with its `407` answers.
 
-Once the fork adds database migrations of its own, step 3 also needs the backup from
-before them restored.
+A server on Mikan newer than Kinkan's newest release cannot move to Kinkan yet: the
+installer never goes back a version. It says so and leaves the server on Mikan until a
+Kinkan release made on that Mikan, or a later one, is out.
 
 ## First-candidate procedure (historical)
 

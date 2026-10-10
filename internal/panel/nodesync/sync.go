@@ -131,10 +131,10 @@ func (s *Syncer) Online() map[string]nodeapi.Online { return *s.online.Load() }
 // time; the counters and the health check have their own, so a node that is slow to
 // apply a state does not freeze the traffic accounting or the health the admin sees.
 func (s *Syncer) run(ctx context.Context) {
+	defer s.runKinkan(ctx)() // Kinkan: the scanner journal's own loop (kinkan.go)
 	var wg sync.WaitGroup
 	defer wg.Wait()
-	wg.Add(4)
-	go func() { defer wg.Done(); every(ctx, 30*time.Second, s.pullScanners) }()
+	wg.Add(3)
 	go func() {
 		defer wg.Done()
 		every(ctx, 2*time.Second, s.pullCounters)
@@ -256,7 +256,7 @@ func (s *Syncer) applyState(ctx context.Context) {
 		s.log.Error("build node state", "err", err)
 		return
 	}
-	key := stateKey(st)
+	key := stateKey(st) + kinkanStateKey(st)
 	now := s.m.now()
 	s.mu.Lock()
 	same := key == s.stateKey
@@ -725,9 +725,6 @@ func (s *Syncer) refreshHealth(ctx context.Context) {
 		return
 	}
 	view.OK, view.Health, view.Listeners = true, h, h.Listeners
-	if servedSite(s.health.Load()) != servedSite(view) {
-		signal(s.stateDirty) // Kinkan: the inbounds fitted to the site follow what the node serves
-	}
 	s.mu.Lock()
 	applied := s.lastApplied.Revision
 	if applied != 0 && h.Revision == applied {
@@ -764,8 +761,7 @@ func stateKey(st nodeapi.DesiredState) string {
 		E []nodeapi.Exit
 		B *nodeapi.TorrentBlock
 		F *nodeapi.Filters
-		K *nodeapi.SiteState // Kinkan: the node's site
-	}{st.Inbounds, st.Slots, st.TLS, st.SelfStealPort, st.Warp, st.Relay, st.Exits, st.Torrent, st.Filters, st.Site})
+	}{st.Inbounds, st.Slots, st.TLS, st.SelfStealPort, st.Warp, st.Relay, st.Exits, st.Torrent, st.Filters})
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
 }
