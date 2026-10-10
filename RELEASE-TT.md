@@ -4,7 +4,32 @@ Repository: `GetsuNoKaze/kinkan`. Image: `ghcr.io/getsunokaze/kinkan`.
 First candidate: `v0.5.0.5-tt.1`, based on upstream Mikan 0.5.0.4.
 This file is a runbook; commands below have not been run on production nodes.
 
-## Publish and check
+## Transition to stable Kinkan releases (tt.4 and later)
+
+The first three fork releases were prereleases. Starting with the next release,
+`vX-tt.N` is stable; `vX-tt.N-rc.N` remains beta. The existing tt.3 release is still
+a prerelease. The steps below apply only after tt.4 has actually been published and
+its signed manifest, installers and image have passed verification.
+
+An installed tt.3 or earlier host command does not recognise `-tt.N` as stable.
+Bootstrap once with the new release's installer script instead of running the old
+`mikan update` command:
+
+```sh
+curl -fsSL https://github.com/GetsuNoKaze/kinkan/releases/download/v0.5.0.5-tt.4/install.sh | sudo bash
+```
+
+The script verifies the signed release index, manifest and installer checksum before
+installing the host command. On an existing installation the new command performs an
+update; it does not create a new panel. Back up the existing settings and database and
+record the old image digest first. This also replaces the old signing key trusted by
+tt.1/tt.2 with Kinkan's current key. After a successful update, verify `kinkan status`,
+subscriptions and the other protocols; later stable releases use `kinkan update`.
+
+This one-time procedure and rollback still need to be checked on the canary. Do not
+promote an existing prerelease or enable automatic updates merely to skip the test.
+
+## First-candidate procedure (historical)
 
 1. Create the GitHub repository with no generated README or licence. Keep `upstream`
    pointing at Miroshka000/mikan; add `origin` pointing at GetsuNoKaze/kinkan.
