@@ -16,9 +16,9 @@ export const LOCALES: { id: Locale; label: string }[] = [
   { id: "en", label: "English" },
 ];
 
-export type Dict = typeof ru & KinkanDict;
+export type Dict = typeof ru;
 type Leaves<T> = { [K in keyof T & string]: T[K] extends string ? K : `${K}.${Leaves<T[K]>}` }[keyof T & string];
-export type Key = Leaves<Dict>;
+export type Key = Leaves<Dict & KinkanDict>; // Kinkan: the fork's keys too (kinkan.ts)
 type Params = Record<string, string | number>;
 /** How an entry fetches a language's dictionary; the module's default export is the dictionary. */
 export type Loaders<D extends Partial<Dict> = Dict> = Record<Locale, () => Promise<{ default: D }>>;
