@@ -11,6 +11,8 @@ on:
     paths:
       - .github/workflows/published-image-check.yml
       - test/e2e/compose.published.yaml
+      - test/e2e/run.sh
+      - test/e2e/e2e_test.go
 permissions:
   contents: read
 jobs:
