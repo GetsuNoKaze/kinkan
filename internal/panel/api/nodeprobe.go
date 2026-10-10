@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -18,8 +19,9 @@ import (
 type nodeProbeInput struct {
 	ID   int64 `path:"id" minimum:"1"`
 	Body struct {
-		InboundID     int64 `json:"inbound_id,omitempty" minimum:"0" doc:"0 scans all enabled inbounds"`
-		ReferencePort int   `json:"reference_port,omitempty" minimum:"0" maximum:"65535"`
+		InboundID     int64  `json:"inbound_id,omitempty" minimum:"0" doc:"0 scans all enabled inbounds"`
+		ReferenceHost string `json:"reference_host,omitempty" maxLength:"253" doc:"TLS name of the cover site on the same node; defaults to the inbound SNI"`
+		ReferencePort int    `json:"reference_port,omitempty" minimum:"0" maximum:"65535"`
 	}
 }
 
@@ -54,6 +56,10 @@ func (h *handlers) probeNode(ctx context.Context, in *nodeProbeInput) (*nodeProb
 	defer ttProbing.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, 240*time.Second)
 	defer cancel()
+	referenceHost := strings.TrimSpace(in.Body.ReferenceHost)
+	if referenceHost != "" && (!proto.PublicHost(referenceHost) || strings.ContainsAny(referenceHost, ":/?#@[]%\\ \t\r\n")) {
+		return nil, huma.Error422UnprocessableEntity("probe_public_host")
+	}
 	node, err := h.nodeOf(ctx, in.ID)
 	if err != nil {
 		return nil, err
@@ -129,7 +135,11 @@ func (h *handlers) probeNode(ctx context.Context, in *nodeProbeInput) (*nodeProb
 		// the validated node IP, never the cover's destination or client's server.
 		cfg.Target = "https://" + net.JoinHostPort(sni, port)
 		if in.Body.ReferencePort != 0 {
-			cfg.Reference = "https://" + net.JoinHostPort(sni, strconv.Itoa(in.Body.ReferencePort))
+			refName := sni
+			if referenceHost != "" {
+				refName = referenceHost
+			}
+			cfg.Reference = "https://" + net.JoinHostPort(refName, strconv.Itoa(in.Body.ReferencePort))
 		}
 		if obfs, ok := template["obfs"].(string); ok && obfs != "" {
 			cfg.Obfuscated = true

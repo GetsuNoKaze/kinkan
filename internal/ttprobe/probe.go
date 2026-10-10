@@ -296,7 +296,11 @@ func Scan(ctx context.Context, cfg Config) (Report, error) {
 				r.add(name, "PASS", fmt.Sprintf("status=%d; no explicit proxy authentication response", a.status))
 				continue
 			}
-			b, err := request(ctx, cfg, ref, host, proto, p)
+			refHost := ref.Host
+			if p.host != "" {
+				refHost = p.host
+			}
+			b, err := request(ctx, cfg, ref, refHost, proto, p)
 			if err != nil {
 				r.add(name, "ERROR", "reference: "+err.Error())
 				continue
@@ -315,7 +319,7 @@ func Scan(ctx context.Context, cfg Config) (Report, error) {
 		raw, _ := json.Marshal(a)
 		r.add("HTTP/2 fingerprint", "INFO", string(raw))
 	} else {
-		b, err := fingerprint(ctx, cfg, ref, u.Host)
+		b, err := fingerprint(ctx, cfg, ref, ref.Host)
 		if err != nil {
 			r.add("HTTP/2 fingerprint", "ERROR", "reference: "+err.Error())
 		} else {

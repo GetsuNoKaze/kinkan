@@ -140,3 +140,44 @@ func TestManifest(t *testing.T) {
 		t.Fatal(fmt.Sprint(err), out.String())
 	}
 }
+
+// A cover on a separate TLS name/port must receive its own ordinary Host header.
+// Foreign-Host probes still send the same deliberately invalid host to both ends.
+func TestReferenceUsesOwnHTTPHost(t *testing.T) {
+	server := func() *httptest.Server {
+		var expected string
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Host != expected {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			_, _ = w.Write([]byte("same cover"))
+		})
+		s := httptest.NewUnstartedServer(h)
+		s.EnableHTTP2 = true
+		s.StartTLS()
+		expected = strings.TrimPrefix(s.URL, "https://")
+		t.Cleanup(s.Close)
+		return s
+	}
+	target, reference := server(), server()
+	roots := x509.NewCertPool()
+	roots.AddCert(target.Certificate())
+	roots.AddCert(reference.Certificate())
+	r, err := Scan(context.Background(), Config{Protocol: "vless", Target: target.URL, Reference: reference.URL, Timeout: time.Second, TLS: &tls.Config{RootCAs: roots}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checked := 0
+	for _, f := range r.Findings {
+		if f.Name == "http/1.1 GET /" || f.Name == "h2 GET /" || f.Name == "HTTP/2 fingerprint" || strings.HasSuffix(f.Name, "foreign Host") {
+			checked++
+			if f.Level != "PASS" {
+				t.Errorf("reference used the wrong Host: %+v", f)
+			}
+		}
+	}
+	if checked != 5 {
+		t.Fatalf("missing comparisons: %d", checked)
+	}
+}

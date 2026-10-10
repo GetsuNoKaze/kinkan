@@ -2831,6 +2831,11 @@
             "minimum": 0,
             "type": "integer"
           },
+          "reference_host": {
+            "description": "TLS name of the cover site on the same node; defaults to the inbound SNI",
+            "maxLength": 253,
+            "type": "string"
+          },
           "reference_port": {
             "format": "int64",
             "maximum": 65535,

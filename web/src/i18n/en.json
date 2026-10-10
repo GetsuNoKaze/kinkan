@@ -2726,7 +2726,7 @@
     "intro": "Check enabled inbounds without credentials: TLS and HTTP, QUIC and HTTP/3, and responses to random bytes. Compare them with the node website.",
     "vantage": "Requests originate from the panel server. This checks its network path, not the client network or filtering on that path.",
     "noInbound": "This node has no enabled inbounds.",
-    "inbound": "TrustTunnel inbound",
+    "inbound": "Inbound",
     "reference": "Cover site HTTPS port",
     "referenceHint": "The HTTPS port of the cover site on this node, for example Caddy's. Leave blank to check without comparison. Certificates are verified.",
     "badPort": "Enter a port from 1 to 65535 or leave it blank.",
@@ -2768,7 +2768,13 @@
     "noticeable": "Noticeable",
     "exposed": "Exposed",
     "inconclusive": "Inconclusive",
-    "incomplete": "Some checks are incomplete"
+    "incomplete": "Some checks are incomplete",
+    "referenceHost": "Cover site hostname",
+    "referenceHostHint": "Domain without https:// or a port. Leave blank to use the inbound hostname. All connections go to the node IP.",
+    "noReference": "Probes run, but a Quiet verdict requires a cover site comparison. Enter the cover site HTTPS port.",
+    "obfuscated": "This port uses obfuscation: plain QUIC probes cannot pass it. Silence does not establish stealth.",
+    "incompleteReason": "Some probes failed or are unsupported. See the findings below.",
+    "insufficient": "The probes do not provide enough evidence to assess stealth."
   },
   "scanners": {
     "title": "Scanner journal",
