@@ -67,10 +67,10 @@ index daa2aac..98a0fdc 100644
  		service.UpdateUsers(config.Users)
 diff --git a/transport/trusttunnel/fallback_test.go b/transport/trusttunnel/fallback_test.go
 new file mode 100644
-index 0000000..6daa027
+index 0000000..b40f7c4
 --- /dev/null
 +++ b/transport/trusttunnel/fallback_test.go
-@@ -0,0 +1,639 @@
+@@ -0,0 +1,729 @@
 +package trusttunnel
 +
 +import (
@@ -710,11 +710,101 @@ index 0000000..6daa027
 +		_ = conn.Close()
 +	}
 +}
++
++func TestFallbackPerSourceLimit(t *testing.T) {
++	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
++	defer backend.Close()
++	s := newFallbackService(t, backend)
++	// httptest.NewRequest comes from 192.0.2.1.
++	busy, _ := fallbackSource("192.0.2.1:1234")
++	s.fallbackSources[busy] = fallbackMaxPerSource
++
++	recorder := httptest.NewRecorder()
++	s.serveFallback(recorder, httptest.NewRequest("GET", "https://cover.example/", nil))
++	if recorder.Code != http.StatusServiceUnavailable {
++		t.Fatalf("status for a source at its limit = %d, want 503", recorder.Code)
++	}
++	if len(s.fallbackSlots) != 0 {
++		t.Fatalf("a refused source took a global slot (slots=%d)", len(s.fallbackSlots))
++	}
++
++	other := httptest.NewRequest("GET", "https://cover.example/", nil)
++	other.RemoteAddr = "198.51.100.7:4321"
++	recorder = httptest.NewRecorder()
++	s.serveFallback(recorder, other)
++	if recorder.Code != http.StatusOK {
++		t.Fatalf("status for another source = %d, want 200", recorder.Code)
++	}
++	if len(s.fallbackSources) != 1 {
++		t.Fatalf("finished request still counted against its source: %v", s.fallbackSources)
++	}
++}
++
++func TestFallbackSourceGroupsIPv6ByPrefix(t *testing.T) {
++	a, okA := fallbackSource("[2001:db8:1:2::1]:443")
++	b, okB := fallbackSource("[2001:db8:1:2:ffff::9]:443")
++	c, okC := fallbackSource("[2001:db8:1:3::1]:443")
++	v4, okV4 := fallbackSource("[::ffff:192.0.2.1]:443")
++	if !okA || !okB || !okC || !okV4 {
++		t.Fatal("valid addresses were not parsed")
++	}
++	if a != b || a == c {
++		t.Errorf("IPv6 sources: %v %v %v, want the /64 shared and the next /64 apart", a, b, c)
++	}
++	if v4.String() != "192.0.2.1/32" {
++		t.Errorf("IPv4-mapped source = %v, want 192.0.2.1/32", v4)
++	}
++	if _, ok := fallbackSource("not an address"); ok {
++		t.Error("garbage parsed as a source")
++	}
++}
++
++func TestFallbackDialRefusesMetadataAddresses(t *testing.T) {
++	for _, address := range []string{"169.254.169.254:80", "[fe80::1]:80", "0.0.0.0:80", "[::]:80", "224.0.0.1:80", "[::ffff:169.254.169.254]:80"} {
++		if err := fallbackDialControl("tcp4", address, nil); err == nil {
++			t.Errorf("dial to %s allowed", address)
++		}
++	}
++	for _, address := range []string{"127.0.0.1:8080", "[::1]:8080", "10.0.0.5:80", "203.0.113.9:443"} {
++		if err := fallbackDialControl("tcp4", address, nil); err != nil {
++			t.Errorf("dial to %s refused: %v", address, err)
++		}
++	}
++
++	// A name that resolves to a refused address is caught when the transport dials.
++	s := NewService(ServiceOptions{Ctx: context.Background(), Fallback: "169.254.169.254:80"})
++	t.Cleanup(func() { _ = s.Close() })
++	started := time.Now()
++	recorder := httptest.NewRecorder()
++	s.serveFallback(recorder, httptest.NewRequest("GET", "https://cover.example/", nil))
++	if recorder.Code != http.StatusBadGateway {
++		t.Fatalf("status = %d, want 502", recorder.Code)
++	}
++	if elapsed := time.Since(started); elapsed > time.Second {
++		t.Errorf("refused dial took %s, as if it was attempted", elapsed)
++	}
++}
++
++func TestAuthFailureLogLimiter(t *testing.T) {
++	var limiter logLimiter
++	now := time.Unix(1000, 0)
++	if ok, n := limiter.allow(now, 10*time.Second); !ok || n != 0 {
++		t.Fatalf("first message: %v %d", ok, n)
++	}
++	for i := 0; i < 3; i++ {
++		if ok, _ := limiter.allow(now.Add(time.Duration(i+1)*time.Second), 10*time.Second); ok {
++			t.Fatalf("message %d inside the interval was logged", i)
++		}
++	}
++	if ok, n := limiter.allow(now.Add(10*time.Second), 10*time.Second); !ok || n != 3 {
++		t.Fatalf("after the interval: %v suppressed=%d, want true 3", ok, n)
++	}
++}
 diff --git a/transport/trusttunnel/service.go b/transport/trusttunnel/service.go
-index c6d0ee5..809707e 100644
+index c6d0ee5..e2c6180 100644
 --- a/transport/trusttunnel/service.go
 +++ b/transport/trusttunnel/service.go
-@@ -2,15 +2,19 @@ package trusttunnel
+@@ -2,15 +2,21 @@ package trusttunnel
  
  import (
  	"context"
@@ -722,8 +812,10 @@ index c6d0ee5..809707e 100644
  	"errors"
 +	"io"
  	"net"
++	"net/netip"
  	"sync"
 +	"sync/atomic"
++	"syscall"
  	"time"
  
  	"github.com/metacubex/mihomo/common/httputils"
@@ -734,7 +826,7 @@ index c6d0ee5..809707e 100644
  	"github.com/metacubex/quic-go/http3"
  	"github.com/metacubex/sing/common"
  	"github.com/metacubex/sing/common/auth"
-@@ -40,6 +44,9 @@ type ServiceOptions struct {
+@@ -40,6 +46,9 @@ type ServiceOptions struct {
  	QUICCongestionControl string
  	QUICCwnd              int
  	QUICBBRProfile        string
@@ -744,7 +836,7 @@ index c6d0ee5..809707e 100644
  }
  
  type Service struct {
-@@ -56,10 +63,31 @@ type Service struct {
+@@ -56,10 +65,96 @@ type Service struct {
  	tcpListener           net.Listener
  	tlsListener           net.Listener
  	udpConn               net.PacketConn
@@ -752,6 +844,9 @@ index c6d0ee5..809707e 100644
 +	fallbackTransport     *http.Transport
 +	fallbackSlots         chan struct{}
 +	fallbackIdleTimeout   time.Duration
++	fallbackSourceAccess  sync.Mutex
++	fallbackSources       map[netip.Prefix]int
++	authFailureLog        logLimiter
 +	// fallbackCtx is cancelled on Close so in-flight fallback requests stop too,
 +	// including upgraded connections that the HTTP servers no longer track.
 +	fallbackCtx    context.Context
@@ -767,7 +862,69 @@ index c6d0ee5..809707e 100644
 +	// fallbackMaxConcurrent caps in-flight fallback requests so a slow or hung
 +	// backend cannot pin an unbounded number of handlers and backend connections.
 +	fallbackMaxConcurrent = 256
++	// fallbackMaxPerSource caps one client network's share of those, so a single
++	// prober trickling uploads cannot take every slot and turn the cover site into
++	// a blank 503 for everyone else. A browser loading a page over HTTP/2 stays well
++	// below it.
++	fallbackMaxPerSource = 64
++	// authFailureLogInterval spaces out the log of wrong credentials, which a prober
++	// can send on every request.
++	authFailureLogInterval = 10 * time.Second
 +)
++
++var errFallbackAddress = errors.New("fallback address is link-local, multicast or unspecified")
++
++// fallbackDialControl refuses backend addresses that unauthenticated clients must
++// never reach through the fallback, such as the cloud metadata service. The panel
++// checks the configured address, but a host name is only resolved here.
++func fallbackDialControl(_, address string, _ syscall.RawConn) error {
++	addrPort, err := netip.ParseAddrPort(address)
++	if err != nil {
++		return err
++	}
++	ip := addrPort.Addr().Unmap()
++	if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
++		return errFallbackAddress
++	}
++	return nil
++}
++
++// fallbackSource is the client network a request counts against: the address for
++// IPv4, the /64 for IPv6, where one client usually holds a whole prefix.
++func fallbackSource(remoteAddr string) (netip.Prefix, bool) {
++	addrPort, err := netip.ParseAddrPort(remoteAddr)
++	if err != nil {
++		return netip.Prefix{}, false
++	}
++	ip := addrPort.Addr().Unmap()
++	bits := 32
++	if ip.Is6() {
++		bits = 64
++	}
++	prefix, err := ip.Prefix(bits)
++	return prefix, err == nil
++}
++
++// logLimiter lets one message through per interval and counts the rest.
++type logLimiter struct {
++	access     sync.Mutex
++	last       time.Time
++	suppressed int
++}
++
++// allow reports whether to log now and how many messages were dropped since the
++// last one that was logged.
++func (l *logLimiter) allow(now time.Time, interval time.Duration) (bool, int) {
++	l.access.Lock()
++	defer l.access.Unlock()
++	if !l.last.IsZero() && now.Sub(l.last) < interval {
++		l.suppressed++
++		return false, 0
++	}
++	suppressed := l.suppressed
++	l.last, l.suppressed = now, 0
++	return true, suppressed
++}
 +
 +type fallbackWatchdogKey struct{}
 +
@@ -777,7 +934,7 @@ index c6d0ee5..809707e 100644
  		ctx:                   options.Ctx,
  		logger:                options.Logger,
  		handler:               options.Handler,
-@@ -68,6 +96,55 @@ func NewService(options ServiceOptions) *Service {
+@@ -68,6 +163,56 @@ func NewService(options ServiceOptions) *Service {
  		quicCwnd:              options.QUICCwnd,
  		quicBBRProfile:        options.QUICBBRProfile,
  	}
@@ -785,12 +942,13 @@ index c6d0ee5..809707e 100644
 +		// A dedicated transport with timeouts for connecting and for the response
 +		// headers; stalled bodies are handled by the idle watchdog in serveFallback.
 +		s.fallbackTransport = &http.Transport{
-+			DialContext:           (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
++			DialContext:           (&net.Dialer{Timeout: 5 * time.Second, Control: fallbackDialControl}).DialContext,
 +			ResponseHeaderTimeout: 10 * time.Second,
 +			IdleConnTimeout:       30 * time.Second,
 +		}
 +		s.fallbackCtx, s.fallbackCancel = context.WithCancel(context.Background())
 +		s.fallbackSlots = make(chan struct{}, fallbackMaxConcurrent)
++		s.fallbackSources = make(map[netip.Prefix]int)
 +		s.fallbackIdleTimeout = fallbackIdleTimeout
 +		target := options.Fallback
 +		s.fallbackProxy = &httputil.ReverseProxy{
@@ -833,7 +991,7 @@ index c6d0ee5..809707e 100644
  }
  
  func (s *Service) Start(tcpListener net.Listener, udpConn net.PacketConn, tlsConfig *tls.Config) error {
-@@ -80,7 +157,12 @@ func (s *Service) Start(tcpListener net.Listener, udpConn net.PacketConn, tlsCon
+@@ -80,7 +225,12 @@ func (s *Service) Start(tcpListener net.Listener, udpConn net.PacketConn, tlsCon
  		// Note that this usage is limited to our own net/http fork
  		// The standard library also needs to mask the tls.Conn type for the conn returned by the Listener.
  		// see: https://github.com/golang/go/issues/79293#issuecomment-4426393534
@@ -847,7 +1005,7 @@ index c6d0ee5..809707e 100644
  		s.httpServer = &http.Server{
  			Handler:     s,
  			IdleTimeout: DefaultSessionTimeout,
-@@ -92,7 +174,15 @@ func (s *Service) Start(tcpListener net.Listener, udpConn net.PacketConn, tlsCon
+@@ -92,7 +242,15 @@ func (s *Service) Start(tcpListener net.Listener, udpConn net.PacketConn, tlsCon
  		listener := tcpListener
  		s.tcpListener = tcpListener
  		if tlsConfig != nil {
@@ -864,7 +1022,7 @@ index c6d0ee5..809707e 100644
  			s.tlsListener = listener
  		}
  		go func() {
-@@ -116,6 +206,9 @@ func (s *Service) UpdateUsers(users map[string]string) {
+@@ -116,6 +274,9 @@ func (s *Service) UpdateUsers(users map[string]string) {
  }
  
  func (s *Service) Close() error {
@@ -874,7 +1032,7 @@ index c6d0ee5..809707e 100644
  	var shutdownErr error
  	if s.httpServer != nil {
  		const shutdownTimeout = 5 * time.Second
-@@ -126,6 +219,9 @@ func (s *Service) Close() error {
+@@ -126,6 +287,9 @@ func (s *Service) Close() error {
  			shutdownErr = nil
  		}
  	}
@@ -884,7 +1042,7 @@ index c6d0ee5..809707e 100644
  	closeErr := common.Close(
  		common.PtrOrNil(s.httpServer),
  		s.tlsListener,
-@@ -140,6 +236,19 @@ func (s *Service) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+@@ -140,6 +304,25 @@ func (s *Service) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
  	authorization := request.Header.Get("Proxy-Authorization")
  	username, loaded := s.verify(authorization)
  	if !loaded {
@@ -895,7 +1053,13 @@ index c6d0ee5..809707e 100644
 +			switch {
 +			case s.logger == nil:
 +			case authorization != "":
-+				s.badRequest(request.Context(), request, E.New("authorization failed, served the fallback"))
++				if allowed, suppressed := s.authFailureLog.allow(time.Now(), authFailureLogInterval); allowed {
++					if suppressed > 0 {
++						s.badRequest(request.Context(), request, E.New("authorization failed, served the fallback (", suppressed, " more since the last such message)"))
++					} else {
++						s.badRequest(request.Context(), request, E.New("authorization failed, served the fallback"))
++					}
++				}
 +			default:
 +				s.logger.DebugContext(request.Context(), "unauthenticated request from ", request.RemoteAddr, " served the fallback")
 +			}
@@ -904,7 +1068,7 @@ index c6d0ee5..809707e 100644
  		writer.WriteHeader(http.StatusProxyAuthRequired)
  		s.badRequest(request.Context(), request, E.New("authorization failed"))
  		return
-@@ -252,7 +361,8 @@ func (s *Service) verify(authorization string) (username string, loaded bool) {
+@@ -252,7 +435,8 @@ func (s *Service) verify(authorization string) (username string, loaded bool) {
  	if !loaded {
  		return "", false
  	}
@@ -914,7 +1078,7 @@ index c6d0ee5..809707e 100644
  		return "", false
  	}
  	return username, true
-@@ -262,6 +372,191 @@ func (s *Service) badRequest(ctx context.Context, request *http.Request, err err
+@@ -262,6 +446,216 @@ func (s *Service) badRequest(ctx context.Context, request *http.Request, err err
  	s.logger.ErrorContext(ctx, E.Cause(err, "process connection from ", request.RemoteAddr))
  }
  
@@ -937,6 +1101,13 @@ index c6d0ee5..809707e 100644
 +func (s *Service) serveFallback(writer http.ResponseWriter, request *http.Request) bool {
 +	if s.fallbackProxy == nil {
 +		return false
++	}
++	if source, loaded := fallbackSource(request.RemoteAddr); loaded {
++		if !s.acquireFallbackSource(source) {
++			writer.WriteHeader(http.StatusServiceUnavailable)
++			return true
++		}
++		defer s.releaseFallbackSource(source)
 +	}
 +	select {
 +	case s.fallbackSlots <- struct{}{}:
@@ -994,6 +1165,24 @@ index c6d0ee5..809707e 100644
 +		panic(http.ErrAbortHandler)
 +	}
 +	return true
++}
++
++func (s *Service) acquireFallbackSource(source netip.Prefix) bool {
++	s.fallbackSourceAccess.Lock()
++	defer s.fallbackSourceAccess.Unlock()
++	if s.fallbackSources[source] >= fallbackMaxPerSource {
++		return false
++	}
++	s.fallbackSources[source]++
++	return true
++}
++
++func (s *Service) releaseFallbackSource(source netip.Prefix) {
++	s.fallbackSourceAccess.Lock()
++	defer s.fallbackSourceAccess.Unlock()
++	if s.fallbackSources[source]--; s.fallbackSources[source] <= 0 {
++		delete(s.fallbackSources, source)
++	}
 +}
 +
 +// newFallbackRequestBody feeds the inbound body through a pipe that is closed as

@@ -637,3 +637,93 @@ func TestFallbackNegotiatesALPN(t *testing.T) {
 		_ = conn.Close()
 	}
 }
+
+func TestFallbackPerSourceLimit(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer backend.Close()
+	s := newFallbackService(t, backend)
+	// httptest.NewRequest comes from 192.0.2.1.
+	busy, _ := fallbackSource("192.0.2.1:1234")
+	s.fallbackSources[busy] = fallbackMaxPerSource
+
+	recorder := httptest.NewRecorder()
+	s.serveFallback(recorder, httptest.NewRequest("GET", "https://cover.example/", nil))
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status for a source at its limit = %d, want 503", recorder.Code)
+	}
+	if len(s.fallbackSlots) != 0 {
+		t.Fatalf("a refused source took a global slot (slots=%d)", len(s.fallbackSlots))
+	}
+
+	other := httptest.NewRequest("GET", "https://cover.example/", nil)
+	other.RemoteAddr = "198.51.100.7:4321"
+	recorder = httptest.NewRecorder()
+	s.serveFallback(recorder, other)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status for another source = %d, want 200", recorder.Code)
+	}
+	if len(s.fallbackSources) != 1 {
+		t.Fatalf("finished request still counted against its source: %v", s.fallbackSources)
+	}
+}
+
+func TestFallbackSourceGroupsIPv6ByPrefix(t *testing.T) {
+	a, okA := fallbackSource("[2001:db8:1:2::1]:443")
+	b, okB := fallbackSource("[2001:db8:1:2:ffff::9]:443")
+	c, okC := fallbackSource("[2001:db8:1:3::1]:443")
+	v4, okV4 := fallbackSource("[::ffff:192.0.2.1]:443")
+	if !okA || !okB || !okC || !okV4 {
+		t.Fatal("valid addresses were not parsed")
+	}
+	if a != b || a == c {
+		t.Errorf("IPv6 sources: %v %v %v, want the /64 shared and the next /64 apart", a, b, c)
+	}
+	if v4.String() != "192.0.2.1/32" {
+		t.Errorf("IPv4-mapped source = %v, want 192.0.2.1/32", v4)
+	}
+	if _, ok := fallbackSource("not an address"); ok {
+		t.Error("garbage parsed as a source")
+	}
+}
+
+func TestFallbackDialRefusesMetadataAddresses(t *testing.T) {
+	for _, address := range []string{"169.254.169.254:80", "[fe80::1]:80", "0.0.0.0:80", "[::]:80", "224.0.0.1:80", "[::ffff:169.254.169.254]:80"} {
+		if err := fallbackDialControl("tcp4", address, nil); err == nil {
+			t.Errorf("dial to %s allowed", address)
+		}
+	}
+	for _, address := range []string{"127.0.0.1:8080", "[::1]:8080", "10.0.0.5:80", "203.0.113.9:443"} {
+		if err := fallbackDialControl("tcp4", address, nil); err != nil {
+			t.Errorf("dial to %s refused: %v", address, err)
+		}
+	}
+
+	// A name that resolves to a refused address is caught when the transport dials.
+	s := NewService(ServiceOptions{Ctx: context.Background(), Fallback: "169.254.169.254:80"})
+	t.Cleanup(func() { _ = s.Close() })
+	started := time.Now()
+	recorder := httptest.NewRecorder()
+	s.serveFallback(recorder, httptest.NewRequest("GET", "https://cover.example/", nil))
+	if recorder.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502", recorder.Code)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Errorf("refused dial took %s, as if it was attempted", elapsed)
+	}
+}
+
+func TestAuthFailureLogLimiter(t *testing.T) {
+	var limiter logLimiter
+	now := time.Unix(1000, 0)
+	if ok, n := limiter.allow(now, 10*time.Second); !ok || n != 0 {
+		t.Fatalf("first message: %v %d", ok, n)
+	}
+	for i := 0; i < 3; i++ {
+		if ok, _ := limiter.allow(now.Add(time.Duration(i+1)*time.Second), 10*time.Second); ok {
+			t.Fatalf("message %d inside the interval was logged", i)
+		}
+	}
+	if ok, n := limiter.allow(now.Add(10*time.Second), 10*time.Second); !ok || n != 3 {
+		t.Fatalf("after the interval: %v suppressed=%d, want true 3", ok, n)
+	}
+}

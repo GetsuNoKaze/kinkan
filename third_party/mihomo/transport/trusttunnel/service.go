@@ -6,8 +6,10 @@ import (
 	"errors"
 	"io"
 	"net"
+	"net/netip"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/metacubex/mihomo/common/httputils"
@@ -67,6 +69,9 @@ type Service struct {
 	fallbackTransport     *http.Transport
 	fallbackSlots         chan struct{}
 	fallbackIdleTimeout   time.Duration
+	fallbackSourceAccess  sync.Mutex
+	fallbackSources       map[netip.Prefix]int
+	authFailureLog        logLimiter
 	// fallbackCtx is cancelled on Close so in-flight fallback requests stop too,
 	// including upgraded connections that the HTTP servers no longer track.
 	fallbackCtx    context.Context
@@ -82,7 +87,69 @@ const (
 	// fallbackMaxConcurrent caps in-flight fallback requests so a slow or hung
 	// backend cannot pin an unbounded number of handlers and backend connections.
 	fallbackMaxConcurrent = 256
+	// fallbackMaxPerSource caps one client network's share of those, so a single
+	// prober trickling uploads cannot take every slot and turn the cover site into
+	// a blank 503 for everyone else. A browser loading a page over HTTP/2 stays well
+	// below it.
+	fallbackMaxPerSource = 64
+	// authFailureLogInterval spaces out the log of wrong credentials, which a prober
+	// can send on every request.
+	authFailureLogInterval = 10 * time.Second
 )
+
+var errFallbackAddress = errors.New("fallback address is link-local, multicast or unspecified")
+
+// fallbackDialControl refuses backend addresses that unauthenticated clients must
+// never reach through the fallback, such as the cloud metadata service. The panel
+// checks the configured address, but a host name is only resolved here.
+func fallbackDialControl(_, address string, _ syscall.RawConn) error {
+	addrPort, err := netip.ParseAddrPort(address)
+	if err != nil {
+		return err
+	}
+	ip := addrPort.Addr().Unmap()
+	if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+		return errFallbackAddress
+	}
+	return nil
+}
+
+// fallbackSource is the client network a request counts against: the address for
+// IPv4, the /64 for IPv6, where one client usually holds a whole prefix.
+func fallbackSource(remoteAddr string) (netip.Prefix, bool) {
+	addrPort, err := netip.ParseAddrPort(remoteAddr)
+	if err != nil {
+		return netip.Prefix{}, false
+	}
+	ip := addrPort.Addr().Unmap()
+	bits := 32
+	if ip.Is6() {
+		bits = 64
+	}
+	prefix, err := ip.Prefix(bits)
+	return prefix, err == nil
+}
+
+// logLimiter lets one message through per interval and counts the rest.
+type logLimiter struct {
+	access     sync.Mutex
+	last       time.Time
+	suppressed int
+}
+
+// allow reports whether to log now and how many messages were dropped since the
+// last one that was logged.
+func (l *logLimiter) allow(now time.Time, interval time.Duration) (bool, int) {
+	l.access.Lock()
+	defer l.access.Unlock()
+	if !l.last.IsZero() && now.Sub(l.last) < interval {
+		l.suppressed++
+		return false, 0
+	}
+	suppressed := l.suppressed
+	l.last, l.suppressed = now, 0
+	return true, suppressed
+}
 
 type fallbackWatchdogKey struct{}
 
@@ -100,12 +167,13 @@ func NewService(options ServiceOptions) *Service {
 		// A dedicated transport with timeouts for connecting and for the response
 		// headers; stalled bodies are handled by the idle watchdog in serveFallback.
 		s.fallbackTransport = &http.Transport{
-			DialContext:           (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
+			DialContext:           (&net.Dialer{Timeout: 5 * time.Second, Control: fallbackDialControl}).DialContext,
 			ResponseHeaderTimeout: 10 * time.Second,
 			IdleConnTimeout:       30 * time.Second,
 		}
 		s.fallbackCtx, s.fallbackCancel = context.WithCancel(context.Background())
 		s.fallbackSlots = make(chan struct{}, fallbackMaxConcurrent)
+		s.fallbackSources = make(map[netip.Prefix]int)
 		s.fallbackIdleTimeout = fallbackIdleTimeout
 		target := options.Fallback
 		s.fallbackProxy = &httputil.ReverseProxy{
@@ -243,7 +311,13 @@ func (s *Service) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 			switch {
 			case s.logger == nil:
 			case authorization != "":
-				s.badRequest(request.Context(), request, E.New("authorization failed, served the fallback"))
+				if allowed, suppressed := s.authFailureLog.allow(time.Now(), authFailureLogInterval); allowed {
+					if suppressed > 0 {
+						s.badRequest(request.Context(), request, E.New("authorization failed, served the fallback (", suppressed, " more since the last such message)"))
+					} else {
+						s.badRequest(request.Context(), request, E.New("authorization failed, served the fallback"))
+					}
+				}
 			default:
 				s.logger.DebugContext(request.Context(), "unauthenticated request from ", request.RemoteAddr, " served the fallback")
 			}
@@ -392,6 +466,13 @@ func (s *Service) serveFallback(writer http.ResponseWriter, request *http.Reques
 	if s.fallbackProxy == nil {
 		return false
 	}
+	if source, loaded := fallbackSource(request.RemoteAddr); loaded {
+		if !s.acquireFallbackSource(source) {
+			writer.WriteHeader(http.StatusServiceUnavailable)
+			return true
+		}
+		defer s.releaseFallbackSource(source)
+	}
 	select {
 	case s.fallbackSlots <- struct{}{}:
 		defer func() { <-s.fallbackSlots }()
@@ -448,6 +529,24 @@ func (s *Service) serveFallback(writer http.ResponseWriter, request *http.Reques
 		panic(http.ErrAbortHandler)
 	}
 	return true
+}
+
+func (s *Service) acquireFallbackSource(source netip.Prefix) bool {
+	s.fallbackSourceAccess.Lock()
+	defer s.fallbackSourceAccess.Unlock()
+	if s.fallbackSources[source] >= fallbackMaxPerSource {
+		return false
+	}
+	s.fallbackSources[source]++
+	return true
+}
+
+func (s *Service) releaseFallbackSource(source netip.Prefix) {
+	s.fallbackSourceAccess.Lock()
+	defer s.fallbackSourceAccess.Unlock()
+	if s.fallbackSources[source]--; s.fallbackSources[source] <= 0 {
+		delete(s.fallbackSources, source)
+	}
 }
 
 // newFallbackRequestBody feeds the inbound body through a pipe that is closed as
