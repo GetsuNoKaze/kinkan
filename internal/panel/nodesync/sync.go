@@ -133,7 +133,8 @@ func (s *Syncer) Online() map[string]nodeapi.Online { return *s.online.Load() }
 func (s *Syncer) run(ctx context.Context) {
 	var wg sync.WaitGroup
 	defer wg.Wait()
-	wg.Add(3)
+	wg.Add(4)
+	go func() { defer wg.Done(); every(ctx, 30*time.Second, s.pullScanners) }()
 	go func() {
 		defer wg.Done()
 		every(ctx, 2*time.Second, s.pullCounters)

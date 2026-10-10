@@ -2011,6 +2011,35 @@
         ],
         "type": "object"
       },
+      "InboundProbeView": {
+        "additionalProperties": false,
+        "properties": {
+          "inbound_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "network": {
+            "type": "string"
+          },
+          "port": {
+            "type": "string"
+          },
+          "report": {
+            "$ref": "#/components/schemas/ProtocolProbeReport"
+          }
+        },
+        "required": [
+          "inbound_id",
+          "name",
+          "port",
+          "network",
+          "report"
+        ],
+        "type": "object"
+      },
       "InboundView": {
         "additionalProperties": false,
         "properties": {
@@ -2790,6 +2819,64 @@
           "node",
           "key",
           "command"
+        ],
+        "type": "object"
+      },
+      "NodeProbeInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "inbound_id": {
+            "description": "0 scans all enabled inbounds",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "reference_port": {
+            "format": "int64",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "NodeProbeView": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "inbounds": {
+            "items": {
+              "$ref": "#/components/schemas/InboundProbeView"
+            },
+            "type": "array"
+          },
+          "local_node": {
+            "type": "boolean"
+          },
+          "node_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "started_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "vantage": {
+            "enum": [
+              "panel"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "started_at",
+          "node_id",
+          "vantage",
+          "address",
+          "local_node",
+          "inbounds"
         ],
         "type": "object"
       },
@@ -4945,6 +5032,46 @@
         ],
         "type": "object"
       },
+      "ProtocolProbeReport": {
+        "additionalProperties": false,
+        "properties": {
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            },
+            "type": "array"
+          },
+          "incomplete": {
+            "type": "boolean"
+          },
+          "protocol": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "quiet",
+              "noticeable",
+              "exposed",
+              "inconclusive"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "protocol",
+          "verdict",
+          "incomplete",
+          "target",
+          "findings"
+        ],
+        "type": "object"
+      },
       "PutSubImageInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -5342,6 +5469,129 @@
           "ip",
           "scanned",
           "results"
+        ],
+        "type": "object"
+      },
+      "ScannerDay": {
+        "additionalProperties": false,
+        "properties": {
+          "clients": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "day": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "day",
+          "count",
+          "clients"
+        ],
+        "type": "object"
+      },
+      "ScannerRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "asn": {
+            "type": "string"
+          },
+          "client": {
+            "type": "boolean"
+          },
+          "count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "country": {
+            "type": "string"
+          },
+          "day": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "first": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "inbound": {
+            "type": "string"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "last": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "method": {
+            "type": "string"
+          },
+          "organization": {
+            "type": "string"
+          },
+          "protocol": {
+            "type": "string"
+          },
+          "ptr": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "scanner": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "day",
+          "ip",
+          "inbound",
+          "protocol",
+          "reason",
+          "client",
+          "count",
+          "first",
+          "last",
+          "scanner"
+        ],
+        "type": "object"
+      },
+      "ScannerView": {
+        "additionalProperties": false,
+        "properties": {
+          "coverage": {
+            "type": "string"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/ScannerDay"
+            },
+            "type": "array"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/ScannerRecord"
+            },
+            "type": "array"
+          },
+          "spike": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "records",
+          "days",
+          "spike",
+          "coverage"
         ],
         "type": "object"
       },
@@ -9566,6 +9816,104 @@
           }
         },
         "summary": "Выпустить новый ключ ноды (старый перестаёт работать)",
+        "tags": [
+          "node"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/nodes/{id}/protocol-probe": {
+      "post": {
+        "operationId": "probe-node-protocols",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NodeProbeInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeProbeView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Проверить протоколы глазами сканера",
+        "tags": [
+          "node"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/nodes/{id}/scanners": {
+      "get": {
+        "operationId": "node-scanners",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScannerView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Журнал неудачных обращений",
         "tags": [
           "node"
         ],

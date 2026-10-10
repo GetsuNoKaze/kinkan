@@ -454,6 +454,10 @@ func (m *Manager) prune(ctx context.Context, now time.Time) {
 		m.log.Error("prune torrent hits", "err", err)
 		return
 	}
+	if err := m.st.PruneScanners(ctx, now); err != nil {
+		m.log.Error("prune scanner journal", "err", err)
+		return
+	}
 	m.lastPrune = now
 }
 

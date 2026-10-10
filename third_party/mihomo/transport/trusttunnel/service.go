@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
+	"github.com/metacubex/mihomo/component/authevent"
 	"io"
 	"net"
 	"net/netip"
@@ -317,6 +318,15 @@ func (s *Service) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	authorization := request.Header.Get("Proxy-Authorization")
 	username, loaded := s.verify(authorization)
 	if !loaded {
+		reason := "no_credentials"
+		if authorization != "" {
+			reason = "wrong_credentials"
+		}
+		local := ""
+		if s.tcpListener != nil {
+			local = s.tcpListener.Addr().String()
+		}
+		authevent.Emit(authevent.Event{Protocol: "trusttunnel", Local: local, Remote: request.RemoteAddr, Reason: reason, Method: request.Method})
 		if s.serveFallback(writer, request) {
 			// A request with credentials that do not match is most likely a misconfigured
 			// client, so it is logged as before; one without credentials is a browser or a

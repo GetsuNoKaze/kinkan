@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/metacubex/mihomo/component/authevent"
 	"net"
 	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -213,6 +215,28 @@ func New(config LC.Hysteria2Server, lc C.InboundListenConfig, tunnel C.Tunnel, a
 		MaxConnectionReceiveWindow:     config.MaxConnectionReceiveWindow,
 	}
 
+	// Observe rejected /auth requests without repeating sing-quic's password check.
+	cover := masqueradeHandler
+	if cover == nil {
+		cover = http.NotFoundHandler()
+	}
+	masqueradeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && r.Host == "hysteria" && r.URL.Path == "/auth" {
+			authPresent := r.Header.Get("Hysteria-Auth") != ""
+			rx, _ := strconv.ParseUint(r.Header.Get("Hysteria-CC-RX"), 10, 64)
+			// sing-quic also masquerades authenticated users when BBR is disabled.
+			// These requests cannot be classified here; avoid logging our own users.
+			ambiguous := authPresent && utils.StringToBps(config.Down) > 0 && config.IgnoreClientBandwidth && rx == 0
+			if !ambiguous {
+				reason := "no_credentials"
+				if authPresent {
+					reason = "wrong_credentials"
+				}
+				authevent.Emit(authevent.Event{Protocol: "hysteria2", Local: config.Listen, Remote: r.RemoteAddr, Reason: reason, Method: r.Method})
+			}
+		}
+		cover.ServeHTTP(w, r)
+	})
 	service, err := hysteria2.NewService[string](hysteria2.ServiceOptions{
 		Context:               context.Background(),
 		Logger:                log.SingLogger,

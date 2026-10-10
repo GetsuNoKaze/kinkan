@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	C "github.com/metacubex/mihomo/constant"
@@ -27,10 +28,12 @@ import (
 	mlog "github.com/metacubex/mihomo/log"
 	"github.com/metacubex/mihomo/tunnel"
 
+	"github.com/metacubex/mihomo/component/authevent"
 	"mikan/internal/fsutil"
 	"mikan/internal/nodeapi"
 	"mikan/internal/proto"
 	"mikan/internal/scan"
+	"mikan/internal/scannerlog"
 )
 
 const (
@@ -59,13 +62,16 @@ type Engine struct {
 	Reg *Registry
 	tun *Tunnel
 
-	mu         sync.Mutex // serializes Apply
-	savedShape string     // policyShape of the policies in the state file
-	savedAt    time.Time  // when the state file was written
-	applied    nodeapi.DesiredState
-	cert       proto.Cert // node certificate files written by the last Apply
-	listeners  map[string]nodeapi.ListenerStatus
-	site       *siteServer // Kinkan: the website the node shows (kinkan_site.go)
+	mu             sync.Mutex // serializes Apply
+	savedShape     string     // policyShape of the policies in the state file
+	savedAt        time.Time  // when the state file was written
+	applied        nodeapi.DesiredState
+	cert           proto.Cert // node certificate files written by the last Apply
+	listeners      map[string]nodeapi.ListenerStatus
+	site           *siteServer // Kinkan: the website the node shows (kinkan_site.go)
+	scanners       *scannerlog.Journal
+	scannerEvents  chan authevent.Event
+	scannerDropped atomic.Int64
 
 	errsMu sync.Mutex
 	errs   map[string]string // listener name → last listen error
@@ -176,6 +182,7 @@ func Start(o Options) (*Engine, error) {
 	}
 	e.Reg = NewRegistry(cs.Epoch, cs.Seq, o.DeviceRelease, time.Now)
 	e.tun = &Tunnel{inner: tunnel.Tunnel, reg: e.Reg}
+	e.startScannerJournal()
 
 	base, _, err := buildConfig(nodeapi.DesiredState{}, proto.Cert{}, o.AllowPrivate)
 	if err != nil {
@@ -420,6 +427,11 @@ func (e *Engine) Health() nodeapi.Health {
 // PersistCounters is called periodically and on shutdown; at most the last interval
 // of traffic is lost if the process dies.
 func (e *Engine) PersistCounters() error {
+	if e.scanners != nil {
+		if err := e.scanners.Persist(time.Now()); err != nil {
+			e.log.Warn("persist scanner journal", "err", err)
+		}
+	}
 	raw, err := json.Marshal(e.Reg.snapshot())
 	if err != nil {
 		return err

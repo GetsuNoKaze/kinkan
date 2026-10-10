@@ -61,3 +61,9 @@ Repository settings the workflows need (release setup is in RELEASE-TT.md):
 ## Licence
 
 GPL-3.0, like mikan and mihomo.
+
+## Протоколы и журнал обращений
+
+В исходниках добавлены общий прогон по inbound’ам, QUIC/HTTP/3 и первые пять точек
+сбора отказов авторизации. Покрытие, ограничения и результаты стенда —
+в [PROBE-PROTOCOLS.md](PROBE-PROTOCOLS.md).

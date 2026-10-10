@@ -1,0 +1,200 @@
+diff --git a/listener/anytls/server.go b/listener/anytls/server.go
+index c5c6060..fa5f798 100644
+--- a/listener/anytls/server.go
++++ b/listener/anytls/server.go
+@@ -5,6 +5,7 @@ import (
+ 	"crypto/sha256"
+ 	"encoding/binary"
+ 	"errors"
++	"github.com/metacubex/mihomo/component/authevent"
+ 	"net"
+ 	"strings"
+ 	"sync/atomic"
+@@ -225,6 +226,7 @@ func (l *Listener) HandleConn(conn net.Conn, h *sing.ListenerHandler) {
+ 	if user, ok := l.userMap[passwordSha256]; ok {
+ 		ctx = auth.ContextWithUser(ctx, user)
+ 	} else {
++		authevent.Emit(authevent.Event{Protocol: "anytls", Local: conn.LocalAddr().String(), Remote: conn.RemoteAddr().String(), Reason: "wrong_credentials"})
+ 		return
+ 	}
+ 	by, err = b.ReadBytes(2)
+diff --git a/listener/reality/reality.go b/listener/reality/reality.go
+index 256dbcf..40de0c9 100644
+--- a/listener/reality/reality.go
++++ b/listener/reality/reality.go
+@@ -6,6 +6,7 @@ import (
+ 	"encoding/hex"
+ 	"errors"
+ 	"fmt"
++	"github.com/metacubex/mihomo/component/authevent"
+ 	"net"
+ 	"runtime/debug"
+ 	"time"
+@@ -91,6 +92,7 @@ func (b Builder) NewListener(l net.Listener) net.Listener {
+ 	return N.NewHandleContextListener(context.Background(), l, func(ctx context.Context, conn net.Conn) (net.Conn, error) {
+ 		c, err := utls.RealityServer(ctx, conn, b.realityConfig)
+ 		if err != nil {
++			authevent.Emit(authevent.Event{Protocol: "reality", Local: conn.LocalAddr().String(), Remote: conn.RemoteAddr().String(), Reason: "rejected_handshake"})
+ 			return nil, err
+ 		}
+ 		// Due to low implementation quality, the reality server intercepted half-close and caused memory leaks.
+diff --git a/listener/sing_hysteria2/server.go b/listener/sing_hysteria2/server.go
+index 08f9cbc..c9c98b5 100644
+--- a/listener/sing_hysteria2/server.go
++++ b/listener/sing_hysteria2/server.go
+@@ -4,9 +4,11 @@ import (
+ 	"context"
+ 	"errors"
+ 	"fmt"
++	"github.com/metacubex/mihomo/component/authevent"
+ 	"net"
+ 	"net/netip"
+ 	"net/url"
++	"strconv"
+ 	"strings"
+ 	"time"
+ 
+@@ -213,6 +215,28 @@ func New(config LC.Hysteria2Server, lc C.InboundListenConfig, tunnel C.Tunnel, a
+ 		MaxConnectionReceiveWindow:     config.MaxConnectionReceiveWindow,
+ 	}
+ 
++	// Observe rejected /auth requests without repeating sing-quic's password check.
++	cover := masqueradeHandler
++	if cover == nil {
++		cover = http.NotFoundHandler()
++	}
++	masqueradeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		if r.Method == "POST" && r.Host == "hysteria" && r.URL.Path == "/auth" {
++			authPresent := r.Header.Get("Hysteria-Auth") != ""
++			rx, _ := strconv.ParseUint(r.Header.Get("Hysteria-CC-RX"), 10, 64)
++			// sing-quic also masquerades authenticated users when BBR is disabled.
++			// These requests cannot be classified here; avoid logging our own users.
++			ambiguous := authPresent && utils.StringToBps(config.Down) > 0 && config.IgnoreClientBandwidth && rx == 0
++			if !ambiguous {
++				reason := "no_credentials"
++				if authPresent {
++					reason = "wrong_credentials"
++				}
++				authevent.Emit(authevent.Event{Protocol: "hysteria2", Local: config.Listen, Remote: r.RemoteAddr, Reason: reason, Method: r.Method})
++			}
++		}
++		cover.ServeHTTP(w, r)
++	})
+ 	service, err := hysteria2.NewService[string](hysteria2.ServiceOptions{
+ 		Context:               context.Background(),
+ 		Logger:                log.SingLogger,
+diff --git a/transport/trusttunnel/service.go b/transport/trusttunnel/service.go
+index 0b46344..01f16af 100644
+--- a/transport/trusttunnel/service.go
++++ b/transport/trusttunnel/service.go
+@@ -4,6 +4,7 @@ import (
+ 	"context"
+ 	"crypto/subtle"
+ 	"errors"
++	"github.com/metacubex/mihomo/component/authevent"
+ 	"io"
+ 	"net"
+ 	"net/netip"
+@@ -317,6 +318,15 @@ func (s *Service) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+ 	authorization := request.Header.Get("Proxy-Authorization")
+ 	username, loaded := s.verify(authorization)
+ 	if !loaded {
++		reason := "no_credentials"
++		if authorization != "" {
++			reason = "wrong_credentials"
++		}
++		local := ""
++		if s.tcpListener != nil {
++			local = s.tcpListener.Addr().String()
++		}
++		authevent.Emit(authevent.Event{Protocol: "trusttunnel", Local: local, Remote: request.RemoteAddr, Reason: reason, Method: request.Method})
+ 		if s.serveFallback(writer, request) {
+ 			// A request with credentials that do not match is most likely a misconfigured
+ 			// client, so it is logged as before; one without credentials is a browser or a
+diff --git a/transport/tuic/v4/server.go b/transport/tuic/v4/server.go
+index 68a5310..574edfe 100644
+--- a/transport/tuic/v4/server.go
++++ b/transport/tuic/v4/server.go
+@@ -4,6 +4,7 @@ import (
+ 	"bufio"
+ 	"bytes"
+ 	"fmt"
++	"github.com/metacubex/mihomo/component/authevent"
+ 	"net"
+ 	"sync"
+ 
+@@ -55,6 +56,7 @@ func (s *serverHandler) AuthOk() bool {
+ 
+ func (s *serverHandler) HandleTimeout() {
+ 	s.authOnce.Do(func() {
++		authevent.Emit(authevent.Event{Protocol: "tuic", Local: s.quicConn.LocalAddr().String(), Remote: s.quicConn.RemoteAddr().String(), Reason: "authentication_timeout"})
+ 		_ = s.quicConn.CloseWithError(AuthenticationTimeout, "AuthenticationTimeout")
+ 		s.authOk.Store(false)
+ 		close(s.authCh)
+@@ -156,6 +158,7 @@ func (s *serverHandler) HandleUniStream(reader *bufio.Reader) (err error) {
+ 		}
+ 		s.authOnce.Do(func() {
+ 			if !authOk {
++				authevent.Emit(authevent.Event{Protocol: "tuic", Local: s.quicConn.LocalAddr().String(), Remote: s.quicConn.RemoteAddr().String(), Reason: "wrong_credentials"})
+ 				_ = s.quicConn.CloseWithError(AuthenticationFailed, "AuthenticationFailed")
+ 			}
+ 			s.authOk.Store(authOk)
+diff --git a/transport/tuic/v5/server.go b/transport/tuic/v5/server.go
+index 352a864..a8d4ff8 100644
+--- a/transport/tuic/v5/server.go
++++ b/transport/tuic/v5/server.go
+@@ -4,6 +4,7 @@ import (
+ 	"bufio"
+ 	"bytes"
+ 	"fmt"
++	"github.com/metacubex/mihomo/component/authevent"
+ 	"net"
+ 	"sync"
+ 
+@@ -55,6 +56,7 @@ func (s *serverHandler) AuthOk() bool {
+ 
+ func (s *serverHandler) HandleTimeout() {
+ 	s.authOnce.Do(func() {
++		authevent.Emit(authevent.Event{Protocol: "tuic", Local: s.quicConn.LocalAddr().String(), Remote: s.quicConn.RemoteAddr().String(), Reason: "authentication_timeout"})
+ 		_ = s.quicConn.CloseWithError(AuthenticationTimeout, "AuthenticationTimeout")
+ 		s.authOk.Store(false)
+ 		close(s.authCh)
+@@ -168,6 +170,7 @@ func (s *serverHandler) HandleUniStream(reader *bufio.Reader) (err error) {
+ 		}
+ 		s.authOnce.Do(func() {
+ 			if !authOk {
++				authevent.Emit(authevent.Event{Protocol: "tuic", Local: s.quicConn.LocalAddr().String(), Remote: s.quicConn.RemoteAddr().String(), Reason: "wrong_credentials"})
+ 				_ = s.quicConn.CloseWithError(AuthenticationFailed, "AuthenticationFailed")
+ 			}
+ 			s.authOk.Store(authOk)
+diff --git a/component/authevent/event.go b/component/authevent/event.go
+new file mode 100644
+index 0000000..0b71b00
+--- /dev/null
++++ b/component/authevent/event.go
+@@ -0,0 +1,25 @@
++// Package authevent exposes bounded metadata about rejected authentication to
++// embedders. Credentials, URLs, headers and user payloads are never included.
++package authevent
++
++import "sync/atomic"
++
++type Event struct{ Protocol, Local, Remote, Reason, Method string }
++type handler struct{ fn func(Event) }
++
++var sink atomic.Pointer[handler]
++
++// SetHandler installs a callback. It must return immediately; embedders should
++// enqueue events in a bounded queue rather than do I/O on handshake goroutines.
++func SetHandler(fn func(Event)) {
++	if fn == nil {
++		sink.Store(nil)
++	} else {
++		sink.Store(&handler{fn})
++	}
++}
++func Emit(e Event) {
++	if h := sink.Load(); h != nil {
++		h.fn(e)
++	}
++}
