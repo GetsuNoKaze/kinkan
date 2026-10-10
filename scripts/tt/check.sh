@@ -35,8 +35,8 @@ step "test mikan"
 go run ./cmd/mikan-release fork-check || fail "release repository differs"
 go test ./internal/proto/... ./internal/release/... ./internal/ttprobe/... ./internal/nodeprobe/... ./internal/scannerlog/... ./cmd/mikan-release/... ||
 	fail "protocol or release tests fail"
-go test -run TestTrustTunnelFallbackOnNode ./internal/node ||
-	fail "embedded TrustTunnel fallback test fails"
+go test -run 'TestTrustTunnelFallbackOnNode|TestHysteria2ScannerAuthOnNode' ./internal/node ||
+	fail "embedded listener auth or fallback test fails"
 
 step "test metacubex/http"
 (cd third_party/metacubex-http && go test -run TestKinkan .) ||
