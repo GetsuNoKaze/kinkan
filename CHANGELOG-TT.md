@@ -2,7 +2,7 @@
 
 Fork release notes. Upstream history remains in CHANGELOG.md.
 
-## Unreleased
+## 0.5.0.5-tt.4
 ### en
 - TrustTunnel fallback: one client network (an IPv4 address, an IPv6 /64) holds at most 64 of the 256 fallback requests, so one slow prober cannot turn the cover site into a blank 503 for everyone. The backend address is checked when dialing too: a host name that resolves to a link-local (cloud metadata), multicast or unspecified address is refused. Wrong credentials are logged at most once per 10 seconds, with the number of the rest.
 - The TrustTunnel fallback's HTTP/2 now matches Caddy in two more ways, measured against Caddy 2.11.7: MAX_HEADER_LIST_SIZE 16704 instead of Go's 1 MB default, and Date set by the front and sent last instead of the backend's sorted among the headers. The third difference, SETTINGS 9 (NO_RFC7540_PRIORITIES), is fixed in the fork's own copy of metacubex/http (third_party/metacubex-http), so the SETTINGS frame now matches Caddy's.
