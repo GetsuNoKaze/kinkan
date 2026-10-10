@@ -27,6 +27,9 @@ import (
 // with the node's certificate, as REALITY's own target. It answers the way Caddy's
 // file_server does, the server a cover site usually stands behind.
 
+// siteMaxHeaderBytes is Caddy's request header limit (see listen).
+const siteMaxHeaderBytes = 16 << 10
+
 // siteDir holds the archives, one per hash: the current one and none else once it serves.
 const siteDir = "site"
 
@@ -205,7 +208,11 @@ func (s *siteServer) listen(certs *nodeapi.TLSFiles, log *slog.Logger) {
 			errs = append(errs, err.Error())
 			return ""
 		}
-		srv := &http.Server{Handler: s, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute, ErrorLog: slog.NewLogLogger(log.Handler(), slog.LevelDebug)}
+		srv := &http.Server{Handler: s, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute, ErrorLog: slog.NewLogLogger(log.Handler(), slog.LevelDebug),
+			// Caddy's request header limit, as TrustTunnel's fallback front has it: HTTP/2
+			// announces it (MAX_HEADER_LIST_SIZE 16704), and Go's 1 MB would set REALITY's
+			// own site apart from the TrustTunnel port on the same node.
+			MaxHeaderBytes: siteMaxHeaderBytes}
 		s.srv = append(s.srv, srv)
 		if conf != nil {
 			srv.TLSConfig = conf

@@ -219,3 +219,45 @@ func TestSiteServingTLS(t *testing.T) {
 		t.Error("a port in use is not reported")
 	}
 }
+
+// The site's HTTP/2 announces Caddy's header limit, as the TrustTunnel front does.
+func TestSiteHeaderLimitLikeCaddy(t *testing.T) {
+	e := testEngine(t)
+	s, archive := packedSite(t, "Night")
+	pair, err := nodetls.Generate("node.example", x509.ExtKeyUsageServerAuth, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.PutSite(s.Hash, archive); err != nil {
+		t.Fatal(err)
+	}
+	e.applySite(nodeapi.DesiredState{TLS: &nodeapi.TLSFiles{CertPEM: pair.CertPEM, KeyPEM: pair.KeyPEM}, Site: &nodeapi.SiteState{Hash: s.Hash, HTTPPort: freePort(t), HTTPSPort: freePort(t)}})
+	defer e.stopSite()
+	conn, err := tls.Dial("tcp", e.siteStatus().HTTPS, &tls.Config{InsecureSkipVerify: true, NextProtos: []string{"h2"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+	if _, err := io.WriteString(conn, "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n\x00\x00\x00\x04\x00\x00\x00\x00\x00"); err != nil {
+		t.Fatal(err)
+	}
+	var head [9]byte
+	if _, err := io.ReadFull(conn, head[:]); err != nil || head[3] != 0x4 {
+		t.Fatalf("no SETTINGS frame: %x %v", head, err)
+	}
+	payload := make([]byte, int(head[0])<<16|int(head[1])<<8|int(head[2]))
+	if _, err := io.ReadFull(conn, payload); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i+6 <= len(payload); i += 6 {
+		if id := int(payload[i])<<8 | int(payload[i+1]); id == 6 {
+			v := int(payload[i+2])<<24 | int(payload[i+3])<<16 | int(payload[i+4])<<8 | int(payload[i+5])
+			if v != 16704 {
+				t.Fatalf("MAX_HEADER_LIST_SIZE = %d, want 16704 like Caddy", v)
+			}
+			return
+		}
+	}
+	t.Fatal("no MAX_HEADER_LIST_SIZE in SETTINGS")
+}
