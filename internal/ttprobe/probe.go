@@ -15,6 +15,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -73,8 +74,9 @@ func Run(ctx context.Context, args []string, out, stderr io.Writer) error {
 	ref := f.String("reference", "", "HTTPS cover site to compare (e.g. https://example.org:8444)")
 	timeout := f.Duration("timeout", 5*time.Second, "deadline per request/handshake (100ms..30s)")
 	jsonOut := f.Bool("json", false, "write a machine-readable report")
+	address := f.String("address", "", "connect to this IP instead of resolving the names; SNI and Host stay as in the URLs")
 	f.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: kinkan probe [--reference HTTPS_URL] [--timeout 5s] [--json] HTTPS_URL")
+		fmt.Fprintln(stderr, "Usage: kinkan probe [--reference HTTPS_URL] [--address IP] [--timeout 5s] [--json] HTTPS_URL")
 		f.PrintDefaults()
 	}
 	if err := f.Parse(args); err != nil {
@@ -87,7 +89,15 @@ func Run(ctx context.Context, args []string, out, stderr io.Writer) error {
 		f.Usage()
 		return errors.New("one HTTPS target is required; flags precede the target")
 	}
-	r, err := Scan(ctx, Config{Target: f.Arg(0), Reference: *ref, Timeout: *timeout})
+	cfg := Config{Target: f.Arg(0), Reference: *ref, Timeout: *timeout}
+	if *address != "" {
+		ip, err := netip.ParseAddr(*address)
+		if err != nil {
+			return fmt.Errorf("--address must be an IP address: %q", *address)
+		}
+		cfg.DialContext = addressDialer(ip)
+	}
+	r, err := Scan(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -121,6 +131,18 @@ func Run(ctx context.Context, args []string, out, stderr io.Writer) error {
 		return &CheckError{failed, incomplete}
 	}
 	return nil
+}
+
+// addressDialer sends every connection to ip, keeping the port: for a node whose name
+// does not resolve (yet, or on this network) or points elsewhere.
+func addressDialer(ip netip.Addr) func(context.Context, string, string) (net.Conn, error) {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		_, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, err
+		}
+		return (&net.Dialer{}).DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
+	}
 }
 
 func endpoint(raw string) (*url.URL, error) {

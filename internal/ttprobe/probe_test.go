@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"sync"
 	"testing"
@@ -402,5 +403,27 @@ func TestUnreachableReferenceSkipsComparisonsOnce(t *testing.T) {
 	}
 	if got := findings(r, "HTTP/2 fingerprint"); len(got) != 1 || got[0].Level != "INFO" {
 		t.Fatalf("fingerprint after an unreachable reference: %+v", got)
+	}
+}
+
+func TestAddressFlagPinsConnections(t *testing.T) {
+	var out, stderr bytes.Buffer
+	if err := Run(context.Background(), []string{"--address", "not-an-ip", "https://example.org"}, &out, &stderr); err == nil || !strings.Contains(err.Error(), "--address") {
+		t.Fatalf("bad address accepted: %v", err)
+	}
+	// The name does not resolve; only the pinned IP makes the handshake reach the site.
+	s, cfg := site(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "cover") }))
+	u, _ := endpoint(s.URL)
+	cfg.Target = "https://unresolvable.invalid:" + u.Port()
+	cfg.TLS.ServerName = "example.com" // in httptest's certificate
+	cfg.DialContext = addressDialer(netip.MustParseAddr(u.Hostname()))
+	r, err := Scan(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range r.Findings {
+		if f.Level == "ERROR" || f.Level == "FAIL" {
+			t.Errorf("%+v", f)
+		}
 	}
 }
