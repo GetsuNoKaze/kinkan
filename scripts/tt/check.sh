@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# The checks for this fork's changes: third_party/mihomo matches its patches, mikan
+# The checks for this fork's changes: third_party/mihomo and third_party/metacubex-http
+# match their patches, mikan
 # builds with it, go vet passes, and the tests that cover the changes pass.
 # mikan's own full suite (it needs PostgreSQL) runs in .github/workflows/ci.yml.
 set -euo pipefail
@@ -13,6 +14,9 @@ step() { echo "==> $*"; }
 
 step "third_party/mihomo"
 scripts/tt/mihomo.sh --check
+
+step "third_party/metacubex-http"
+scripts/tt/http.sh --check
 
 # The panel embeds the web bundle; these checks do not need the real one.
 if [ ! -d web/dist ]; then
@@ -33,6 +37,10 @@ go test ./internal/proto/... ./internal/release/... ./internal/ttprobe/... ./cmd
 	fail "protocol or release tests fail"
 go test -run TestTrustTunnelFallbackOnNode ./internal/node ||
 	fail "embedded TrustTunnel fallback test fails"
+
+step "test metacubex/http"
+(cd third_party/metacubex-http && go test -run TestKinkan .) ||
+	fail "metacubex/http patch tests fail"
 
 step "test mihomo"
 (cd third_party/mihomo && go test ./transport/trusttunnel/ && go test -run TrustTunnel ./listener/inbound/) ||

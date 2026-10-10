@@ -169,3 +169,5 @@ require (
 replace google.golang.org/protobuf => github.com/metacubex/protobuf-go v0.0.0-20260306035419-7ceee0674686
 
 replace github.com/metacubex/mihomo => ./third_party/mihomo
+
+replace github.com/metacubex/http => ./third_party/metacubex-http

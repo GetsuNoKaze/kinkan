@@ -125,6 +125,15 @@ func TestTrustTunnelFallbackOnNode(t *testing.T) {
 	for _, finding := range report.Findings {
 		if finding.Name == "HTTP/2 fingerprint" {
 			t.Logf("scanner: %+v", finding)
+			// What third_party/metacubex-http and the fallback align with Caddy.
+			settings := finding.Compare.Target.Settings
+			last := settings[len(settings)-1]
+			if last.ID != 9 || last.Value != 1 {
+				t.Errorf("TrustTunnel SETTINGS do not end with NO_RFC7540_PRIORITIES=1: %+v", settings)
+			}
+			if headers := finding.Compare.Target.Headers; headers[len(headers)-1] != "date" {
+				t.Errorf("TrustTunnel header order %v, want date last", headers)
+			}
 		}
 		if finding.Level == "FAIL" || finding.Level == "ERROR" || strings.Contains(finding.Detail, "cover differs") || strings.Contains(finding.Detail, "differs from cover") {
 			t.Errorf("scanner: %+v", finding)

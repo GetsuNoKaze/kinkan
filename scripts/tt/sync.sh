@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Merges upstream mikan's main into the sync/upstream branch and regenerates
-# third_party/mihomo if the merge moved mikan to another mihomo version.
+# third_party/mihomo (and third_party/metacubex-http, which mihomo's version decides)
+# if the merge moved mikan to another mihomo version.
 #
 # Writes to $GITHUB_OUTPUT (when set):
 #   up_to_date=true    upstream main is already merged, nothing to do
@@ -49,10 +50,12 @@ fi
 
 before="$(cat third_party/mihomo/.mihomo-version 2>/dev/null || true)"
 scripts/tt/mihomo.sh
+scripts/tt/http.sh
 if [ -n "$(git status --porcelain -- third_party go.mod go.sum)" ]; then
 	after="$(cat third_party/mihomo/.mihomo-version)"
+	http="$(cat third_party/metacubex-http/.http-version)"
 	git add -A third_party go.mod go.sum
-	git commit --quiet -m "third_party/mihomo: mihomo $after with patches/mihomo (was ${before:-none})"
+	git commit --quiet -m "third_party: mihomo $after (was ${before:-none}), metacubex/http $http, with their patches"
 fi
 
 echo "merged $what into $branch"
