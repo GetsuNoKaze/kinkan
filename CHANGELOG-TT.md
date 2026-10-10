@@ -2,6 +2,18 @@
 
 Fork release notes. Upstream history remains in CHANGELOG.md.
 
+## 0.5.0.5-tt.8
+### en
+- Scanner journal: the panel's own checks of its nodes are marked as such, hidden by default and kept out of the chart and the spike; only the panel can mark them. Country and network come from DB-IP's free databases (CC BY 4.0), which the panel keeps and updates monthly, where the node found none.
+- The fork's code sits beside Mikan's and is called with one line each, so syncs with Mikan merge cleanly: a trial merge of Mikan 0.5.0.5-rc.4 went from 15 conflicting files to 3. The Node API is unchanged; the node's served site moved to its own endpoint.
+- A server on a Mikan newer than Kinkan's latest release is told that it stays on Mikan until a Kinkan release made on that Mikan is out, instead of "is the latest release".
+- The kumquat logo in the panel, the favicon and the touch icon; Kinkan's own README.
+### ru
+- Журнал сканеров: собственные проверки панели помечаются, по умолчанию скрыты и не входят в график и всплеск; пометку ставит только панель. Страну и сеть, если нода их не определила, подставляет панель по бесплатным базам DB-IP (CC BY 4.0), которые она хранит и обновляет раз в месяц.
+- Код форка лежит рядом с кодом Mikan и подключается одной строкой, поэтому синхронизация с Mikan сливается без конфликтов: пробное слияние с Mikan 0.5.0.5-rc.4 — 3 файла с конфликтами вместо 15. Node API не изменился; то, какой сайт отдаёт нода, теперь отдельный запрос.
+- Сервер на Mikan новее последнего релиза Kinkan получает объяснение, что остаётся на Mikan до релиза Kinkan на этой версии, а не «is the latest release».
+- Логотип-кумкват в панели, favicon и иконке для телефона; собственный README Kinkan.
+
 ## 0.5.0.5-tt.7
 ### en
 - The protocol check says "Not enough data" instead of "Not checked" when its probes ran but had nothing to compare with, and explains why next to the verdict. A clear TUIC giveaway still reads "Exposed" even if other probes failed.
