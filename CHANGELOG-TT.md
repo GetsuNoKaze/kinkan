@@ -2,7 +2,7 @@
 
 Fork release notes. Upstream history remains in CHANGELOG.md.
 
-## Unreleased
+## 0.5.0.5-tt.5
 ### en
 - Node site: upload a static website as a zip in the panel (Nodes → Node site) and give it to nodes. The panel checks the archive (index.html, 404.html, robots.txt and a favicon; static files only; no parent paths, links or zip bombs), keeps it in the database and sends it to the node, which checks it again and serves it on 127.0.0.1 like Caddy's file_server — over HTTP on 17080 and over TLS with the node's certificate on 17443. Once the node serves it, TrustTunnel without a fallback of its own falls back to it, and REALITY aimed at the panel's own HTTPS aims at the site instead of the panel's empty 404. REALITY may also be aimed at the site (127.0.0.1:17443) by hand on any node that has one. Mikan's nodes ignore all of it. The panel warns when one site is on several nodes: it ties them together.
 - The fork's database migrations have their own goose table (kinkan_db_version), apart from Mikan's.
