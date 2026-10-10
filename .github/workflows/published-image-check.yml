@@ -17,6 +17,17 @@ jobs:
   published:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    services:
+      postgres:
+        image: mirror.gcr.io/library/postgres:18-alpine
+        env:
+          POSTGRES_USER: image_test
+          POSTGRES_PASSWORD: image_test
+          POSTGRES_DB: image_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U image_test -d image_test"
+          --health-interval 2s --health-timeout 5s --health-retries 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -56,6 +67,26 @@ jobs:
             esac
             docker pull -q "$src" && docker tag "$src" "$img"
           done
+      - name: released panel with PostgreSQL, migrations and restart
+        run: |
+          docker run -d --name published-panel --network host --read-only \
+            --cap-drop ALL --cap-add NET_BIND_SERVICE --tmpfs /tmp \
+            -v published-panel-data:/data \
+            -e MIKAN_DATABASE_URL='postgres://image_test:image_test@127.0.0.1:5432/image_test?sslmode=disable' \
+            -e MIKAN_DEV=1 -e MIKAN_PANEL_LISTEN=127.0.0.1:22053 -e MIKAN_NODE_SOCKET=off \
+            "$E2E_IMAGE" serve
+          test "$(docker inspect -f '{{.Config.User}}' published-panel)" = '65532:65532'
+          wait_health() {
+            for i in $(seq 1 30); do
+              if docker exec published-panel /usr/local/bin/mikan health; then return 0; fi
+              sleep 2
+            done
+            docker logs published-panel
+            return 1
+          }
+          wait_health
+          docker restart published-panel
+          wait_health
       - name: all node e2e tests against the released image, then restart
         env:
           E2E_RESTART: "1"
@@ -63,3 +94,8 @@ jobs:
       - name: diagnostics
         if: failure()
         run: docker ps -a && docker image ls
+      - name: panel logs and cleanup
+        if: always()
+        run: |
+          docker logs published-panel 2>&1 || true
+          docker rm -f published-panel || true
