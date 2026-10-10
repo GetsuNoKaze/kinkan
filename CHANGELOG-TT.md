@@ -4,10 +4,12 @@ Fork release notes. Upstream history remains in CHANGELOG.md.
 
 ## Unreleased
 ### en
+- `kinkan probe` checks the unauthenticated TrustTunnel surface (33 checks), compares cover responses and the HTTP/2 fingerprint against an optional HTTPS reference, and reports explicit proxy leaks separately from differences and incomplete checks. Text/JSON output; works on panels and separate nodes. See PROBE-TT.md.
 - The kinkan command: `kinkan update`, `kinkan status` and the rest; mikan keeps working, kinkan is a link to it. Servers get it on install or after an update.
 - Kinkan's releases (vX-tt.N) are stable releases now: kinkan update and the daily update check take them, GitHub marks them latest and the one-line install works. Builds with more after -tt.N (vX-tt.N-rc.1) stay pre-releases on the beta channel.
 - A server on 0.5.0.5-tt.3 or earlier does not take -tt.N as stable yet: update it once with this release's installer, as in RELEASE-TT.md; later releases arrive by kinkan update.
 ### ru
+- `kinkan probe`: 33 проверки TrustTunnel без пароля, сравнение ответов и HTTP/2 отпечатка с HTTPS cover-сайтом. Явные признаки прокси, отличия и невыполненные проверки разделены; текстовый/JSON отчёт. Работает на панели и отдельной ноде. Инструкция — PROBE-TT.md.
 - Команда kinkan: `kinkan update`, `kinkan status` и остальные; mikan по-прежнему работает, kinkan — ссылка на неё. Серверы получают её при установке или после обновления.
 - Релизы Kinkan (vX-tt.N) теперь стабильные: их берут kinkan update и ежедневная проверка обновлений, GitHub отмечает их как latest, работает установка одной строкой. Сборки с чем-то после -tt.N (vX-tt.N-rc.1) остаются пре-релизами в канале beta.
 - Сервер на 0.5.0.5-tt.3 или раньше ещё не считает -tt.N стабильными: обновите его один раз установщиком этого релиза, как в RELEASE-TT.md; дальше обновления приходят через kinkan update.

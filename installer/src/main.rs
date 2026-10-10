@@ -50,6 +50,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
+    /// Check unauthenticated HTTPS responses and compare a cover site's HTTP/2 fingerprint
+    Probe {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
     /// Install the panel, or with --join a node of another panel
     Install(setup::Options),
     /// Containers, version, health and whether an update is out
@@ -171,6 +176,7 @@ enum CertCmd {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = match cli.cmd {
+        Some(Cmd::Probe { args }) => ops::probe(&args),
         None => tui::start(),
         Some(Cmd::Install(o)) => setup::install(o),
         Some(Cmd::Status) => ops::status(),
@@ -265,6 +271,23 @@ fn progress_line() -> impl FnMut(f64) {
         if q != last {
             last = q;
             out(&format!("  {}%", q * 25));
+        }
+    }
+}
+
+#[cfg(test)]
+mod probe_tests {
+    use super::*;
+
+    #[test]
+    fn flags_reach_the_image_probe() {
+        let expected = ["--json", "--timeout", "3s", "--reference", "https://cover.example:8444", "https://node.example:443"];
+        let mut args = vec!["kinkan", "probe"];
+        args.extend(expected);
+        let cli = Cli::try_parse_from(args).unwrap();
+        match cli.cmd {
+            Some(Cmd::Probe { args }) => assert_eq!(args, expected),
+            _ => panic!("probe subcommand was not selected"),
         }
     }
 }

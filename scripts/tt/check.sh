@@ -29,7 +29,7 @@ go vet ./... || fail "go vet fails"
 
 step "test mikan"
 go run ./cmd/mikan-release fork-check || fail "release repository differs"
-go test ./internal/proto/... ./internal/release/... ./cmd/mikan-release/... ||
+go test ./internal/proto/... ./internal/release/... ./internal/ttprobe/... ./cmd/mikan-release/... ||
 	fail "protocol or release tests fail"
 go test -run TestTrustTunnelFallbackOnNode ./internal/node ||
 	fail "embedded TrustTunnel fallback test fails"

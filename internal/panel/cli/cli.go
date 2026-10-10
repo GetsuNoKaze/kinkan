@@ -28,11 +28,13 @@ import (
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/ttprobe"
 )
 
 const usage = `mikan — VPN panel on the mihomo core
 
 Commands:
+  probe [flags] HTTPS_URL        check unauthenticated TrustTunnel and compare a cover site
   serve                         run the panel
   admin bootstrap [flags]       first setup: admin, secret paths, address, language
   admin url                     print the panel's link
@@ -74,6 +76,8 @@ func Run(ctx context.Context, args []string, version string, web fs.FS) error {
 		return nil
 	}
 	switch args[0] {
+	case "probe":
+		return ttprobe.Run(ctx, args[1:], os.Stdout, os.Stderr)
 	case "serve":
 		cfg, err := config.FromEnv()
 		if err != nil {

@@ -80,6 +80,20 @@ pub fn admin(args: &[&str]) -> Result<()> {
     Ok(())
 }
 
+/// Runs the image's probe on either installation mode, without touching its data
+/// or requiring the panel database. The image contains mikan on separate nodes too.
+pub fn probe(args: &[String]) -> Result<()> {
+    let install = Install::load()?;
+    let service = if install.node { "node" } else { "panel" };
+    let mut full = vec!["exec", "-T", service, "/usr/local/bin/mikan", "probe"];
+    full.extend(args.iter().map(String::as_str));
+    let status = docker::compose(&full).status()?;
+    if !status.success() {
+        std::process::exit(status.code().unwrap_or(1));
+    }
+    Ok(())
+}
+
 /// The largest PEM file the panel takes (tlscert.MaxPEM).
 const MAX_PEM: u64 = 64 << 10;
 

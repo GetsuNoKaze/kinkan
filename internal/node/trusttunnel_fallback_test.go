@@ -1,6 +1,7 @@
 package node
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -20,6 +21,7 @@ import (
 	"mikan/internal/nodeapi"
 	"mikan/internal/nodetls"
 	"mikan/internal/proto"
+	"mikan/internal/ttprobe"
 )
 
 // Exercise the running embedded listener with credentials rendered by mikan, not only
@@ -97,6 +99,35 @@ func TestTrustTunnelFallbackOnNode(t *testing.T) {
 			if err != nil || resp.StatusCode != 200 || string(body) != probe.body || resp.ProtoMajor != wantProto || resp.Header.Get("Proxy-Authenticate") != "" {
 				t.Fatalf("h2=%v %s: status=%d proto=%s body=%q err=%v", h2, probe.method, resp.StatusCode, resp.Proto, body, err)
 			}
+		}
+	}
+	// Run the scanner against the actual patched mihomo listener and an HTTPS
+	// reference serving the same cover, with certificate verification enabled.
+	certificate, err := tls.LoadX509KeyPair(cert.CertPath, cert.KeyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reference := httptest.NewUnstartedServer(cover.Config.Handler)
+	reference.EnableHTTP2 = true
+	reference.TLS = &tls.Config{Certificates: []tls.Certificate{certificate}, NextProtos: []string{"h2", "http/1.1"}}
+	reference.StartTLS()
+	t.Cleanup(reference.Close)
+	report, err := ttprobe.Scan(context.Background(), ttprobe.Config{
+		Target: "https://" + in.Address(), Reference: reference.URL, Timeout: 5 * time.Second,
+		TLS: &tls.Config{RootCAs: roots, ServerName: "tt.test"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Findings) != 33 {
+		t.Fatalf("scanner checks=%d", len(report.Findings))
+	}
+	for _, finding := range report.Findings {
+		if finding.Name == "HTTP/2 fingerprint" {
+			t.Logf("scanner: %+v", finding)
+		}
+		if finding.Level == "FAIL" || finding.Level == "ERROR" || strings.Contains(finding.Detail, "cover differs") {
+			t.Errorf("scanner: %+v", finding)
 		}
 	}
 }
