@@ -2,6 +2,12 @@
 
 Fork release notes. Upstream history remains in CHANGELOG.md.
 
+## 0.5.0.5-tt.9
+### en
+- Quiet node: after the protocol check the panel says what the node looks like as a whole (no quieter than its loudest inbound: all protocols share its address) and, for each inbound that is not quiet, why and what helps: turn TUIC or another proxy answer off, give the node a site (TrustTunnel without a fallback, REALITY on the panel's empty 404), turn on Hysteria2's obfs, or check again with a reference on 443. Turning an inbound off asks first and is undone under Protocols.
+### ru
+- Тихая нода: после проверки протоколов панель показывает, как выглядит нода целиком (не тише самого заметного подключения: адрес у всех протоколов общий), и для каждого не тихого подключения — почему и что поможет: выключить TUIC или другой прокси-ответ, дать ноде сайт (TrustTunnel без fallback, REALITY на пустом 404 панели), включить obfs у Hysteria2 или повторить проверку с эталоном на 443. Выключение спрашивает подтверждение и отменяется в «Протоколах».
+
 ## 0.5.0.5-tt.8
 ### en
 - Scanner journal: the panel's own checks of its nodes are marked as such, hidden by default and kept out of the chart and the spike; only the panel can mark them. Country and network come from DB-IP's free databases (CC BY 4.0), which the panel keeps and updates monthly, where the node found none.
