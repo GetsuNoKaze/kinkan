@@ -42,7 +42,10 @@ jobs:
       - name: released binaries on both architectures
         run: |
           for arch in amd64 arm64; do
-            test "$(docker run --rm --platform linux/$arch "$E2E_IMAGE" version)" = "$RELEASE_VERSION"
+            # The runner's classic image store cannot hold both platforms under one index digest.
+            digest=$(docker manifest inspect "$E2E_IMAGE" | jq -r --arg arch "$arch" '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest')
+            test -n "$digest"
+            test "$(docker run --rm --platform linux/$arch "${E2E_IMAGE%@*}@$digest" version)" = "$RELEASE_VERSION"
           done
       - name: Docker Hub images through mirror
         run: |
