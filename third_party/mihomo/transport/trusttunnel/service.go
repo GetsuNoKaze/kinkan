@@ -87,6 +87,10 @@ const (
 	// fallbackMaxConcurrent caps in-flight fallback requests so a slow or hung
 	// backend cannot pin an unbounded number of handlers and backend connections.
 	fallbackMaxConcurrent = 256
+	// fallbackMaxHeaderBytes is Caddy's request header limit. The HTTP/2 server
+	// announces it in SETTINGS (MAX_HEADER_LIST_SIZE, plus 320), where Go's 1 MB
+	// default would differ from the cover site's own front.
+	fallbackMaxHeaderBytes = 16 << 10
 	// fallbackMaxPerSource caps one client network's share of those, so a single
 	// prober trickling uploads cannot take every slot and turn the cover site into
 	// a blank 503 for everyone else. A browser loading a page over HTTP/2 stays well
@@ -190,6 +194,10 @@ func NewService(options ServiceOptions) *Service {
 				r.SetXForwarded()
 			},
 			ModifyResponse: func(response *http.Response) error {
+				// Let this server stamp Date itself, as a Go front server such as Caddy
+				// does: it then comes last in an HTTP/2 response, instead of sorted among
+				// the backend's headers, where it would set the fallback apart.
+				response.Header.Del("Date")
 				watchdog, loaded := response.Request.Context().Value(fallbackWatchdogKey{}).(*idleWatchdog)
 				if !loaded {
 					return nil
@@ -231,13 +239,18 @@ func (s *Service) Start(tcpListener net.Listener, udpConn net.PacketConn, tlsCon
 		// HTTP/2 over TLS that negotiated http/1.1 or nothing would give the proxy away to a
 		// prober; such a preface is read as an HTTP/1 request and goes to the fallback.
 		protocols.SetUnencryptedHTTP2(s.fallbackProxy == nil)
+		maxHeaderBytes := 0 // the default
+		if s.fallbackProxy != nil {
+			maxHeaderBytes = fallbackMaxHeaderBytes
+		}
 		s.httpServer = &http.Server{
 			Handler:     s,
 			IdleTimeout: DefaultSessionTimeout,
 			BaseContext: func(net.Listener) context.Context {
 				return s.ctx
 			},
-			Protocols: protocols,
+			MaxHeaderBytes: maxHeaderBytes,
+			Protocols:      protocols,
 		}
 		listener := tcpListener
 		s.tcpListener = tcpListener

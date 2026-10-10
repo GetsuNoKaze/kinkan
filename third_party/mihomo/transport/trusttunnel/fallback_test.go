@@ -2,6 +2,7 @@ package trusttunnel
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -23,6 +24,8 @@ import (
 	"github.com/metacubex/quic-go/http3"
 	"github.com/metacubex/sing/common/logger"
 	"github.com/metacubex/tls"
+	xhttp2 "golang.org/x/net/http2"
+	"golang.org/x/net/http2/hpack"
 )
 
 func newFallbackService(t *testing.T, backend *httptest.Server) *Service {
@@ -725,5 +728,78 @@ func TestAuthFailureLogLimiter(t *testing.T) {
 	}
 	if ok, n := limiter.allow(now.Add(10*time.Second), 10*time.Second); !ok || n != 3 {
 		t.Fatalf("after the interval: %v suppressed=%d, want true 3", ok, n)
+	}
+}
+
+// TestFallbackHTTP2LooksLikeCaddy checks the parts of the HTTP/2 fingerprint the
+// fallback controls, measured against Caddy 2.11: the header list limit in SETTINGS,
+// and Date written by the front server after the backend's headers.
+func TestFallbackHTTP2LooksLikeCaddy(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Date", "Mon, 01 Jan 2001 00:00:00 GMT")
+		w.Header().Set("Server", "Caddy")
+		w.Header().Set("Etag", `"x"`)
+		_, _ = io.WriteString(w, "cover")
+	}))
+	defer backend.Close()
+	_, address := startFallbackServer(t, backend, time.Minute)
+
+	conn, err := tls.Dial("tcp", address, &tls.Config{InsecureSkipVerify: true, NextProtos: []string{"h2"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+	if _, err = io.WriteString(conn, xhttp2.ClientPreface); err != nil {
+		t.Fatal(err)
+	}
+	framer := xhttp2.NewFramer(conn, conn)
+	if err = framer.WriteSettings(); err != nil {
+		t.Fatal(err)
+	}
+	var block bytes.Buffer
+	encoder := hpack.NewEncoder(&block)
+	for _, field := range []hpack.HeaderField{{Name: ":method", Value: "GET"}, {Name: ":scheme", Value: "https"}, {Name: ":authority", Value: "cover.example"}, {Name: ":path", Value: "/"}} {
+		_ = encoder.WriteField(field)
+	}
+	if err = framer.WriteHeaders(xhttp2.HeadersFrameParam{StreamID: 1, BlockFragment: block.Bytes(), EndStream: true, EndHeaders: true}); err != nil {
+		t.Fatal(err)
+	}
+	var headerList uint32
+	var names []string
+	var date string
+	decoder := hpack.NewDecoder(4096, func(field hpack.HeaderField) {
+		names = append(names, field.Name)
+		if field.Name == "date" {
+			date = field.Value
+		}
+	})
+	for names == nil {
+		frame, err := framer.ReadFrame()
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch frame := frame.(type) {
+		case *xhttp2.SettingsFrame:
+			if value, ok := frame.Value(xhttp2.SettingMaxHeaderListSize); ok {
+				headerList = value
+			}
+			if !frame.IsAck() {
+				_ = framer.WriteSettingsAck()
+			}
+		case *xhttp2.HeadersFrame:
+			if _, err := decoder.Write(frame.HeaderBlockFragment()); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if headerList != 16704 {
+		t.Errorf("MAX_HEADER_LIST_SIZE = %d, want Caddy's 16704", headerList)
+	}
+	if len(names) == 0 || names[len(names)-1] != "date" {
+		t.Errorf("header order %v, want date last", names)
+	}
+	if strings.Contains(date, "2001") {
+		t.Errorf("backend Date %q passed through", date)
 	}
 }
