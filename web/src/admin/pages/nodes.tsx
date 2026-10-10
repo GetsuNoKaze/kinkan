@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { Activity, ArrowDown, ArrowUp, ArrowUpCircle, ArrowUpDown, Check, Cloud, Copy, Gauge, KeyRound, LoaderCircle, MoreHorizontal, Pencil, Plus, ShieldCheck, Trash2, Waypoints } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, ArrowUpCircle, ArrowUpDown, Check, Cloud, Copy, Gauge, Globe, KeyRound, LoaderCircle, MoreHorizontal, Pencil, Plus, ShieldCheck, Trash2, Waypoints } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../api/client";
 import { qk, useNodes } from "../../api/hooks";
@@ -19,6 +19,7 @@ import { SpeedDrawer } from "./node-speed";
 import { NodeTrafficDrawer } from "./node-traffic";
 import { WarpDrawer } from "./node-warp";
 import { TTProbeDrawer } from "./node-ttprobe";
+import { SiteDrawer } from "./node-site";
 
 type Node = Schemas["NodeInfo"];
 type Joined = { name: string; key: string; command: string };
@@ -43,6 +44,7 @@ export function NodesPage() {
   const [warpOf, setWarpOf] = useState<Node | null>(null);
   const [speedOf, setSpeedOf] = useState<Node | null>(null);
   const [probeOf, setProbeOf] = useState<Node | null>(null);
+  const [siteOf, setSiteOf] = useState<Node | null>(null);
   const [trafficOf, setTrafficOf] = useState<Node | null>(null);
   const [cascadeOf, setCascadeOf] = useState<Node | null>(null);
   const [certOf, setCertOf] = useState<Node | null>(null);
@@ -176,7 +178,7 @@ export function NodesPage() {
                 </p>
               ) : null}
               {list.map((n, idx) => (
-                <NodeCard key={n.id} n={n} idx={idx} total={list.length} ordering={ordering} sorting={order.isPending} moving={order.isPending && order.variables.moved === n.id} onMove={(by) => move(list, idx, by)} updating={update.isPending && update.variables === n.id} busy={update.isPending} onUpdate={() => setUpdateOf(n)} onEdit={() => setEditing(n)} onWarp={() => setWarpOf(n)} onSpeed={() => setSpeedOf(n)} onProbe={() => setProbeOf(n)} onTraffic={() => setTrafficOf(n)} onCascade={() => setCascadeOf(n)} onCert={() => setCertOf(n)} onRekey={() => setRekeying(n)} onRemove={() => setRemoving(n)} />
+                <NodeCard key={n.id} n={n} idx={idx} total={list.length} ordering={ordering} sorting={order.isPending} moving={order.isPending && order.variables.moved === n.id} onMove={(by) => move(list, idx, by)} updating={update.isPending && update.variables === n.id} busy={update.isPending} onUpdate={() => setUpdateOf(n)} onEdit={() => setEditing(n)} onWarp={() => setWarpOf(n)} onSpeed={() => setSpeedOf(n)} onProbe={() => setProbeOf(n)} onSite={() => setSiteOf(n)} onTraffic={() => setTrafficOf(n)} onCascade={() => setCascadeOf(n)} onCert={() => setCertOf(n)} onRekey={() => setRekeying(n)} onRemove={() => setRemoving(n)} />
               ))}
             </div>
           )
@@ -195,6 +197,7 @@ export function NodesPage() {
       <WarpDrawer node={warpOf ? { id: warpOf.id, name: nodeLabel(warpOf) } : null} onClose={() => setWarpOf(null)} />
       <SpeedDrawer node={speedOf ? { id: speedOf.id, name: nodeLabel(speedOf) } : null} onClose={() => setSpeedOf(null)} />
       <TTProbeDrawer node={probeOf} onClose={() => setProbeOf(null)} />
+      <SiteDrawer node={siteOf} onClose={() => setSiteOf(null)} />
       <NodeTrafficDrawer node={trafficOf ? { id: trafficOf.id, name: nodeLabel(trafficOf) } : null} onClose={() => setTrafficOf(null)} />
       <CascadeDrawer node={cascadeOf ? { id: cascadeOf.id, name: nodeLabel(cascadeOf) } : null} onClose={() => setCascadeOf(null)} />
       <CertDrawer
@@ -256,6 +259,7 @@ function NodeCard({
   onWarp,
   onSpeed,
   onProbe,
+  onSite,
   onTraffic,
   onCascade,
   onCert,
@@ -282,6 +286,7 @@ function NodeCard({
   onWarp: () => void;
   onSpeed: () => void;
   onProbe: () => void;
+  onSite: () => void;
   onTraffic: () => void;
   onCascade: () => void;
   onCert: () => void;
@@ -408,6 +413,9 @@ function NodeCard({
         </Button>
         <Button size="sm" onClick={onProbe}>
           <ShieldCheck size={16} aria-hidden /> {t("ttProbe.button")}
+        </Button>
+        <Button size="sm" onClick={onSite}>
+          <Globe size={16} aria-hidden /> {t("site.button")}
         </Button>
         <Menu.Root>
           <Menu.Trigger asChild>

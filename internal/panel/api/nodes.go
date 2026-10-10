@@ -56,6 +56,8 @@ type NodeInfo struct {
 	// Certificate is the node's own one for its protocols on the node's TLS; nil: the
 	// node uses its self-signed certificate.
 	Certificate *NodeCertView `json:"certificate,omitempty"`
+	// Site is the website the node serves (Kinkan); nil: none, or a node without sites.
+	Site *nodeapi.SiteStatus `json:"site,omitempty" doc:"Сайт, который отдаёт нода: хеш, адреса на 127.0.0.1 и ошибка (например, порт занят)"`
 }
 
 type nodesOutput struct{ Body []NodeInfo }
@@ -171,6 +173,7 @@ func (h *handlers) viewNode(ctx context.Context, n db.Node, inbounds []db.Inboun
 		return v
 	}
 	v.Status, v.Version, v.Conns = "ok", hv.Health.Version, hv.Health.Conns
+	v.Site = hv.Health.Site // Kinkan
 	v.CPUPercent, v.MemUsed, v.MemTotal = hv.Health.System.CPUPercent, hv.Health.System.MemUsed, hv.Health.System.MemTotal
 	if p := hv.Health.System.ProcCPUPercent; p > 0 {
 		v.ProcCPU = &p
