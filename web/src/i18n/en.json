@@ -458,7 +458,10 @@
       "logo_missing": "Upload a logo first",
       "background_missing": "Upload a background image first",
       "duplicate_id": "An instruction is listed twice",
-      "too_many_docs": "No more than {value} instructions"
+      "too_many_docs": "No more than {value} instructions",
+      "probe_disabled_node": "This node is disabled.",
+      "probe_no_inbounds": "No enabled inbounds to probe.",
+      "probe_too_many_inbounds": "A run supports up to 64 inbounds; select one."
     },
     "acme": {
       "port80_busy": "Port 80 is used by another program. Let's Encrypt checks the server through it",
@@ -2718,23 +2721,23 @@
     "uploadButton": "Upload"
   },
   "ttProbe": {
-    "button": "Check TrustTunnel",
-    "title": "Scanner-style check",
-    "intro": "Unauthenticated checks of TrustTunnel: authentication, CONNECT, proxy-style requests, TLS and HTTP/2. Compare responses with your cover site.",
+    "button": "Protocol probes",
+    "title": "Protocol probes",
+    "intro": "Check enabled inbounds without credentials: TLS and HTTP, QUIC and HTTP/3, and responses to random bytes. Compare them with the node website.",
     "vantage": "Requests originate from the panel server. This checks its network path, not the client network or filtering on that path.",
-    "noInbound": "This node has no enabled TrustTunnel inbounds.",
+    "noInbound": "This node has no enabled inbounds.",
     "inbound": "TrustTunnel inbound",
     "reference": "Cover site HTTPS port",
     "referenceHint": "The HTTPS port of the cover site on this node, for example Caddy's. Leave blank to check without comparison. Certificates are verified.",
     "badPort": "Enter a port from 1 to 65535 or leave it blank.",
     "run": "Run check",
     "running": "Checking…",
-    "wait": "The check may take up to 75 seconds. Closing this drawer cancels the request.",
+    "wait": "Checking inbounds sequentially. The run is limited to four minutes; closing this window cancels it.",
     "target": "Target",
     "cover": "Reference",
     "noReference": "No cover site comparison",
     "download": "Download JSON",
-    "limits": "Differences (WARN) need review; errors (ERROR) mean incomplete checks. Success does not guarantee invisibility or resistance to blocking.",
+    "limits": "Cover differences need investigation. Quiet means the completed probes matched; silence, obfuscation and timing alone do not establish invisibility.",
     "levelFAIL": "Proxy disclosures",
     "levelERROR": "Incomplete",
     "levelWARN": "Differences",
@@ -2757,5 +2760,30 @@
     "fpHeaders": "Response header order",
     "fpMissing": "not sent",
     "fpSame": "The HTTP/2 fingerprints match."
+  },
+  "nodeProbe": {
+    "all": "All enabled inbounds",
+    "verdict": "Verdict",
+    "quiet": "Quiet",
+    "noticeable": "Noticeable",
+    "exposed": "Exposed",
+    "inconclusive": "Inconclusive",
+    "incomplete": "Some checks are incomplete"
+  },
+  "scanners": {
+    "title": "Scanner journal",
+    "intro": "Rejected requests over 30 days, aggregated by IP. No credentials or user traffic. Website visitors may be browsers; attribution is a network or verified reverse-DNS hint.",
+    "coverage": "Updated Kinkan nodes record TrustTunnel, rejected REALITY handshakes, TUIC, wrong AnyTLS auth and failed Hysteria2 auth requests. Pre-QUIC obfuscation failures and other protocols are not visible yet.",
+    "spike": "Increased probing: at least 100 requests today and more than three times the previous 7-day daily average.",
+    "days": "External requests by day (UTC)",
+    "showClients": "Show errors from known client addresses",
+    "empty": "No records yet. Collection requires an updated node; historical scans cannot be recovered.",
+    "source": "Source",
+    "who": "Attribution",
+    "inbound": "Activity",
+    "attempts": "Attempts",
+    "when": "First / last",
+    "client": "Likely a client",
+    "unknown": "Unknown"
   }
 }

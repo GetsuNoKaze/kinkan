@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/metacubex/mihomo/component/authevent"
 	"net"
 	"runtime/debug"
 	"time"
@@ -91,6 +92,7 @@ func (b Builder) NewListener(l net.Listener) net.Listener {
 	return N.NewHandleContextListener(context.Background(), l, func(ctx context.Context, conn net.Conn) (net.Conn, error) {
 		c, err := utls.RealityServer(ctx, conn, b.realityConfig)
 		if err != nil {
+			authevent.Emit(authevent.Event{Protocol: "reality", Local: conn.LocalAddr().String(), Remote: conn.RemoteAddr().String(), Reason: "rejected_handshake"})
 			return nil, err
 		}
 		// Due to low implementation quality, the reality server intercepted half-close and caused memory leaks.

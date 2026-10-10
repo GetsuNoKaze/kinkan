@@ -8,7 +8,8 @@ import { t } from "../../i18n";
 import { dateLong, time } from "../../lib/format";
 import { nodeLabel } from "../../lib/node-label";
 
-type Result = Schemas["TTProbeView"];
+type Result = Schemas["NodeProbeView"];
+type SingleResult = Schemas["TTProbeView"];
 type Node = Schemas["NodeInfo"];
 type Finding = Schemas["Finding"];
 type Fingerprint = Schemas["H2Fingerprint"];
@@ -31,20 +32,20 @@ export function TTProbeDrawer({ node, onClose }: { node: Node | null; onClose: (
 
 function ProbeForm({ node }: { node: Node }) {
   const all = useQuery({ queryKey: ["inbounds"], queryFn: ({ signal }) => unwrap(api.GET("/api/v1/inbounds", { signal })) });
-  const choices = (all.data ?? []).filter((i) => i.node_id === node.id && i.type === "trusttunnel" && i.enabled);
+  const choices = (all.data ?? []).filter((i) => i.node_id === node.id && i.enabled);
   const [picked, setPicked] = useState(0);
   const [reference, setReference] = useState("");
   const [result, setResult] = useState<Result | null>(null);
   const [formError, setFormError] = useState("");
   const controller = useRef<AbortController | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
-  const inbound = choices.find((i) => i.id === picked) ?? choices[0];
+  const inbound = choices.find((i) => i.id === picked);
   const run = useMutation({
     mutationFn: () => {
       controller.current = new AbortController();
-      return unwrap(api.POST("/api/v1/nodes/{id}/trusttunnel-probe", {
+      return unwrap(api.POST("/api/v1/nodes/{id}/protocol-probe", {
         params: { path: { id: node.id } },
-        body: { inbound_id: inbound!.id, reference_port: reference.trim() === "" ? 0 : Number(reference) },
+        body: { inbound_id: picked, reference_port: reference.trim() === "" ? 0 : Number(reference) },
         signal: controller.current.signal,
       }));
     },
@@ -66,19 +67,28 @@ function ProbeForm({ node }: { node: Node }) {
     <p className="text-[13px] text-[var(--ink-500)]">{t("ttProbe.intro")}</p>
     <div className="banner info">{t("ttProbe.vantage")}</div>
     {all.isError ? <p role="alert">{errorText(all.error)}</p> : all.isPending ? <p role="status">{t("common.loading")}</p> : choices.length === 0 ? <p>{t("ttProbe.noInbound")}</p> : <>
-      <Field label={t("ttProbe.inbound")} htmlFor="tt-probe-inbound"><select id="tt-probe-inbound" className="input" value={inbound?.id ?? ""} disabled={run.isPending} onChange={(e) => setPicked(Number(e.target.value))}>
-        {choices.map((i) => <option key={i.id} value={i.id}>{i.name} · {i.port}</option>)}
+      <Field label={t("ttProbe.inbound")} htmlFor="tt-probe-inbound"><select id="tt-probe-inbound" className="input" value={picked} disabled={run.isPending} onChange={(e) => setPicked(Number(e.target.value))}>
+        <option value={0}>{t("nodeProbe.all")}</option>
+        {choices.map((i) => <option key={i.id} value={i.id}>{i.name} · {i.type} · {i.port}</option>)}
       </select></Field>
       <Field label={t("ttProbe.reference")} htmlFor="tt-probe-reference" hint={t("ttProbe.referenceHint")}><input id="tt-probe-reference" className="input" type="text" inputMode="numeric" value={reference} disabled={run.isPending} onChange={(e) => setReference(e.target.value)} /></Field>
-      <Button variant="primary" loading={run.isPending} disabled={!node.enabled || !inbound} onClick={start}><ShieldCheck size={16} aria-hidden />{run.isPending ? t("ttProbe.running") : t("ttProbe.run")}</Button>
+      <Button variant="primary" loading={run.isPending} disabled={!node.enabled || (picked !== 0 && !inbound)} onClick={start}><ShieldCheck size={16} aria-hidden />{run.isPending ? t("ttProbe.running") : t("ttProbe.run")}</Button>
     </>}
     {run.isPending ? <p role="status" aria-live="polite" className="text-sm">{t("ttProbe.wait")}</p> : null}
     {formError ? <p role="alert" className="text-sm text-[var(--berry-600)]">{formError}</p> : null}
-    {result ? <Report result={result} onDownload={download} /> : null}
+    {result ? <>
+      <Button onClick={download}><Download size={16} aria-hidden />{t("ttProbe.download")}</Button>
+      <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr><th>{t("ttProbe.inbound")}</th><th>{t("nodeProbe.verdict")}</th></tr></thead>
+        <tbody>{result.inbounds.map((item) => <tr key={item.inbound_id}><td>{item.name} · {item.report.protocol} · {item.port}/{item.network}</td><td><Pill tone={item.report.verdict === "quiet" ? "ok" : item.report.verdict === "noticeable" ? "warn" : "bad"}>{verdictLabel(item.report.verdict)}</Pill>{item.report.incomplete ? ` · ${t("nodeProbe.incomplete")}` : ""}</td></tr>)}</tbody>
+      </table></div>
+      {result.inbounds.map((item) => <details key={item.inbound_id} className="rounded-xl border border-[var(--hairline)] p-3"><summary className="cursor-pointer text-sm">{item.name} · {verdictLabel(item.report.verdict)}</summary>
+        <Report result={{ ...result, inbound_id: item.inbound_id, report: item.report }} onDownload={download} />
+      </details>)}
+    </> : null}
   </div>;
 }
 
-function Report({ result, onDownload }: { result: Result; onDownload: () => void }) {
+function Report({ result, onDownload }: { result: SingleResult; onDownload: () => void }) {
   const [filter, setFilter] = useState<Level | null>(null);
   const findings = result.report.findings;
   const count = (level: Level) => findings.filter((f) => f.level === level).length;
@@ -105,7 +115,7 @@ function Report({ result, onDownload }: { result: Result; onDownload: () => void
   </>;
 }
 
-function Verdict({ result, count }: { result: Result; count: (level: Level) => number }) {
+function Verdict({ result, count }: { result: SingleResult; count: (level: Level) => number }) {
   const [cls, text] = count("FAIL") > 0 ? ["err", t("ttProbe.verdictFAIL", { n: count("FAIL") })]
     : count("ERROR") > 0 ? ["err", t("ttProbe.verdictERROR", { n: count("ERROR") })]
     : !result.report.reference ? ["warn", t("ttProbe.verdictNoReference")]
@@ -153,4 +163,13 @@ function FingerprintTable({ target, reference }: { target: Fingerprint; referenc
       </tr>)}</tbody>
     </table>
   </div>;
+}
+
+function verdictLabel(verdict: string) {
+  switch (verdict) {
+    case "quiet": return t("nodeProbe.quiet");
+    case "noticeable": return t("nodeProbe.noticeable");
+    case "exposed": return t("nodeProbe.exposed");
+    default: return t("nodeProbe.inconclusive");
+  }
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/metacubex/mihomo/component/authevent"
 	"net"
 	"net/netip"
 	"net/url"
@@ -213,6 +214,32 @@ func New(config LC.Hysteria2Server, lc C.InboundListenConfig, tunnel C.Tunnel, a
 		MaxConnectionReceiveWindow:     config.MaxConnectionReceiveWindow,
 	}
 
+	// Observe failed auth only. Normal HTTP requests and successful users are
+	// deliberately excluded, even when they reach the masquerade handler.
+	cover := masqueradeHandler
+	if cover == nil {
+		cover = http.NotFoundHandler()
+	}
+	masqueradeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && r.Host == "hysteria" && r.URL.Path == "/auth" {
+			password := r.Header.Get("Hysteria-Auth")
+			valid := false
+			for _, expected := range config.Users {
+				if password == expected {
+					valid = true
+					break
+				}
+			}
+			if !valid {
+				reason := "wrong_credentials"
+				if password == "" {
+					reason = "no_credentials"
+				}
+				authevent.Emit(authevent.Event{Protocol: "hysteria2", Local: config.Listen, Remote: r.RemoteAddr, Reason: reason, Method: r.Method})
+			}
+		}
+		cover.ServeHTTP(w, r)
+	})
 	service, err := hysteria2.NewService[string](hysteria2.ServiceOptions{
 		Context:               context.Background(),
 		Logger:                log.SingLogger,

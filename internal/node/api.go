@@ -23,6 +23,14 @@ var scanning sync.Mutex
 // access control, and on a remote node over TLS that only the panel's certificate opens.
 func Handler(e *Engine, log *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/scanners", func(w http.ResponseWriter, r *http.Request) {
+		s, err := e.Scanners(r.Context())
+		if err != nil {
+			fail(w, log, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, s)
+	})
 	mux.HandleFunc("PUT /v1/state", func(w http.ResponseWriter, r *http.Request) {
 		var st nodeapi.DesiredState
 		if !decode(w, r, &st) {

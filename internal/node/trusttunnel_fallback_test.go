@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/metacubex/mihomo/component/authevent"
 	C "github.com/metacubex/mihomo/constant"
 	"github.com/metacubex/mihomo/listener"
 
@@ -27,6 +28,14 @@ import (
 // Exercise the running embedded listener with credentials rendered by mikan, not only
 // a hand-written mihomo configuration. The test certificate is verified through a root pool.
 func TestTrustTunnelFallbackOnNode(t *testing.T) {
+	events := make(chan authevent.Event, 128)
+	authevent.SetHandler(func(ev authevent.Event) {
+		select {
+		case events <- ev:
+		default:
+		}
+	})
+	t.Cleanup(func() { authevent.SetHandler(nil) })
 	cover := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "cover "+r.Method)
 	}))
@@ -98,6 +107,22 @@ func TestTrustTunnelFallbackOnNode(t *testing.T) {
 			}
 			if err != nil || resp.StatusCode != 200 || string(body) != probe.body || resp.ProtoMajor != wantProto || resp.Header.Get("Proxy-Authenticate") != "" {
 				t.Fatalf("h2=%v %s: status=%d proto=%s body=%q err=%v", h2, probe.method, resp.StatusCode, resp.Proto, body, err)
+			}
+			if probe.auth == "" || probe.auth == "Basic invalid" {
+				select {
+				case ev := <-events:
+					if ev.Remote == "" || ev.Local == "" || ev.Protocol != "trusttunnel" || ev.Method != probe.method {
+						t.Fatalf("wrong auth event: %+v", ev)
+					}
+				default:
+					t.Fatal("missing unauthenticated event")
+				}
+			} else {
+				select {
+				case ev := <-events:
+					t.Fatalf("successful user logged: %+v", ev)
+				default:
+				}
 			}
 		}
 	}

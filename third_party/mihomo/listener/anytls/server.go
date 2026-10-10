@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"github.com/metacubex/mihomo/component/authevent"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -225,6 +226,7 @@ func (l *Listener) HandleConn(conn net.Conn, h *sing.ListenerHandler) {
 	if user, ok := l.userMap[passwordSha256]; ok {
 		ctx = auth.ContextWithUser(ctx, user)
 	} else {
+		authevent.Emit(authevent.Event{Protocol: "anytls", Local: conn.LocalAddr().String(), Remote: conn.RemoteAddr().String(), Reason: "wrong_credentials"})
 		return
 	}
 	by, err = b.ReadBytes(2)

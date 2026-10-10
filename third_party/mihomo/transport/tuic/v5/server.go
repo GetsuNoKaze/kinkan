@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"github.com/metacubex/mihomo/component/authevent"
 	"net"
 	"sync"
 
@@ -55,6 +56,7 @@ func (s *serverHandler) AuthOk() bool {
 
 func (s *serverHandler) HandleTimeout() {
 	s.authOnce.Do(func() {
+		authevent.Emit(authevent.Event{Protocol: "tuic", Local: s.quicConn.LocalAddr().String(), Remote: s.quicConn.RemoteAddr().String(), Reason: "authentication_timeout"})
 		_ = s.quicConn.CloseWithError(AuthenticationTimeout, "AuthenticationTimeout")
 		s.authOk.Store(false)
 		close(s.authCh)
@@ -168,6 +170,7 @@ func (s *serverHandler) HandleUniStream(reader *bufio.Reader) (err error) {
 		}
 		s.authOnce.Do(func() {
 			if !authOk {
+				authevent.Emit(authevent.Event{Protocol: "tuic", Local: s.quicConn.LocalAddr().String(), Remote: s.quicConn.RemoteAddr().String(), Reason: "wrong_credentials"})
 				_ = s.quicConn.CloseWithError(AuthenticationFailed, "AuthenticationFailed")
 			}
 			s.authOk.Store(authOk)

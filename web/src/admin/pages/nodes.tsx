@@ -19,6 +19,7 @@ import { SpeedDrawer } from "./node-speed";
 import { NodeTrafficDrawer } from "./node-traffic";
 import { WarpDrawer } from "./node-warp";
 import { TTProbeDrawer } from "./node-ttprobe";
+import { ScannerDrawer } from "./node-scanners";
 import { SiteDrawer } from "./node-site";
 
 type Node = Schemas["NodeInfo"];
@@ -43,6 +44,7 @@ export function NodesPage() {
   const [joined, setJoined] = useState<Joined | null>(null);
   const [warpOf, setWarpOf] = useState<Node | null>(null);
   const [speedOf, setSpeedOf] = useState<Node | null>(null);
+  const [scannersOf, setScannersOf] = useState<Node | null>(null);
   const [probeOf, setProbeOf] = useState<Node | null>(null);
   const [siteOf, setSiteOf] = useState<Node | null>(null);
   const [trafficOf, setTrafficOf] = useState<Node | null>(null);
@@ -178,7 +180,7 @@ export function NodesPage() {
                 </p>
               ) : null}
               {list.map((n, idx) => (
-                <NodeCard key={n.id} n={n} idx={idx} total={list.length} ordering={ordering} sorting={order.isPending} moving={order.isPending && order.variables.moved === n.id} onMove={(by) => move(list, idx, by)} updating={update.isPending && update.variables === n.id} busy={update.isPending} onUpdate={() => setUpdateOf(n)} onEdit={() => setEditing(n)} onWarp={() => setWarpOf(n)} onSpeed={() => setSpeedOf(n)} onProbe={() => setProbeOf(n)} onSite={() => setSiteOf(n)} onTraffic={() => setTrafficOf(n)} onCascade={() => setCascadeOf(n)} onCert={() => setCertOf(n)} onRekey={() => setRekeying(n)} onRemove={() => setRemoving(n)} />
+                <NodeCard key={n.id} n={n} idx={idx} total={list.length} ordering={ordering} sorting={order.isPending} moving={order.isPending && order.variables.moved === n.id} onMove={(by) => move(list, idx, by)} updating={update.isPending && update.variables === n.id} busy={update.isPending} onUpdate={() => setUpdateOf(n)} onEdit={() => setEditing(n)} onWarp={() => setWarpOf(n)} onSpeed={() => setSpeedOf(n)} onProbe={() => setProbeOf(n)} onScanners={() => setScannersOf(n)} onSite={() => setSiteOf(n)} onTraffic={() => setTrafficOf(n)} onCascade={() => setCascadeOf(n)} onCert={() => setCertOf(n)} onRekey={() => setRekeying(n)} onRemove={() => setRemoving(n)} />
               ))}
             </div>
           )
@@ -196,6 +198,7 @@ export function NodesPage() {
       <KeyDrawer joined={joined} onClose={() => setJoined(null)} />
       <WarpDrawer node={warpOf ? { id: warpOf.id, name: nodeLabel(warpOf) } : null} onClose={() => setWarpOf(null)} />
       <SpeedDrawer node={speedOf ? { id: speedOf.id, name: nodeLabel(speedOf) } : null} onClose={() => setSpeedOf(null)} />
+      <ScannerDrawer node={scannersOf} onClose={() => setScannersOf(null)} />
       <TTProbeDrawer node={probeOf} onClose={() => setProbeOf(null)} />
       <SiteDrawer node={siteOf} onClose={() => setSiteOf(null)} />
       <NodeTrafficDrawer node={trafficOf ? { id: trafficOf.id, name: nodeLabel(trafficOf) } : null} onClose={() => setTrafficOf(null)} />
@@ -259,6 +262,7 @@ function NodeCard({
   onWarp,
   onSpeed,
   onProbe,
+  onScanners,
   onSite,
   onTraffic,
   onCascade,
@@ -286,6 +290,7 @@ function NodeCard({
   onWarp: () => void;
   onSpeed: () => void;
   onProbe: () => void;
+  onScanners: () => void;
   onSite: () => void;
   onTraffic: () => void;
   onCascade: () => void;
@@ -411,6 +416,7 @@ function NodeCard({
         <Button size="sm" onClick={onTraffic}>
           <Activity size={16} aria-hidden /> {t("nodeTraffic.button")}
         </Button>
+        <Button size="sm" onClick={onScanners}><Activity size={16} aria-hidden />{t("scanners.title")}</Button>
         <Button size="sm" onClick={onProbe}>
           <ShieldCheck size={16} aria-hidden /> {t("ttProbe.button")}
         </Button>

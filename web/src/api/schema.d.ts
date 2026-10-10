@@ -677,6 +677,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/nodes/{id}/protocol-probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Проверить протоколы глазами сканера */
+        post: operations["probe-node-protocols"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/nodes/{id}/scanners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Журнал неудачных обращений */
+        get: operations["node-scanners"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/nodes/{id}/site": {
         parameters: {
             query?: never;
@@ -2509,6 +2543,14 @@ export interface components {
             /** @description Marzban, PasarGuard: логин администратора */
             username?: string;
         };
+        InboundProbeView: {
+            /** Format: int64 */
+            inbound_id: number;
+            name: string;
+            network: string;
+            port: string;
+            report: components["schemas"]["ProtocolProbeReport"];
+        };
         InboundView: {
             /** @description Приложения, которым подключение попадает в подписку: mihomo, xray, singbox, stash, other */
             apps: string[];
@@ -2798,6 +2840,26 @@ export interface components {
             /** @description Ключ подключения ноды: показывается один раз */
             key: string;
             node: components["schemas"]["NodeInfo"];
+        };
+        NodeProbeInputBody: {
+            /**
+             * Format: int64
+             * @description 0 scans all enabled inbounds
+             */
+            inbound_id?: number;
+            /** Format: int64 */
+            reference_port?: number;
+        };
+        NodeProbeView: {
+            address: string;
+            inbounds: components["schemas"]["InboundProbeView"][];
+            local_node: boolean;
+            /** Format: int64 */
+            node_id: number;
+            /** Format: date-time */
+            started_at: string;
+            /** @enum {string} */
+            vantage: "panel";
         };
         NodeShare: {
             /**
@@ -3581,6 +3643,15 @@ export interface components {
             /** Format: int64 */
             successful_activations: number;
         };
+        ProtocolProbeReport: {
+            findings: components["schemas"]["Finding"][];
+            incomplete: boolean;
+            protocol: string;
+            reference?: string;
+            target: string;
+            /** @enum {string} */
+            verdict: "quiet" | "noticeable" | "exposed" | "inconclusive";
+        };
         PutSubImageInputBody: {
             /** @description Картинка в base64: PNG, JPEG или WebP; логотип до 512 КБ, фон до 2 МБ. SVG не принимается */
             data: string;
@@ -3703,6 +3774,42 @@ export interface components {
             scanned: number;
             /** @description Свой домен с сертификатом панели */
             self_steal?: components["schemas"]["Result"];
+        };
+        ScannerDay: {
+            /** Format: int64 */
+            clients: number;
+            /** Format: int64 */
+            count: number;
+            /** Format: int64 */
+            day: number;
+        };
+        ScannerRecord: {
+            asn?: string;
+            client: boolean;
+            /** Format: int64 */
+            count: number;
+            country?: string;
+            /** Format: int64 */
+            day: number;
+            evidence?: string;
+            /** Format: int64 */
+            first: number;
+            inbound: string;
+            ip: string;
+            /** Format: int64 */
+            last: number;
+            method?: string;
+            organization?: string;
+            protocol: string;
+            ptr?: string;
+            reason: string;
+            scanner: string;
+        };
+        ScannerView: {
+            coverage: string;
+            days: components["schemas"]["ScannerDay"][];
+            records: components["schemas"]["ScannerRecord"][];
+            spike: boolean;
         };
         Servers: {
             auto?: string;
@@ -6098,6 +6205,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NodeKeyOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "probe-node-protocols": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NodeProbeInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeProbeView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "node-scanners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScannerView"];
                 };
             };
             /** @description Error */
