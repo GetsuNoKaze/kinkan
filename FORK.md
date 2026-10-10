@@ -17,14 +17,15 @@ Plans: [ROADMAP.md](ROADMAP.md).
 | TrustTunnel without credentials | answers `407`, which identifies the port as a proxy | requests, `CONNECT` included, go to a real site through `fallback` | done |
 | TrustTunnel ALPN | none negotiated, browsers fall back to HTTP/1.1 | `h2, http/1.1` when `fallback` is set | done |
 | HTTP/2 without ALPN | spoken on TLS that negotiated `http/1.1` or nothing | with `fallback`, only after negotiating `h2`; a bare preface gets an HTTP/1 answer | done |
-| Wrong credentials in the log | logged | logged; requests without credentials at debug level only | done |
+| Wrong credentials in the log | logged | logged at most once per 10 seconds with a count of the rest; requests without credentials at debug level only | done |
 | `fallback` in the panel | | checked when saved: `host:port`, no link-local address (cloud metadata) | done |
-| Stalled clients on the fallback | | idle limit, 256 concurrent requests at most, cancelled on restart | done |
+| Stalled clients on the fallback | | idle limit, 256 concurrent requests at most and 64 per client network (/32, IPv6 /64), cancelled on restart | done |
+| Fallback backend address | | link-local, multicast and unspecified addresses refused when dialing, also behind a host name | done |
 | `fallback` in a TrustTunnel template | rejected | accepted | done |
 | Cover site | served by the panel only, on its port | served by every node on `127.0.0.1`, no Caddy needed | planned |
 | Site for TrustTunnel | | `fallback` set automatically when the node has a domain | planned |
 | REALITY targets | a wrong target goes unnoticed | checked: your certificate and your site behind your SNI | planned |
-| Scanner check | | admin UI (Nodes → Check TrustTunnel) and `kinkan probe`: 33 checks, proxy-auth leaks, ALPN/SNI, raw HTTP/2, cover response and HTTP/2 fingerprint comparison; [usage](PROBE-TT.md) | implemented; next release |
+| Scanner check | | admin UI (Nodes → Check TrustTunnel) and `kinkan probe`: 36 checks, proxy-auth leaks, ALPN/SNI, raw HTTP/2, absolute-form and foreign-Host requests, cover response and HTTP/2 fingerprint comparison; [usage](PROBE-TT.md) | implemented; next release |
 | Scanner counter | | requests without credentials per day on TrustTunnel, in the panel | planned |
 | Manual settings after an update | an update can reset them | `mikan-ensure` restores them and reports to Telegram | planned |
 
