@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="../.github/assets/kinkan/banner-ru-ai-v2.png" alt="Kinkan — свой сайт, измерения, меньше догадок" width="100%">
+<img src="../.github/assets/kinkan/banner-ru.webp" alt="Kinkan — свой сайт, измерения, меньше догадок" width="100%">
 
 **VPN-панель на [mihomo](https://github.com/MetaCubeX/mihomo), которая помогает понять, что выдаёт вашу ноду при сканировании.**
 
@@ -9,7 +9,7 @@
 [![Образ](https://img.shields.io/badge/ghcr.io-getsunokaze%2Fkinkan-2b8c9e?style=flat-square&logo=docker&logoColor=white)](https://github.com/GetsuNoKaze/kinkan/pkgs/container/kinkan)
 [![Лицензия](https://img.shields.io/badge/license-GPL--3.0-52886d?style=flat-square)](../LICENSE)
 
-**Русский** · [English](../README.en.md)
+**Русский** · [English](README.en.md)
 
 [Установить](#установка) · [Что добавляет Kinkan](#что-добавляет-kinkan) · [Посмотреть интерфейс](#как-это-выглядит) · [Документация](#документация)
 
@@ -52,7 +52,7 @@ Kinkan — неофициальный форк [Mikan](https://github.com/Mirosh
 </tr>
 </table>
 
-<p align="center"><img src="../.github/assets/kinkan/flow-ru-ai-v2.png" alt="Неверная авторизация TrustTunnel ведёт на сайт; проверка протоколов собирает ответы и сравнивает их с эталоном" width="100%"></p>
+<p align="center"><img src="../.github/assets/kinkan/flow-ru.webp" alt="Неверная авторизация TrustTunnel ведёт на сайт; проверка протоколов собирает ответы и сравнивает их с эталоном" width="100%"></p>
 
 **Что важно знать.** Эти возможности не делают любой VPN невидимым. Журнал сейчас охватывает TrustTunnel, отказы REALITY, TUIC, неверную авторизацию AnyTLS и запросы авторизации Hysteria2. Маскировка obfs, часть ошибок и остальные протоколы ещё не имеют полного покрытия. Таймаут не считается признаком скрытности; для итога «Тихий» нужен сайт для сравнения. [Подробности замеров и ограничений →](../PROBE-PROTOCOLS.md)
 

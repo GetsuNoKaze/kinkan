@@ -11,7 +11,7 @@
 [![Checks](https://img.shields.io/github/actions/workflow/status/GetsuNoKaze/kinkan/tt-check.yml?branch=main&label=checks&style=flat-square)](https://github.com/GetsuNoKaze/kinkan/actions/workflows/tt-check.yml)
 [![License](https://img.shields.io/badge/license-GPL--3.0-52886d?style=flat-square)](../LICENSE)
 
-[Русский](../README.md) · **English**
+[Русский](README.md) · **English**
 
 </div>
 
@@ -61,7 +61,13 @@ For a remote node, copy its join command from the panel's **Nodes** page:
 curl -fsSL https://github.com/GetsuNoKaze/kinkan/releases/latest/download/install.sh | sudo bash -s -- --join YOUR_JOIN_KEY
 ```
 
-Replace `YOUR_JOIN_KEY` with the panel's key. Run Kinkan on both panel and nodes. For an existing Mikan or early Kinkan installation, back up first and follow [the migration and update guide](../RELEASE-TT.md), including compatibility considerations for a rollback.
+Replace `YOUR_JOIN_KEY` with the panel's key. Run Kinkan on both panel and nodes. 
+
+### Switching from Mikan
+
+Back up (`mikan backup`), then run the same install command on the panel's server: on a server with Mikan it updates the installation in place, keeping users, subscriptions and settings, and adds the `kinkan` command. Update separate nodes from the panel (**Nodes → Update**), one at a time: moving separate nodes has not been tested on our test server yet.
+
+Kinkan follows Mikan: a `X-tt.N` release is built on the Mikan before it. A server on a Mikan newer than Kinkan's latest release stays on Mikan, since the installer never goes back a version, and says so; it moves to Kinkan with the first release built on its Mikan. Going back to Mikan keeps the database: see [RELEASE-TT.md](../RELEASE-TT.md).
 
 ## First steps
 
