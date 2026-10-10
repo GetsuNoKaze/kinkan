@@ -151,7 +151,8 @@
       "noticeable": "The inbound's answers differ from an ordinary website. Details below.",
       "no_reference": "There was nothing to compare with. Check again with a reference: usually port 443, where REALITY shows the node's site.",
       "obfuscated": "The port is silent without the password, as it should be with obfs. Nothing more can be checked from outside.",
-      "incomplete": "The check did not finish or the protocol is not supported yet. That does not mean quiet."
+      "incomplete": "The check did not finish or the protocol is not supported yet. That does not mean quiet.",
+      "reality_far": "The REALITY target \"{target}\" lives in another network (AS{target_as} {target_org}) than the node (AS{node_as} {node_org}). A scanner sees that site's certificate on a hosting address, a known sign of REALITY. Pick a target near the server (Protocols → the inbound → Find near the server) or give the node its own site."
     },
     "disable": "Turn the inbound off",
     "site": "Open \"Node site\"",

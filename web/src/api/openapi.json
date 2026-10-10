@@ -5147,6 +5147,7 @@
               "tt_differs",
               "reality_site",
               "reality_differs",
+              "reality_far",
               "exposed",
               "noticeable",
               "no_reference",
@@ -5169,6 +5170,12 @@
           },
           "name": {
             "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
           }
         },
         "required": [

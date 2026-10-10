@@ -3679,12 +3679,15 @@ export interface components {
              * @description Что не так; текст — quietNode.advice.<code>
              * @enum {string}
              */
-            code: "tuic_auth" | "quic_obfs" | "quic_auth" | "tt_site" | "tt_differs" | "reality_site" | "reality_differs" | "exposed" | "noticeable" | "no_reference" | "obfuscated" | "incomplete";
+            code: "tuic_auth" | "quic_obfs" | "quic_auth" | "tt_site" | "tt_differs" | "reality_site" | "reality_differs" | "reality_far" | "exposed" | "noticeable" | "no_reference" | "obfuscated" | "incomplete";
             /** Format: int64 */
             inbound_id: number;
             /** @enum {string} */
             level: "exposed" | "noticeable" | "inconclusive";
             name: string;
+            params?: {
+                [key: string]: string;
+            };
         };
         QuietView: {
             advice: components["schemas"]["QuietAdvice"][];

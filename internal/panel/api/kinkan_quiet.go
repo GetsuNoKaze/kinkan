@@ -1,10 +1,14 @@
 package api
 
 import (
+	"context"
 	"net"
+	"net/netip"
 	"strconv"
+	"time"
 
 	"mikan/internal/nodeapi"
+	"mikan/internal/panel/domain"
 	"mikan/internal/proto"
 )
 
@@ -25,13 +29,22 @@ type QuietAdvice struct {
 	InboundID int64  `json:"inbound_id"`
 	Name      string `json:"name"`
 	Level     string `json:"level" enum:"exposed,noticeable,inconclusive"`
-	Code      string `json:"code" enum:"tuic_auth,quic_obfs,quic_auth,tt_site,tt_differs,reality_site,reality_differs,exposed,noticeable,no_reference,obfuscated,incomplete" doc:"Что не так; текст — quietNode.advice.<code>"`
+	Code      string `json:"code" enum:"tuic_auth,quic_obfs,quic_auth,tt_site,tt_differs,reality_site,reality_differs,reality_far,exposed,noticeable,no_reference,obfuscated,incomplete" doc:"Что не так; текст — quietNode.advice.<code>"`
 	Action    string `json:"action" enum:"disable,site,reference,none" doc:"Что предложить: выключить подключение, дать ноде сайт, повторить с эталоном или ничего"`
+	// Params fill the advice's text: for reality_far the target and both networks.
+	Params map[string]string `json:"params,omitempty"`
 }
 
 type quietItem struct {
 	view     InboundProbeView
 	template proto.Template // nil when it does not parse
+	far      *farTarget     // a REALITY target in another network than the node's
+}
+
+// farTarget is a REALITY target whose address is in another network (AS) than the node:
+// a big site's certificate on a hosting provider's address is a known sign of REALITY.
+type farTarget struct {
+	Host, TargetAS, TargetOrg, NodeAS, NodeOrg string
 }
 
 // verdictRank orders verdicts from quiet to exposed: an unknown answer is worse than a
@@ -59,6 +72,13 @@ func adviseQuiet(items []quietItem, siteServed bool) QuietView {
 		r := it.view.Report
 		if verdictRank(r.Verdict) > verdictRank(out.Verdict) {
 			out.Verdict = r.Verdict
+		}
+		if f := it.far; f != nil {
+			if verdictRank("noticeable") > verdictRank(out.Verdict) {
+				out.Verdict = "noticeable"
+			}
+			out.Advice = append(out.Advice, QuietAdvice{InboundID: it.view.InboundID, Name: it.view.Name, Level: "noticeable", Code: "reality_far", Action: "none",
+				Params: map[string]string{"target": f.Host, "target_as": f.TargetAS, "target_org": f.TargetOrg, "node_as": f.NodeAS, "node_org": f.NodeOrg}})
 		}
 		if r.Verdict == "quiet" {
 			continue
@@ -148,4 +168,46 @@ func (h *handlers) siteServedBy(nodeID int64) bool {
 	}
 	s := hv.Health.Site
 	return s.Error == "" && (s.HTTP != "" || s.HTTPS != "")
+}
+
+// farTargetOf looks up whether an inbound's REALITY target lies in another network than
+// the node (nodeIP). nil when it does not, when either network is not known (no GeoIP
+// database yet) or the target is the node's own (loopback).
+func (h *handlers) farTargetOf(ctx context.Context, t proto.Template, nodeIP netip.Addr) *farTarget {
+	if h.d.GeoIP == nil || t == nil {
+		return nil
+	}
+	reality, ok := t["reality-config"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	dest, _ := reality["dest"].(string)
+	host, _, err := net.SplitHostPort(dest)
+	if err != nil || host == "127.0.0.1" || host == "localhost" {
+		return nil
+	}
+	var ip netip.Addr
+	if a, err := netip.ParseAddr(host); err == nil {
+		ip = a
+	} else {
+		resolve := h.d.Resolve
+		if resolve == nil {
+			resolve = domain.SystemResolve
+		}
+		lookup, cancel := context.WithTimeout(ctx, 3*time.Second)
+		addrs, err := resolve(lookup, host)
+		cancel()
+		if err != nil || len(addrs) == 0 {
+			return nil
+		}
+		ip = addrs[0]
+	}
+	if !proto.PublicAddr(ip.Unmap()) {
+		return nil
+	}
+	target, node := h.d.GeoIP.Lookup(ip.Unmap()), h.d.GeoIP.Lookup(nodeIP.Unmap())
+	if target.ASN == "" || node.ASN == "" || target.ASN == node.ASN {
+		return nil
+	}
+	return &farTarget{Host: host, TargetAS: target.ASN, TargetOrg: target.Organization, NodeAS: node.ASN, NodeOrg: node.Organization}
 }

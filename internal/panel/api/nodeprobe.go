@@ -196,7 +196,7 @@ func (h *handlers) probeNode(ctx context.Context, in *nodeProbeInput) (*nodeProb
 	}
 	items := make([]quietItem, len(views))
 	for i := range views {
-		items[i] = quietItem{view: views[i], template: templates[i]}
+		items[i] = quietItem{view: views[i], template: templates[i], far: h.farTargetOf(ctx, templates[i], ip)}
 	}
 	quiet := adviseQuiet(items, h.siteServedBy(node.ID))
 	return &nodeProbeOutput{Body: NodeProbeView{StartedAt: started, NodeID: node.ID, Vantage: "panel", Address: ip.String(), LocalNode: node.Address == "", Inbounds: views, Quiet: quiet}}, nil

@@ -35,9 +35,9 @@ export function QuietSummary({ quiet, onSite, onReference }: { quiet: Quiet; onS
     <h3 id="quiet-node-title" className="text-sm font-medium">{t("quietNode.title")}</h3>
     <div role="status" className={`banner ${banner(quiet.verdict)}`}>{tMaybe(`quietNode.verdict.${quiet.verdict}`) ?? quiet.verdict}</div>
     {quiet.advice.length > 0 ? <ul className="space-y-2">
-      {quiet.advice.map((a) => <li key={a.inbound_id} className="space-y-2 rounded-xl border border-[var(--hairline)] p-3 text-sm">
+      {quiet.advice.map((a) => <li key={`${a.inbound_id}/${a.code}`} className="space-y-2 rounded-xl border border-[var(--hairline)] p-3 text-sm">
         <div className="flex flex-wrap items-center gap-2"><Pill tone={tone(a.level)}>{tMaybe(`quietNode.level.${a.level}`) ?? a.level}</Pill><span className="font-medium break-words">{a.name}</span></div>
-        <p>{tMaybe(`quietNode.advice.${a.code}`) ?? a.code}</p>
+        <p>{tMaybe(`quietNode.advice.${a.code}`, a.params ?? undefined) ?? a.code}</p>
         {a.action === "disable" ? (disabled.includes(a.inbound_id)
           ? <p className="text-xs text-[var(--ink-500)]">{t("quietNode.disabledDone", { name: a.name })}</p>
           : <Button size="sm" onClick={() => setDisabling(a)}><PowerOff size={16} aria-hidden />{t("quietNode.disable")}</Button>) : null}
