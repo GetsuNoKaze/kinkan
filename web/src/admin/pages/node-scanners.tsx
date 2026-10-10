@@ -14,13 +14,14 @@ export function ScannerDrawer({ node, onClose }: { node: Node | null; onClose: (
 }
 function Journal({ node }: { node: Node }) {
   const [showClients, setShowClients] = useState(false);
+  const [showOwn, setShowOwn] = useState(false);
   const result = useQuery({ queryKey: ["scanners", node.id], queryFn: ({ signal }) => unwrap(api.GET("/api/v1/nodes/{id}/scanners", { params: { path: { id: node.id } }, signal })), refetchInterval: 30_000 });
   if (result.isPending) return <p role="status">{t("common.loading")}</p>;
   if (result.isError) return <p role="alert">{errorText(result.error)}</p>;
   const grouped = new Map<string, Schemas["ScannerRecord"] & { methods: Set<string>; reasons: Set<string> }>();
   for (const row of result.data.records) {
-    if (row.client && !showClients) continue;
-    const key = `${row.ip}/${row.inbound}/${row.protocol}/${row.client}`;
+    if (row.own ? !showOwn : row.client && !showClients) continue;
+    const key = `${row.ip}/${row.inbound}/${row.protocol}/${row.client}/${!!row.own}`;
     const old = grouped.get(key);
     if (old) { old.count += row.count; old.first = Math.min(old.first, row.first); old.last = Math.max(old.last, row.last); old.methods.add(row.method ?? ""); old.reasons.add(row.reason); }
     else grouped.set(key, { ...row, methods: new Set([row.method ?? ""]), reasons: new Set([row.reason]) });
@@ -38,13 +39,15 @@ function Journal({ node }: { node: Node }) {
       </svg>
     </figure>
     <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showClients} onChange={(e) => setShowClients(e.target.checked)} />{t("scanners.showClients")}</label>
+    <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showOwn} onChange={(e) => setShowOwn(e.target.checked)} />{t("scanners.showOwn")}</label>
     {rows.length === 0 ? <p>{t("scanners.empty")}</p> : <div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead><tr><th>{t("scanners.source")}</th><th>{t("scanners.who")}</th><th>{t("scanners.inbound")}</th><th>{t("scanners.attempts")}</th><th>{t("scanners.when")}</th></tr></thead><tbody>
-      {rows.map((r) => <tr key={`${r.ip}/${r.inbound}/${r.protocol}/${r.client}`} className="border-t border-[var(--hairline)] align-top">
+      {rows.map((r) => <tr key={`${r.ip}/${r.inbound}/${r.protocol}/${r.client}/${!!r.own}`} className="border-t border-[var(--hairline)] align-top">
         <td className="py-3 pr-3"><p className="mono">{r.ip}</p><p>{r.country || "—"} {r.asn ? `AS${r.asn}` : ""} {r.organization}</p><p className="break-all">{r.ptr}</p></td>
-        <td className="py-3 pr-3"><Pill tone={r.client ? "off" : "warn"}>{r.client ? t("scanners.client") : r.scanner === "unknown" ? t("scanners.unknown") : r.scanner}</Pill><p>{r.evidence}</p></td>
+        <td className="py-3 pr-3"><Pill tone={r.own || r.client ? "off" : "warn"}>{r.own ? t("scanners.own") : r.client ? t("scanners.client") : r.scanner === "unknown" ? t("scanners.unknown") : r.scanner}</Pill><p>{r.evidence}</p></td>
         <td className="py-3 pr-3">{r.inbound} · {r.protocol}<p>{[...r.methods].filter(Boolean).join(", ")}</p><p>{[...r.reasons].join(", ")}</p></td>
         <td className="py-3 pr-3">{r.count}</td><td className="py-3">{new Date(r.first * 1000).toLocaleString()}<br />{new Date(r.last * 1000).toLocaleString()}</td>
       </tr>)}
     </tbody></table></div>}
+    <p className="text-xs text-[var(--ink-500)]">{t("scanners.geoSource")} <a href="https://db-ip.com" target="_blank" rel="noreferrer" className="underline">IP Geolocation by DB-IP</a></p>
   </div>;
 }

@@ -2,10 +2,15 @@ package api
 
 import (
 	"context"
+	"net/http"
+	"net/netip"
+	"time"
+
 	"github.com/danielgtaylor/huma/v2"
 	"mikan/internal/nodeapi"
-	"net/http"
-	"time"
+	"mikan/internal/panel/domain"
+	"mikan/internal/panel/settings"
+	"mikan/internal/proto"
 )
 
 type scannerInput struct {
@@ -15,6 +20,7 @@ type ScannerDay struct {
 	Day     int64 `json:"day"`
 	Count   int64 `json:"count"`
 	Clients int64 `json:"clients"`
+	Own     int64 `json:"own" doc:"Проверки самой панели"`
 }
 type ScannerView struct {
 	Records  []nodeapi.ScannerRecord `json:"records"`
@@ -36,6 +42,26 @@ func (h *handlers) scannersOf(ctx context.Context, in *scannerInput) (*scannerOu
 	if err != nil {
 		return nil, err
 	}
+	own := h.panelAddrs(ctx)
+	for i := range records {
+		r := &records[i]
+		ip, err := netip.ParseAddr(r.IP)
+		if err != nil {
+			continue
+		}
+		ip = ip.Unmap()
+		// Whatever the node says, only the panel knows its own address.
+		r.Own = own[ip]
+		if h.d.GeoIP != nil && (r.Country == "" || r.ASN == "") && proto.PublicAddr(ip) {
+			info := h.d.GeoIP.Lookup(ip)
+			if r.Country == "" {
+				r.Country = info.Country
+			}
+			if r.ASN == "" && info.ASN != "" {
+				r.ASN, r.Organization = info.ASN, info.Organization
+			}
+		}
+	}
 	byDay := map[int64]*ScannerDay{}
 	for _, r := range records {
 		d := byDay[r.Day]
@@ -43,9 +69,12 @@ func (h *handlers) scannersOf(ctx context.Context, in *scannerInput) (*scannerOu
 			d = &ScannerDay{Day: r.Day}
 			byDay[r.Day] = d
 		}
-		if r.Client {
+		switch {
+		case r.Own:
+			d.Own += r.Count
+		case r.Client:
 			d.Clients += r.Count
-		} else {
+		default:
 			d.Count += r.Count
 		}
 	}
@@ -64,5 +93,34 @@ func (h *handlers) scannersOf(ctx context.Context, in *scannerInput) (*scannerOu
 		}
 	}
 	current := days[len(days)-1].Count
+	// The panel's own checks (Nodes → the check) come from its address and are not
+	// scanners: they stay out of Count and so out of the spike.
 	return &scannerOutput{Body: ScannerView{Records: records, Days: days, Spike: current >= 100 && current > 3*max(1, prior/7), Coverage: "TrustTunnel unauthenticated HTTP; REALITY rejected handshakes; TUIC timeout/wrong auth; Hysteria2 rejected /auth; AnyTLS wrong auth. Ordinary Hysteria2 HTTP, pre-QUIC/obfs failures and other protocols are not recorded yet."}}, nil
+}
+
+// panelAddrs are the panel's public addresses: what its domain and public host lead to.
+// The panel's checks of its nodes come from there.
+func (h *handlers) panelAddrs(ctx context.Context) map[netip.Addr]bool {
+	out := map[netip.Addr]bool{}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	for _, key := range []string{settings.KeyDomain, settings.KeyPublicHost} {
+		host, err := h.d.Settings.String(ctx, key)
+		if err != nil || host == "" {
+			continue
+		}
+		if ip, err := netip.ParseAddr(host); err == nil {
+			out[ip.Unmap()] = true
+			continue
+		}
+		resolve := h.d.Resolve
+		if resolve == nil {
+			resolve = domain.SystemResolve
+		}
+		addrs, _ := resolve(ctx, host)
+		for _, ip := range addrs {
+			out[ip.Unmap()] = true
+		}
+	}
+	return out
 }

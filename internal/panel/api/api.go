@@ -23,6 +23,7 @@ import (
 	"mikan/internal/panel/billing"
 	"mikan/internal/panel/dnscheck"
 	"mikan/internal/panel/domain"
+	"mikan/internal/panel/geoip"
 	"mikan/internal/panel/nodesync"
 	"mikan/internal/panel/nodeupdate"
 	"mikan/internal/panel/panelimport"
@@ -105,6 +106,9 @@ type Deps struct {
 	NodeUpdates *nodeupdate.Service
 	// Addons are the marketplace's payment adapters; nil in tests.
 	Addons *addons.Manager
+	// GeoIP finds the country and network of the scanner journal's addresses; nil: what
+	// the nodes found is shown as it is (Kinkan).
+	GeoIP interface{ Lookup(netip.Addr) geoip.Info }
 	// Resolve looks a name up for what the panel dials on the admin's word (a REALITY
 	// target); nil asks the system's resolver.
 	Resolve func(ctx context.Context, host string) ([]netip.Addr, error)
