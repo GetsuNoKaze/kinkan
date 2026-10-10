@@ -26,8 +26,28 @@ record the old image digest first. This also replaces the old signing key truste
 tt.1/tt.2 with Kinkan's current key. After a successful update, verify `kinkan status`,
 subscriptions and the other protocols; later stable releases use `kinkan update`.
 
-This one-time procedure and rollback still need to be checked on the canary. Do not
-promote an existing prerelease or enable automatic updates merely to skip the test.
+Checked on the test node on 10.10.2026, both ways, with the database kept:
+
+- **Mikan → Kinkan:** the one-line install above on a server running official Mikan
+  0.5.0.4 updated it to 0.5.0.5-tt.4 (backup first, then the new image and command).
+  A TrustTunnel inbound with `fallback` came back on its own; `smoke.sh` passed.
+- **Kinkan → Mikan (rollback):**
+  1. `mikan backup`, and note the current image (`grep MIKAN_IMAGE /opt/mikan/.env`).
+  2. Download Mikan's installer for the target release and check its signed manifest
+     with Mikan's key and the installer's sha256, as install.sh does.
+  3. `./mikan-official update ghcr.io/miroshka000/mikan@sha256:<digest from its manifest>`.
+     The database is kept: Kinkan adds no migrations of its own so far.
+  4. **Replace the command too:** `install -m 755 mikan-official /usr/local/bin/mikan`,
+     `rm -f /usr/local/bin/kinkan`, `mikan post-update`. Without it Kinkan's command
+     stays, and since Kinkan's releases are stable it moves the server back to Kinkan on
+     the next daily update check.
+  5. Mikan's panel leaves a TrustTunnel inbound with `fallback` out of the node's state
+     (`inbound left out of the node's state: trusttunnel: config_key (fallback)`); the
+     other protocols keep working. Remove `fallback` from the template to get TT back on
+     Mikan, with its `407` answers.
+
+Once the fork adds database migrations of its own, step 3 also needs the backup from
+before them restored.
 
 ## First-candidate procedure (historical)
 
