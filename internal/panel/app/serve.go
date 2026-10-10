@@ -26,7 +26,6 @@ import (
 	"mikan/internal/panel/config"
 	"mikan/internal/panel/dnscheck"
 	"mikan/internal/panel/domain"
-	"mikan/internal/panel/geoip"
 	"mikan/internal/panel/nodesync"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
@@ -81,10 +80,11 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 
 	opts := Options{Version: version, Web: web, TrustProxy: cfg.TrustProxy, Log: logger, Now: time.Now,
 		Autotune: autotune.DefaultOptions().Scaled(cfg.AutotuneScale), TelegramAPI: cfg.TelegramAPI,
-		DataDir: cfg.DataDir, Releases: updates.Fetch(release.IndexURL, release.LatestURL), DNS: dnscheck.New(), GeoIP: geoip.BaseURL}
+		DataDir: cfg.DataDir, Releases: updates.Fetch(release.IndexURL, release.LatestURL), DNS: dnscheck.New()}
 	nodesDir := filepath.Join(tlsDir, "nodes")
 	nodeCerts := tlscert.NewNodeStore(filepath.Join(tlsDir, "custom-nodes"), time.Now)
 	opts.NodeCerts = nodeCerts
+	opts.KinkanOptions = kinkanOptions() // Kinkan
 	set := settings.New(st.Q)
 	// A node's own certificate (Nodes → Certificate) goes first: links pin it only when
 	// clients cannot trust it, so a renewal of a public one changes nothing for them.

@@ -1,6 +1,8 @@
 name: tt check
 
-# The fork's own checks on every push and pull request (scripts/tt/check.sh).
+# The fork's own checks on every push and pull request: scripts/tt/check.sh, and real
+# TrustTunnel client traffic and cover probes before and after a node restart (node-e2e).
+# Kept apart from mikan's ci.yml, so that merges from upstream do not meet them.
 on:
   push:
   pull_request:
@@ -21,3 +23,31 @@ jobs:
           go-version: "1.27"
           cache: false
       - run: scripts/tt/check.sh
+
+  node-e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Docker Hub's anonymous pull limit is shared by the runners' addresses. The e2e
+      # images are pulled from Google's mirror of it and tagged with their Docker Hub names,
+      # so compose finds them here; dockerd's registry-mirrors is not used by the
+      # containerd image store of this Docker.
+      - name: Docker Hub images through mirror.gcr.io
+        run: |
+          for img in $(sed -n -E 's/^\s*image:\s*([^ #]+).*/\1/p; s/^FROM\s+([^ ]+).*/\1/p' test/e2e/compose.yaml test/e2e/Dockerfile | sort -u); do
+            case "$img" in
+              */*) case "${img%%/*}" in *.* | *:*) continue ;; esac  # another registry
+                   src="mirror.gcr.io/$img" ;;
+              *) src="mirror.gcr.io/library/$img" ;;
+            esac
+            docker pull -q "$src" && docker tag "$src" "$img"
+          done
+          docker image ls --format '{{.Repository}}:{{.Tag}}'
+      - name: authenticated TrustTunnel, cover and restart
+        env:
+          E2E_RUN: TrustTunnel
+          E2E_RESTART: "1"
+        run: sh test/e2e/run.sh

@@ -23,7 +23,8 @@ jobs:
     runs-on: ubuntu-24.04
     services:
       postgres:
-        image: mirror.gcr.io/library/postgres:18-alpine # Kinkan: Docker Hub mirror (see the image job)
+        # Google's Docker Hub mirror: Docker Hub limits anonymous pulls and has outages.
+        image: mirror.gcr.io/library/postgres:18-alpine
         env:
           POSTGRES_USER: mikan_test
           POSTGRES_PASSWORD: mikan_test
@@ -129,47 +130,31 @@ jobs:
       - run: cargo install --locked --version 0.22.2 cargo-audit
       - run: cargo audit --deny warnings
 
-  node-e2e:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      # Kinkan: Docker Hub's anonymous pull limit is shared by the runners' addresses (see
-      # the image job). The e2e images are pulled from Google's mirror of it and tagged with
-      # their Docker Hub names, so compose finds them here; dockerd's registry-mirrors is not
-      # used by the containerd image store of this Docker.
-      - name: Docker Hub images through mirror.gcr.io
-        run: |
-          for img in $(sed -n -E 's/^\s*image:\s*([^ #]+).*/\1/p; s/^FROM\s+([^ ]+).*/\1/p' test/e2e/compose.yaml test/e2e/Dockerfile | sort -u); do
-            case "$img" in
-              */*) case "${img%%/*}" in *.* | *:*) continue ;; esac  # another registry
-                   src="mirror.gcr.io/$img" ;;
-              *) src="mirror.gcr.io/library/$img" ;;
-            esac
-            docker pull -q "$src" && docker tag "$src" "$img"
-          done
-          docker image ls --format '{{.Repository}}:{{.Tag}}'
-      - name: authenticated TrustTunnel, cover and restart
-        env:
-          E2E_RUN: TrustTunnel
-          E2E_RESTART: "1"
-        run: sh test/e2e/run.sh
-
   image:
     runs-on: ubuntu-24.04
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # binfmt, buildkit and the base images come through Google's Docker Hub mirror;
+      # whatever still falls back to Docker Hub is pulled as the account.
+      - if: env.DOCKERHUB_USERNAME != ''
+        # A Docker Hub outage must not stop the build: everything comes through the mirror.
+        continue-on-error: true
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       # arm64 too: a wrong-architecture binary fails the build (see the Dockerfile).
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          image: mirror.gcr.io/tonistiigi/binfmt:latest
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
-          # Kinkan: Docker Hub's anonymous pull limit is shared by the runners' addresses,
-          # and a build that hits it fails. Its images come through Google's mirror of it
-          # (the same images by the same digests); BuildKit falls back to Docker Hub.
+          driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
+          # Base images through Google's Docker Hub mirror, Docker Hub itself when it fails.
           buildkitd-config-inline: |
             [registry."docker.io"]
               mirrors = ["mirror.gcr.io"]

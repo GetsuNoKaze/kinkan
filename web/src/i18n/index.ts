@@ -8,6 +8,7 @@
 // sections it reads (sub.ts).
 import { useSyncExternalStore } from "react";
 import type ru from "./ru.json";
+import type { KinkanDict } from "./kinkan"; // Kinkan
 
 type Locale = "ru" | "en";
 export const LOCALES: { id: Locale; label: string }[] = [
@@ -15,7 +16,7 @@ export const LOCALES: { id: Locale; label: string }[] = [
   { id: "en", label: "English" },
 ];
 
-export type Dict = typeof ru;
+export type Dict = typeof ru & KinkanDict;
 type Leaves<T> = { [K in keyof T & string]: T[K] extends string ? K : `${K}.${Leaves<T[K]>}` }[keyof T & string];
 export type Key = Leaves<Dict>;
 type Params = Record<string, string | number>;

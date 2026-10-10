@@ -25,7 +25,6 @@ import (
 	"mikan/internal/panel/billing"
 	"mikan/internal/panel/dnscheck"
 	"mikan/internal/panel/domain"
-	"mikan/internal/panel/geoip"
 	"mikan/internal/panel/infraalerts"
 	"mikan/internal/panel/nodesync"
 	"mikan/internal/panel/nodeupdate"
@@ -46,6 +45,8 @@ import (
 
 // Panel is the fully wired HTTP side of the panel, without the listener.
 type Panel struct {
+	KinkanPanel // Kinkan (kinkan.go)
+
 	Handler  http.Handler
 	Settings *settings.Settings
 	// reload is what Run reads the paths and the language with every five seconds.
@@ -61,7 +62,6 @@ type Panel struct {
 	Backups     *tgbackup.Service
 	Importer    *panelimport.Importer
 	Addons      *addons.Manager
-	GeoIP       *geoip.DB // Kinkan: the scanner journal's countries and networks
 	server      *server.Server
 	spa         *server.SPA
 	subPage     *server.SPA
@@ -75,6 +75,8 @@ type Panel struct {
 }
 
 type Options struct {
+	KinkanOptions // Kinkan (kinkan.go)
+
 	Version    string
 	Web        fs.FS
 	TrustProxy bool
@@ -115,9 +117,6 @@ type Options struct {
 	// Resolve looks up the names the panel is told to dial (REALITY targets); nil is the
 	// system's resolver, tests set their own.
 	Resolve func(ctx context.Context, host string) ([]netip.Addr, error)
-	// GeoIP is where the scanner journal's country and network databases come from
-	// (geoip.BaseURL); "" never fetches them (Kinkan).
-	GeoIP string
 }
 
 type noChanges struct{}
@@ -143,6 +142,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		IPLimit: p.ipLimit, UserLimit: p.userLimit, TOTP: auth.NewTOTPGuard(),
 		TrustProxy: o.TrustProxy, Log: o.Log, Now: o.Now, Pool: pool,
 	}
+	p.newKinkan(o, &deps) // Kinkan: the fork's services (kinkan.go)
 	if o.Connect != nil {
 		p.Nodes = nodesync.NewManager(st, set, pool, o.Connect, o.Log, o.Now)
 		changes = p.Nodes
@@ -218,8 +218,6 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	deps.Telegram = p.Telegram
 	p.Billing.SetTelegram(p.Telegram)
 	p.Updates = updates.New(o.DataDir, o.Version, o.Releases, o.Log, o.Now)
-	p.GeoIP = geoip.New(o.DataDir, o.GeoIP, o.Log, o.Now)
-	deps.GeoIP = p.GeoIP
 	deps.Updates = p.Updates
 	var certStatus infraalerts.CertificateSource
 	if o.Certs != nil {
@@ -452,6 +450,7 @@ func (p *Panel) Run(ctx context.Context) {
 		p.log.Error("update policy", "err", err)
 	}
 	var workers []func(context.Context)
+	workers = append(workers, p.kinkanWorkers()...) // Kinkan
 	if p.Nodes != nil {
 		workers = append(workers, p.Nodes.Run)
 	}
@@ -461,7 +460,7 @@ func (p *Panel) Run(ctx context.Context) {
 	if p.NodeUpdates != nil {
 		workers = append(workers, p.NodeUpdates.Run)
 	}
-	workers = append(workers, p.Telegram.Run, p.Billing.Run, p.Updates.Run, p.GeoIP.Run, p.Alerts.Run, p.Backups.Run, p.Importer.Run,
+	workers = append(workers, p.Telegram.Run, p.Billing.Run, p.Updates.Run, p.Alerts.Run, p.Backups.Run, p.Importer.Run,
 		func(ctx context.Context) {
 			every(ctx, 5*time.Second, func() {
 				if _, err := p.Apply(ctx); err != nil {

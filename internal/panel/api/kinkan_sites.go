@@ -10,6 +10,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"mikan/internal/nodeapi"
 	"mikan/internal/panel/store"
 	"mikan/internal/site"
 )
@@ -66,6 +67,28 @@ func (h *handlers) registerSites() {
 	huma.Register(h.api, huma.Operation{OperationID: "delete-site", Method: http.MethodDelete, Path: "/api/v1/sites/{id}", Tags: []string{"sites"}, Summary: "Удалить сайт",
 		DefaultStatus: http.StatusNoContent}, h.deleteSite)
 	huma.Register(h.api, huma.Operation{OperationID: "set-node-site", Method: http.MethodPut, Path: "/api/v1/nodes/{id}/site", Tags: []string{"sites"}, Summary: "Сайт ноды"}, h.setNodeSite)
+	huma.Register(h.api, huma.Operation{OperationID: "node-site-served", Method: http.MethodGet, Path: "/api/v1/nodes/{id}/site", Tags: []string{"sites"}, Summary: "Что отдаёт нода"}, h.nodeSiteServed)
+}
+
+type nodeSiteServedOutput struct {
+	Body struct {
+		// Served is what the node says it serves; nil: nothing, or a node that does not
+		// answer or knows nothing of sites (Mikan's). Kept apart from NodeInfo, Mikan's.
+		Served *nodeapi.SiteStatus `json:"served,omitempty" doc:"Сайт, который отдаёт нода: хеш, адреса на 127.0.0.1 и ошибка (например, порт занят); нет поля — ничего"`
+	}
+}
+
+func (h *handlers) nodeSiteServed(ctx context.Context, in *siteIDInput) (*nodeSiteServedOutput, error) {
+	if _, err := h.nodeOf(ctx, in.ID); err != nil {
+		return nil, err
+	}
+	out := &nodeSiteServedOutput{}
+	if h.d.Nodes != nil {
+		if hv, ok := h.d.Nodes.Health(in.ID); ok && hv.OK {
+			out.Body.Served = hv.Health.Site
+		}
+	}
+	return out, nil
 }
 
 func (h *handlers) listSites(ctx context.Context, _ *struct{}) (*sitesOutput, error) {

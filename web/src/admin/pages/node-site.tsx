@@ -28,7 +28,7 @@ function SiteForm({ node }: { node: Node }) {
   const choice = picked ?? current?.id ?? 0;
   const [message, setMessage] = useState("");
   const [formError, setFormError] = useState("");
-  const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: ["sites"] }), qc.invalidateQueries({ queryKey: ["nodes"] })]);
+  const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: ["sites"] }), qc.invalidateQueries({ queryKey: ["nodes"] }), qc.invalidateQueries({ queryKey: ["node-site", node.id] })]);
 
   const assign = useMutation({
     mutationFn: (siteID: number) => unwrap(api.PUT("/api/v1/nodes/{id}/site", { params: { path: { id: node.id } }, body: { site_id: siteID } })),
@@ -66,7 +66,12 @@ function SiteForm({ node }: { node: Node }) {
 
 // What the node itself says it serves: the panel's choice reaches it within seconds.
 function Status({ node, current }: { node: Node; current?: Site }) {
-  const served = node.site;
+  const result = useQuery({
+    queryKey: ["node-site", node.id],
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/nodes/{id}/site", { params: { path: { id: node.id } }, signal })),
+    refetchInterval: 5_000,
+  });
+  const served = result.data?.served;
   if (!current && !served) return <p className="text-sm">{t("site.statusNone")}</p>;
   if (served?.error) return <div className="banner err">{t("site.statusError", { error: served.error })}</div>;
   if (current && served?.hash === current.hash) {

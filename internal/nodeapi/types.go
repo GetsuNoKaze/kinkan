@@ -24,6 +24,8 @@ const (
 // DesiredState is the complete configuration of a node. Applying the same state twice
 // is a no-op; listeners are recreated only when their own part changed.
 type DesiredState struct {
+	KinkanState // Kinkan: the node's site (kinkan.go)
+
 	Revision int64     `json:"revision"`
 	Epoch    string    `json:"epoch"` // counters epoch the policies' BaseSeq refers to
 	Inbounds []Inbound `json:"inbounds"`
@@ -43,9 +45,6 @@ type DesiredState struct {
 	// Filters keep users' traffic from places and strangers from the node; nil: none.
 	// Nodes older than the filters ignore it.
 	Filters *Filters `json:"filters,omitempty"`
-	// Site is the website the node shows (Kinkan, kinkan_site.go); nil: none. Mikan's
-	// nodes ignore it.
-	Site *SiteState `json:"site,omitempty"`
 }
 
 // Filters are the ingress and egress filters of the node.
@@ -87,9 +86,10 @@ type Slot = proto.Slot
 
 // ValidateRequest asks the node to parse one inbound with mihomo without applying it.
 type ValidateRequest struct {
+	KinkanValidate // Kinkan (kinkan.go)
+
 	Inbound       Inbound `json:"inbound"`
 	SelfStealPort int     `json:"self_steal_port,omitempty"`
-	SitePort      int     `json:"site_port,omitempty"` // Kinkan: the node's website over TLS
 }
 
 type Policy struct {
@@ -152,6 +152,8 @@ type Online struct {
 }
 
 type Health struct {
+	KinkanHealth // Kinkan (kinkan.go)
+
 	Version   string           `json:"version"`
 	Core      string           `json:"core"`
 	Revision  int64            `json:"revision"`
@@ -165,8 +167,6 @@ type Health struct {
 	// Host is what listens on the node's server, whoever runs it; nil when the node does not
 	// say (before 0.5.0.2, or it cannot read the kernel's tables).
 	Host *HostPorts `json:"host,omitempty"`
-	// Site is the website the node shows; nil when none (or a node without sites). Kinkan.
-	Site *SiteStatus `json:"site,omitempty"`
 }
 
 // HostPorts are the ports something listens on at the node's server: TCP sockets in the
@@ -325,12 +325,11 @@ type TargetScan struct {
 }
 
 type ApplyResult struct {
+	KinkanApply // Kinkan (kinkan.go)
+
 	Revision  int64            `json:"revision"`
 	Recreated []string         `json:"recreated"`
 	Listeners []ListenerStatus `json:"listeners"`
-	// SiteMissing: the node does not have the state's site; the panel sends it (PutSite)
-	// and applies again. Kinkan.
-	SiteMissing bool `json:"site_missing,omitempty"`
 }
 
 type Error struct {
