@@ -141,7 +141,12 @@ pub fn install_self() -> Result<()> {
 /// which both update units run, empty), and it runs and reports the release it is meant to
 /// be before it takes the working one's place.
 pub fn replace_bin(data: &[u8], release: Option<&str>) -> Result<()> {
-    replace_at(Path::new(BIN), data, release)
+    replace_at(Path::new(BIN), data, release)?;
+    // Kinkan: an update run by the new release's own installer (the one-line install on an
+    // installed server) finishes without post-update, so the link is made with the command.
+    // A name held by something else is reported by post-update; it does not stop an update.
+    let _ = link_alias();
+    Ok(())
 }
 
 fn replace_at(bin: &Path, data: &[u8], release: Option<&str>) -> Result<()> {

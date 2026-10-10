@@ -2,6 +2,12 @@
 
 Fork release notes. Upstream history remains in CHANGELOG.md.
 
+## Unreleased
+### en
+- The kinkan command is also made when the one-line install updates an installed server; 0.5.0.5-tt.4 made it only on a fresh install or a later `mikan update`.
+### ru
+- Команда kinkan появляется и тогда, когда установка одной строкой обновляет уже установленный сервер; в 0.5.0.5-tt.4 она появлялась только при новой установке или при следующем `mikan update`.
+
 ## 0.5.0.5-tt.4
 ### en
 - TrustTunnel fallback: one client network (an IPv4 address, an IPv6 /64) holds at most 64 of the 256 fallback requests, so one slow prober cannot turn the cover site into a blank 503 for everyone. The backend address is checked when dialing too: a host name that resolves to a link-local (cloud metadata), multicast or unspecified address is refused. Wrong credentials are logged at most once per 10 seconds, with the number of the rest.
