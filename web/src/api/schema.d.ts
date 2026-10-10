@@ -2847,6 +2847,8 @@ export interface components {
              * @description 0 scans all enabled inbounds
              */
             inbound_id?: number;
+            /** @description TLS name of the cover site on the same node; defaults to the inbound SNI */
+            reference_host?: string;
             /** Format: int64 */
             reference_port?: number;
         };

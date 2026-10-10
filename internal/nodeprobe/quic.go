@@ -116,7 +116,7 @@ func (r *Report) scanQUIC(ctx context.Context, cfg Config, u *url.URL) {
 		}
 		if cfg.Reference != "" {
 			ref, _ := origin(cfg.Reference)
-			b, err := h3Request(ctx, cfg, ref, u.Host, p.method, p.path, p.wrong)
+			b, err := h3Request(ctx, cfg, ref, ref.Host, p.method, p.path, p.wrong)
 			if err != nil {
 				level = "ERROR"
 				detail += "; cover: " + err.Error()

@@ -12,6 +12,7 @@ type Result = Schemas["NodeProbeView"];
 type SingleResult = Schemas["TTProbeView"];
 type Node = Schemas["NodeInfo"];
 type Finding = Schemas["Finding"];
+type ProtocolReport = Schemas["ProtocolProbeReport"];
 type Fingerprint = Schemas["H2Fingerprint"];
 
 // Worst first: a proxy sign or an unfinished check must not hide among 36 rows.
@@ -35,6 +36,7 @@ function ProbeForm({ node }: { node: Node }) {
   const choices = (all.data ?? []).filter((i) => i.node_id === node.id && i.enabled);
   const [picked, setPicked] = useState(0);
   const [reference, setReference] = useState("");
+  const [referenceHost, setReferenceHost] = useState("");
   const [result, setResult] = useState<Result | null>(null);
   const [formError, setFormError] = useState("");
   const controller = useRef<AbortController | null>(null);
@@ -45,7 +47,7 @@ function ProbeForm({ node }: { node: Node }) {
       controller.current = new AbortController();
       return unwrap(api.POST("/api/v1/nodes/{id}/protocol-probe", {
         params: { path: { id: node.id } },
-        body: { inbound_id: picked, reference_port: reference.trim() === "" ? 0 : Number(reference) },
+        body: { inbound_id: picked, reference_host: referenceHost.trim() || undefined, reference_port: reference.trim() === "" ? 0 : Number(reference) },
         signal: controller.current.signal,
       }));
     },
@@ -72,6 +74,8 @@ function ProbeForm({ node }: { node: Node }) {
         {choices.map((i) => <option key={i.id} value={i.id}>{i.name} · {i.type} · {i.port}</option>)}
       </select></Field>
       <Field label={t("ttProbe.reference")} htmlFor="tt-probe-reference" hint={t("ttProbe.referenceHint")}><input id="tt-probe-reference" className="input" type="text" inputMode="numeric" value={reference} disabled={run.isPending} onChange={(e) => setReference(e.target.value)} /></Field>
+      <Field label={t("nodeProbe.referenceHost")} htmlFor="tt-probe-reference-host" hint={t("nodeProbe.referenceHostHint")}><input id="tt-probe-reference-host" className="input" type="text" value={referenceHost} disabled={run.isPending} maxLength={253} onChange={(e) => setReferenceHost(e.target.value)} /></Field>
+      {reference.trim() === "" ? <div className="banner info">{t("nodeProbe.noReference")}</div> : null}
       <Button variant="primary" loading={run.isPending} disabled={!node.enabled || (picked !== 0 && !inbound)} onClick={start}><ShieldCheck size={16} aria-hidden />{run.isPending ? t("ttProbe.running") : t("ttProbe.run")}</Button>
     </>}
     {run.isPending ? <p role="status" aria-live="polite" className="text-sm">{t("ttProbe.wait")}</p> : null}
@@ -79,7 +83,7 @@ function ProbeForm({ node }: { node: Node }) {
     {result ? <>
       <Button onClick={download}><Download size={16} aria-hidden />{t("ttProbe.download")}</Button>
       <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr><th>{t("ttProbe.inbound")}</th><th>{t("nodeProbe.verdict")}</th></tr></thead>
-        <tbody>{result.inbounds.map((item) => <tr key={item.inbound_id}><td>{item.name} · {item.report.protocol} · {item.port}/{item.network}</td><td><Pill tone={item.report.verdict === "quiet" ? "ok" : item.report.verdict === "noticeable" ? "warn" : "bad"}>{verdictLabel(item.report.verdict)}</Pill>{item.report.incomplete ? ` · ${t("nodeProbe.incomplete")}` : ""}</td></tr>)}</tbody>
+        <tbody>{result.inbounds.map((item) => <tr key={item.inbound_id}><td>{item.name} · {item.report.protocol} · {item.port}/{item.network}</td><td><Pill tone={item.report.verdict === "quiet" ? "ok" : item.report.verdict === "exposed" ? "bad" : "warn"}>{verdictLabel(item.report.verdict)}</Pill>{item.report.incomplete ? ` · ${t("nodeProbe.incomplete")}` : ""}<p className="mt-1 text-xs text-[var(--ink-500)]">{reportReason(item.report)}</p></td></tr>)}</tbody>
       </table></div>
       {result.inbounds.map((item) => <details key={item.inbound_id} className="rounded-xl border border-[var(--hairline)] p-3"><summary className="cursor-pointer text-sm">{item.name} · {verdictLabel(item.report.verdict)}</summary>
         <Report result={{ ...result, inbound_id: item.inbound_id, report: item.report }} onDownload={download} />
@@ -172,4 +176,12 @@ function verdictLabel(verdict: string) {
     case "exposed": return t("nodeProbe.exposed");
     default: return t("nodeProbe.inconclusive");
   }
+}
+
+function reportReason(report: ProtocolReport) {
+  if (report.verdict === "exposed") return report.findings.find((f) => f.level === "FAIL")?.detail;
+  if (report.findings.some((f) => f.name === "obfuscation")) return t("nodeProbe.obfuscated");
+  if (report.incomplete) return t("nodeProbe.incompleteReason");
+  if (!report.reference && report.verdict === "inconclusive") return t("nodeProbe.noReference");
+  return report.verdict === "inconclusive" ? t("nodeProbe.insufficient") : undefined;
 }

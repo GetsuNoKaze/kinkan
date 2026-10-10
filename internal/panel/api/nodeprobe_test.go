@@ -52,6 +52,7 @@ func TestNodeProbeAllInboundsArePinnedAndSessionOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	expectedReference := "https://cover.example:8444"
 	calls := 0
 	lookups := 0
 	handler, _, err := New(Deps{Store: st, Settings: set, Sessions: sessions, Now: clock, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), IPLimit: auth.NewLimiter(10, time.Minute, time.Minute, time.Hour), Resolve: func(context.Context, string) ([]netip.Addr, error) {
@@ -59,7 +60,7 @@ func TestNodeProbeAllInboundsArePinnedAndSessionOnly(t *testing.T) {
 		return []netip.Addr{netip.MustParseAddr("8.8.8.8")}, nil
 	}, NodeProbeScan: func(ctx context.Context, cfg nodeprobe.Config) (nodeprobe.Report, error) {
 		calls++
-		if cfg.Address != "8.8.8.8" || cfg.Reference != "https://node.example:8444" {
+		if cfg.Address != "8.8.8.8" || cfg.Reference != expectedReference {
 			t.Errorf("unpinned scan: %+v", cfg)
 		}
 		if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) > 75*time.Second {
@@ -70,8 +71,12 @@ func TestNodeProbeAllInboundsArePinnedAndSessionOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	call := func(authenticated, csrf bool) *httptest.ResponseRecorder {
-		req := httptest.NewRequest("POST", "/api/v1/nodes/1/protocol-probe", strings.NewReader(`{"reference_port":8444}`))
+	call := func(authenticated, csrf bool, body ...string) *httptest.ResponseRecorder {
+		payload := `{"reference_port":8444,"reference_host":"cover.example"}`
+		if len(body) > 0 {
+			payload = body[0]
+		}
+		req := httptest.NewRequest("POST", "/api/v1/nodes/1/protocol-probe", strings.NewReader(payload))
 		req.Header.Set("Content-Type", "application/json")
 		if authenticated {
 			req.AddCookie(&http.Cookie{Name: auth.CookieName, Value: token})
@@ -100,4 +105,19 @@ func TestNodeProbeAllInboundsArePinnedAndSessionOnly(t *testing.T) {
 	if calls != 2 || lookups != 1 || len(result.Inbounds) != 2 || result.Inbounds[1].Report.Verdict != "exposed" {
 		t.Fatalf("incomplete node scan: %+v calls=%d lookups=%d", result, calls, lookups)
 	}
+	expectedReference = "https://node.example:8444"
+	if r := call(true, true, `{"reference_port":8444}`); r.Code != 200 {
+		t.Fatalf("default reference hostname: %d %s", r.Code, r.Body)
+	}
+	before := calls
+	for _, host := range []string{"localhost", "https://cover.example", "cover.example/path"} {
+		body, _ := json.Marshal(map[string]any{"reference_port": 8444, "reference_host": host})
+		if r := call(true, true, string(body)); r.Code != 422 {
+			t.Fatalf("invalid reference hostname %q: %d %s", host, r.Code, r.Body)
+		}
+	}
+	if calls != before {
+		t.Fatal("invalid reference triggered a scan")
+	}
+
 }
