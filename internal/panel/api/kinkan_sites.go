@@ -152,6 +152,9 @@ func (h *handlers) setNodeSite(ctx context.Context, in *nodeSiteInput) (*nodeSit
 		return nil, err
 	}
 	h.audit(ctx, sessionOf(ctx).AdminID, "node.site", "node", strconv.FormatInt(node.ID, 10), map[string]any{"site_id": in.Body.SiteID})
+	if h.d.Changes != nil {
+		h.d.Changes.SlotsChanged() // the nodes' states are built again, with the site
+	}
 	out := &nodeSiteOutput{}
 	out.Body.NodeID, out.Body.SiteID = node.ID, in.Body.SiteID
 	return out, nil

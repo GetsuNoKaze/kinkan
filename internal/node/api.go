@@ -68,6 +68,7 @@ func Handler(e *Engine, log *slog.Logger) http.Handler {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
+	mux.HandleFunc("PUT /v1/site/{hash}", siteHandler(e, log)) // Kinkan: the node's website
 	mux.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, e.Health())
 	})

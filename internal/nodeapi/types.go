@@ -43,6 +43,9 @@ type DesiredState struct {
 	// Filters keep users' traffic from places and strangers from the node; nil: none.
 	// Nodes older than the filters ignore it.
 	Filters *Filters `json:"filters,omitempty"`
+	// Site is the website the node shows (Kinkan, kinkan_site.go); nil: none. Mikan's
+	// nodes ignore it.
+	Site *SiteState `json:"site,omitempty"`
 }
 
 // Filters are the ingress and egress filters of the node.
@@ -161,6 +164,8 @@ type Health struct {
 	// Host is what listens on the node's server, whoever runs it; nil when the node does not
 	// say (before 0.5.0.2, or it cannot read the kernel's tables).
 	Host *HostPorts `json:"host,omitempty"`
+	// Site is the website the node shows; nil when none (or a node without sites). Kinkan.
+	Site *SiteStatus `json:"site,omitempty"`
 }
 
 // HostPorts are the ports something listens on at the node's server: TCP sockets in the
@@ -322,6 +327,9 @@ type ApplyResult struct {
 	Revision  int64            `json:"revision"`
 	Recreated []string         `json:"recreated"`
 	Listeners []ListenerStatus `json:"listeners"`
+	// SiteMissing: the node does not have the state's site; the panel sends it (PutSite)
+	// and applies again. Kinkan.
+	SiteMissing bool `json:"site_missing,omitempty"`
 }
 
 type Error struct {
