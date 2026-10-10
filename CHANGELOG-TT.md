@@ -2,6 +2,14 @@
 
 Fork release notes. Upstream history remains in CHANGELOG.md.
 
+## 0.5.0.5-tt.7
+### en
+- The protocol check says "Not enough data" instead of "Not checked" when its probes ran but had nothing to compare with, and explains why next to the verdict. A clear TUIC giveaway still reads "Exposed" even if other probes failed.
+- An optional cover hostname for the check: the inbound and the reference site may use different TLS names on the same pinned node IP. Without it the check picks the name as before.
+### ru
+- Проверка протоколов пишет «Недостаточно данных» вместо «Не проверено», когда пробы прошли, но сравнить было не с чем, и объясняет причину рядом с вердиктом. Явный признак TUIC по-прежнему даёт «Палится», даже если другие пробы не удались.
+- Необязательное имя сайта-прикрытия для проверки: подключение и эталонный сайт могут иметь разные TLS-имена на одном закреплённом IP ноды. Без него имя выбирается как раньше.
+
 ## 0.5.0.5-tt.6
 ### en
 - The panel's check now covers all of a node's inbounds, not only TrustTunnel (Nodes → the check, and `kinkan probe --protocol` / `--inbounds`), with one report per inbound. What it does not cover yet is listed in PROBE-PROTOCOLS.md.
