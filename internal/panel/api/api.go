@@ -215,8 +215,8 @@ func New(d Deps) (http.Handler, huma.API, error) {
 		return nil, nil, err
 	}
 	h := &handlers{d: d, api: api, dummyHash: dummy, hashSem: make(chan struct{}, 4), pending: map[int64]pendingTOTP{}}
-	h.registerKinkan() // Kinkan: the fork's endpoints (kinkan.go)
 	api.UseMiddleware(h.middleware)
+	h.registerKinkan() // Kinkan: the fork's endpoints (kinkan.go); after the middleware, which huma binds at registration
 	h.registerAuth()
 	h.registerUsers()
 	h.registerFolders()

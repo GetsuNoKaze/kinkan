@@ -22,7 +22,9 @@ type KinkanDeps struct {
 	NodeProbeScan func(context.Context, nodeprobe.Config) (nodeprobe.Report, error)
 }
 
-// registerKinkan registers the fork's endpoints.
+// registerKinkan registers the fork's endpoints. It runs after api.UseMiddleware: huma
+// binds an operation to the middleware there is when it is registered, and one registered
+// before would answer without a session.
 func (h *handlers) registerKinkan() {
 	h.registerTTProbe()
 	h.registerNodeProbe()
