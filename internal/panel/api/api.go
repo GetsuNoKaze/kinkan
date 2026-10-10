@@ -13,7 +13,6 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 
 	"mikan/internal/nodeapi"
-	"mikan/internal/nodeprobe"
 	"mikan/internal/nodetls"
 	"mikan/internal/panel/acme"
 	"mikan/internal/panel/addons"
@@ -23,7 +22,6 @@ import (
 	"mikan/internal/panel/billing"
 	"mikan/internal/panel/dnscheck"
 	"mikan/internal/panel/domain"
-	"mikan/internal/panel/geoip"
 	"mikan/internal/panel/nodesync"
 	"mikan/internal/panel/nodeupdate"
 	"mikan/internal/panel/panelimport"
@@ -38,10 +36,11 @@ import (
 	"mikan/internal/panel/tlscert"
 	"mikan/internal/panel/updates"
 	"mikan/internal/panel/warp"
-	"mikan/internal/ttprobe"
 )
 
 type Deps struct {
+	KinkanDeps // Kinkan (kinkan.go)
+
 	Version    string
 	Store      *store.Store
 	Settings   *settings.Settings
@@ -106,18 +105,12 @@ type Deps struct {
 	NodeUpdates *nodeupdate.Service
 	// Addons are the marketplace's payment adapters; nil in tests.
 	Addons *addons.Manager
-	// GeoIP finds the country and network of the scanner journal's addresses; nil: what
-	// the nodes found is shown as it is (Kinkan).
-	GeoIP interface{ Lookup(netip.Addr) geoip.Info }
 	// Resolve looks a name up for what the panel dials on the admin's word (a REALITY
 	// target); nil asks the system's resolver.
 	Resolve func(ctx context.Context, host string) ([]netip.Addr, error)
 	// DNS checks that a domain leads to the panel's or the node's server; nil: unchecked
 	// (tests, development).
 	DNS *dnscheck.Checker
-	// TTProbeScan uses the real scanner when nil; supplied by isolated API tests.
-	TTProbeScan   func(context.Context, ttprobe.Config) (ttprobe.Report, error)
-	NodeProbeScan func(context.Context, nodeprobe.Config) (nodeprobe.Report, error)
 }
 
 // NodeRuntime is what the API needs from the running nodes.
@@ -223,6 +216,7 @@ func New(d Deps) (http.Handler, huma.API, error) {
 	}
 	h := &handlers{d: d, api: api, dummyHash: dummy, hashSem: make(chan struct{}, 4), pending: map[int64]pendingTOTP{}}
 	api.UseMiddleware(h.middleware)
+	h.registerKinkan() // Kinkan: the fork's endpoints (kinkan.go); after the middleware, which huma binds at registration
 	h.registerAuth()
 	h.registerUsers()
 	h.registerFolders()
@@ -242,10 +236,6 @@ func New(d Deps) (http.Handler, huma.API, error) {
 	h.registerTelegram()
 	h.registerUpdates()
 	h.registerNodes()
-	h.registerTTProbe()
-	h.registerNodeProbe()
-	h.registerScanners()
-	h.registerSites() // Kinkan: node sites (kinkan_sites.go)
 	h.registerTorrent()
 	h.registerFilters()
 	h.registerSpeedTests()

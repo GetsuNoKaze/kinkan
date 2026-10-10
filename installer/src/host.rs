@@ -105,6 +105,20 @@ pub const BIN: &str = "/usr/local/bin/mikan";
 /// everything from upstream keep using.
 pub const ALIAS: &str = "/usr/local/bin/kinkan";
 
+/// The installer's last words name the kinkan command: Mikan's summary keeps its own
+/// "Commands on this server: mikan …" line as upstream writes it, and the fork renames
+/// the commands on it here, so that a merge does not meet the fork in Mikan's text.
+pub fn kinkan_commands(text: String) -> String {
+    const LINE: &str = "Commands on this server: ";
+    text.split('\n')
+        .map(|l| match l.strip_prefix(LINE) {
+            Some(rest) => format!("{LINE}{} (mikan works too)", rest.replace("mikan", "kinkan")),
+            None => l.to_owned(),
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Points /usr/local/bin/kinkan at the command, unless something else already holds the name.
 pub fn link_alias() -> Result<()> {
     link_alias_at(Path::new(ALIAS), Path::new(BIN))
@@ -479,5 +493,19 @@ mod tests {
         assert_eq!(&r[..4], ["21355/tcp", "80/tcp", "443/tcp", "443/udp"]);
         assert!(r.contains(&"9443/udp".to_string()));
         assert_eq!(rules(None, Some(25305))[0], "25305/tcp");
+    }
+}
+
+#[cfg(test)]
+mod kinkan_tests {
+    use super::kinkan_commands;
+
+    #[test]
+    fn the_summary_names_the_kinkan_command() {
+        let text = "mikan 1 is running.\n\n  Panel     https://x\n\nCommands on this server: mikan (menu), mikan status, mikan update\n\nmikan reset-password";
+        assert_eq!(
+            kinkan_commands(text.to_owned()),
+            "mikan 1 is running.\n\n  Panel     https://x\n\nCommands on this server: kinkan (menu), kinkan status, kinkan update (mikan works too)\n\nmikan reset-password"
+        );
     }
 }

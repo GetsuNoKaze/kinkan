@@ -703,7 +703,7 @@ pub fn wait_ready(node_port: Option<u16>, limit: Duration) -> Result<()> {
 pub fn summary(o: &Outcome, with_password: bool) -> String {
     let mut text = match o.node_port {
         Some(p) => format!(
-            "mikan {} node is running and waits for its panel on port {p}.\nThe panel connects within 30 seconds: see its Nodes page.\nCommands on this server: kinkan (menu), kinkan status, kinkan update (mikan works too)",
+            "mikan {} node is running and waits for its panel on port {p}.\nThe panel connects within 30 seconds: see its Nodes page.\nCommands on this server: mikan (menu), mikan status, mikan update",
             o.version
         ),
         None => {
@@ -715,7 +715,7 @@ pub fn summary(o: &Outcome, with_password: bool) -> String {
                 "shown on the installer's last screen only; a new one: mikan reset-password".to_owned()
             };
             format!(
-                "mikan {} is running.\n\n  Panel     {}\n  Login     {}\n  Password  {password}\n\nCommands on this server: kinkan (menu), kinkan status, kinkan update (mikan works too)",
+                "mikan {} is running.\n\n  Panel     {}\n  Login     {}\n  Password  {password}\n\nCommands on this server: mikan (menu), mikan status, mikan update",
                 o.version, o.url, o.login
             )
         }
@@ -724,7 +724,7 @@ pub fn summary(o: &Outcome, with_password: bool) -> String {
         text.push_str("\n\n");
         text.push_str(&t);
     }
-    text
+    host::kinkan_commands(text) // Kinkan
 }
 
 /// Whether an install stopped half way here: `mikan install` continues it.

@@ -718,7 +718,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Что отдаёт нода */
+        get: operations["node-site-served"];
         /** Сайт ноды */
         put: operations["set-node-site"];
         post?: never;
@@ -2821,8 +2822,6 @@ export interface components {
             proc_cpu_percent?: number;
             /** @description Публичное имя для канала состояния; пустое — нода скрыта из списка */
             public_name: string;
-            /** @description Сайт, который отдаёт нода: хеш, адреса на 127.0.0.1 и ошибка (например, порт занят) */
-            site?: components["schemas"]["SiteStatus"];
             /** @enum {string} */
             status: "ok" | "error" | "unknown";
             /**
@@ -2901,6 +2900,10 @@ export interface components {
             node_id: number;
             /** Format: int64 */
             site_id: number;
+        };
+        NodeSiteServedOutputBody: {
+            /** @description Сайт, который отдаёт нода: хеш, адреса на 127.0.0.1 и ошибка (например, порт занят); нет поля — ничего */
+            served?: components["schemas"]["SiteStatus"];
         };
         NodeView: {
             /** Format: date-time */
@@ -6279,6 +6282,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScannerView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "node-site-served": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeSiteServedOutputBody"];
                 };
             };
             /** @description Error */

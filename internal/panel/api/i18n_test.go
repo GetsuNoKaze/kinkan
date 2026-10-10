@@ -80,6 +80,7 @@ func TestErrorCodesHaveTexts(t *testing.T) {
 			t.Fatalf("%s.json: %v", lang, err)
 		}
 		texts[lang] = f.Errors.API
+		addKinkanTexts(t, root, lang, texts[lang]) // Kinkan: the fork's texts (kinkan_i18n_test.go)
 	}
 	where := map[string]string{} // code → the first file that sends it
 	for _, src := range codeSources {
