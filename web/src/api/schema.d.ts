@@ -3784,6 +3784,11 @@ export interface components {
             count: number;
             /** Format: int64 */
             day: number;
+            /**
+             * Format: int64
+             * @description Проверки самой панели
+             */
+            own: number;
         };
         ScannerRecord: {
             asn?: string;
@@ -3802,6 +3807,7 @@ export interface components {
             last: number;
             method?: string;
             organization?: string;
+            own?: boolean;
             protocol: string;
             ptr?: string;
             reason: string;

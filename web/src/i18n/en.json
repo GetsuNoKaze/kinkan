@@ -2790,6 +2790,9 @@
     "attempts": "Attempts",
     "when": "First / last",
     "client": "Likely a client",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "showOwn": "Show the panel's own checks",
+    "own": "Panel's check",
+    "geoSource": "Country and network, where the node found none, from the panel's database:"
   }
 }

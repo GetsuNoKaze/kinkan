@@ -24,6 +24,8 @@ type ScannerRecord struct {
 	PTR          string `json:"ptr,omitempty"`
 	Scanner      string `json:"scanner"`
 	Evidence     string `json:"evidence,omitempty"`
+	// Own is the panel's: the address is the panel's own, the record its own check.
+	Own bool `json:"own,omitempty"`
 }
 type ScannerSnapshot struct {
 	Epoch   string          `json:"epoch"`

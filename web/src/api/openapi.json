@@ -5491,12 +5491,18 @@
           "day": {
             "format": "int64",
             "type": "integer"
+          },
+          "own": {
+            "description": "Проверки самой панели",
+            "format": "int64",
+            "type": "integer"
           }
         },
         "required": [
           "day",
           "count",
-          "clients"
+          "clients",
+          "own"
         ],
         "type": "object"
       },
@@ -5542,6 +5548,9 @@
           },
           "organization": {
             "type": "string"
+          },
+          "own": {
+            "type": "boolean"
           },
           "protocol": {
             "type": "string"
