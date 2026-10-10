@@ -65,6 +65,7 @@ type Engine struct {
 	applied    nodeapi.DesiredState
 	cert       proto.Cert // node certificate files written by the last Apply
 	listeners  map[string]nodeapi.ListenerStatus
+	site       *siteServer // Kinkan: the website the node shows (kinkan_site.go)
 
 	errsMu sync.Mutex
 	errs   map[string]string // listener name → last listen error
@@ -312,7 +313,9 @@ func (e *Engine) Apply(st nodeapi.DesiredState) (nodeapi.ApplyResult, error) {
 	if err := e.saveState(st); err != nil {
 		e.log.Error("save state", "err", err)
 	}
-	return nodeapi.ApplyResult{Revision: st.Revision, Recreated: recreated, Listeners: statuses}, nil
+	res := nodeapi.ApplyResult{Revision: st.Revision, Recreated: recreated, Listeners: statuses}
+	res.SiteMissing = e.applySite(st) // Kinkan
+	return res, nil
 }
 
 // Validate parses one inbound with mihomo's own parser without applying it, so the
@@ -400,11 +403,13 @@ func (e *Engine) Health() nodeapi.Health {
 		ls = append(ls, s)
 	}
 	rev := e.applied.Revision
+	site := e.siteStatus() // Kinkan
 	e.mu.Unlock()
 	sort.Slice(ls, func(i, j int) bool { return ls[i].Name < ls[j].Name })
 	return nodeapi.Health{
 		Version: e.version, Core: "mihomo " + mihomoVersion(), Revision: rev, StartedAt: e.started,
 		Listeners: ls, Conns: e.Reg.ConnCount(), System: e.sys.last(), Update: e.UpdateStatus(), Host: e.host.get(),
+		Site: site,
 	}
 }
 

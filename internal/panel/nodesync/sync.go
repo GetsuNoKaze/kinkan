@@ -242,6 +242,9 @@ func (s *Syncer) desired(ctx context.Context) (nodeapi.DesiredState, error) {
 	st.Torrent = snap.torrent.Block()
 	st.Filters = snap.filters.State()
 	st.Epoch, st.Policies, _ = s.policiesFrom(snap)
+	if st.Site, err = s.site(ctx); err != nil { // Kinkan: the node's site (kinkan_site.go)
+		return st, err
+	}
 	return st, nil
 }
 
@@ -273,6 +276,9 @@ func (s *Syncer) applyState(ctx context.Context) {
 	}
 	st.Revision = rev
 	res, err := s.node.Apply(ctx, st)
+	if err == nil && res.SiteMissing { // Kinkan: the node gets its site, then the state again
+		res, err = s.sendSite(ctx, st)
+	}
 	if err != nil {
 		s.mu.Lock()
 		s.failedKey = key
@@ -753,7 +759,8 @@ func stateKey(st nodeapi.DesiredState) string {
 		E []nodeapi.Exit
 		B *nodeapi.TorrentBlock
 		F *nodeapi.Filters
-	}{st.Inbounds, st.Slots, st.TLS, st.SelfStealPort, st.Warp, st.Relay, st.Exits, st.Torrent, st.Filters})
+		K *nodeapi.SiteState // Kinkan: the node's site
+	}{st.Inbounds, st.Slots, st.TLS, st.SelfStealPort, st.Warp, st.Relay, st.Exits, st.Torrent, st.Filters, st.Site})
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
 }
