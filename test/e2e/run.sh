@@ -4,10 +4,17 @@
 set -eu
 cd "$(dirname "$0")"
 export MSYS_NO_PATHCONV=1
+if [ -n "${E2E_IMAGE:-}" ]; then
+  export COMPOSE_FILE=compose.yaml:compose.published.yaml
+fi
 
 docker volume create mikan-gomod >/dev/null
 docker volume create mikan-gocache >/dev/null
 docker compose up -d driver
+if [ -n "${E2E_IMAGE:-}" ]; then
+  # The driver creates the shared socket volume first; the released node runs as 65532.
+  docker compose exec -T driver chown 65532:65532 /run/mikan
+fi
 docker compose exec -T driver go run ./test/e2e/gen -out /work
 docker compose up -d --build node target client-a client-b
 sleep 3

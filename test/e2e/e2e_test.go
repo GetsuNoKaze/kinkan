@@ -407,6 +407,11 @@ func TestDeviceLimit(t *testing.T) {
 // AC-6: новый юзер (свободный слот) подключается без пересоздания листенеров, QUIC-сессии соседей живы.
 func TestNewUserKeepsQUICSessions(t *testing.T) {
 	n := newNode()
+	t.Cleanup(func() {
+		if err := n.call(http.MethodPut, "/v1/policies", nodeapi.PoliciesRequest{Policies: policies(defaultOverrides)}, nil); err != nil {
+			t.Errorf("restore policies after new-user test: %v", err)
+		}
+	})
 	bystander := startStream(t, clientA, socksPort(6, "hy2"))
 	defer bystander.conn.Close()
 	st := state
