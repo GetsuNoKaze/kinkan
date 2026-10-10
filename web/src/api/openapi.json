@@ -1560,6 +1560,26 @@
         ],
         "type": "object"
       },
+      "Finding": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "level",
+          "detail"
+        ],
+        "type": "object"
+      },
       "FolderView": {
         "additionalProperties": false,
         "properties": {
@@ -5716,6 +5736,63 @@
         ],
         "type": "object"
       },
+      "TTProbeReport": {
+        "additionalProperties": false,
+        "properties": {
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            },
+            "type": "array"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "findings"
+        ],
+        "type": "object"
+      },
+      "TTProbeView": {
+        "additionalProperties": false,
+        "properties": {
+          "inbound_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "node_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "report": {
+            "$ref": "#/components/schemas/TTProbeReport"
+          },
+          "started_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "vantage": {
+            "description": "Запросы идут с сервера панели, а не из браузера или сети клиента",
+            "enum": [
+              "panel"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "started_at",
+          "node_id",
+          "inbound_id",
+          "vantage",
+          "report"
+        ],
+        "type": "object"
+      },
       "TariffBody": {
         "additionalProperties": false,
         "properties": {
@@ -6455,6 +6532,27 @@
           "t",
           "up",
           "down"
+        ],
+        "type": "object"
+      },
+      "TtProbeInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "inbound_id": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "reference_port": {
+            "description": "HTTPS cover-сайт на той же ноде; 0 — без сравнения",
+            "format": "int64",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inbound_id"
         ],
         "type": "object"
       },
@@ -9360,6 +9458,60 @@
         "tags": [
           "node"
         ]
+      }
+    },
+    "/api/v1/nodes/{id}/trusttunnel-probe": {
+      "post": {
+        "operationId": "probe-node-trusttunnel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TtProbeInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TTProbeView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Проверить TrustTunnel глазами сканера",
+        "tags": [
+          "node"
+        ],
+        "x-session-only": true
       }
     },
     "/api/v1/nodes/{id}/update": {

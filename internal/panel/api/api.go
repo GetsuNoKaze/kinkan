@@ -36,6 +36,7 @@ import (
 	"mikan/internal/panel/tlscert"
 	"mikan/internal/panel/updates"
 	"mikan/internal/panel/warp"
+	"mikan/internal/ttprobe"
 )
 
 type Deps struct {
@@ -109,6 +110,8 @@ type Deps struct {
 	// DNS checks that a domain leads to the panel's or the node's server; nil: unchecked
 	// (tests, development).
 	DNS *dnscheck.Checker
+	// TTProbeScan uses the real scanner when nil; supplied by isolated API tests.
+	TTProbeScan func(context.Context, ttprobe.Config) (ttprobe.Report, error)
 }
 
 // NodeRuntime is what the API needs from the running nodes.
@@ -233,6 +236,7 @@ func New(d Deps) (http.Handler, huma.API, error) {
 	h.registerTelegram()
 	h.registerUpdates()
 	h.registerNodes()
+	h.registerTTProbe()
 	h.registerTorrent()
 	h.registerFilters()
 	h.registerSpeedTests()

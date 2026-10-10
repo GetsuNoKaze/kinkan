@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -229,5 +230,39 @@ func TestRequestBoundAndCancellation(t *testing.T) {
 	}
 	if _, err := dial(ctx, cfg, u, nil, u.Hostname(), false); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled handshake: %v", err)
+	}
+}
+
+func TestPinnedDialerUsedByEveryTransport(t *testing.T) {
+	s, cfg := site(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "cover") }))
+	u, _ := endpoint(s.URL)
+	cfg.Target = "https://example.com:443"
+	cfg.Reference = "https://example.com:8444"
+	var mu sync.Mutex
+	var addresses []string
+	cfg.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		mu.Lock()
+		addresses = append(addresses, addr)
+		mu.Unlock()
+		return (&net.Dialer{}).DialContext(ctx, network, u.Host)
+	}
+	r, err := Scan(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range r.Findings {
+		if f.Level == "FAIL" || f.Level == "ERROR" || f.Level == "WARN" {
+			t.Errorf("%+v", f)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(addresses) != 58 {
+		t.Fatalf("not every probe used the pinned dialer: calls=%d", len(addresses))
+	}
+	for _, a := range addresses {
+		if a != "example.com:443" && a != "example.com:8444" {
+			t.Errorf("unexpected address %s", a)
+		}
 	}
 }

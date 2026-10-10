@@ -24,7 +24,7 @@ Plans: [ROADMAP.md](ROADMAP.md).
 | Cover site | served by the panel only, on its port | served by every node on `127.0.0.1`, no Caddy needed | planned |
 | Site for TrustTunnel | | `fallback` set automatically when the node has a domain | planned |
 | REALITY targets | a wrong target goes unnoticed | checked: your certificate and your site behind your SNI | planned |
-| Scanner check | | `kinkan probe`: 33 checks, proxy-auth leaks, ALPN/SNI, raw HTTP/2, cover response and HTTP/2 fingerprint comparison; [usage](PROBE-TT.md) | implemented; next release |
+| Scanner check | | admin UI (Nodes → Check TrustTunnel) and `kinkan probe`: 33 checks, proxy-auth leaks, ALPN/SNI, raw HTTP/2, cover response and HTTP/2 fingerprint comparison; [usage](PROBE-TT.md) | implemented; next release |
 | Scanner counter | | requests without credentials per day on TrustTunnel, in the panel | planned |
 | Manual settings after an update | an update can reset them | `mikan-ensure` restores them and reports to Telegram | planned |
 

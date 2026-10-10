@@ -43,6 +43,9 @@ type Config struct {
 	Target, Reference string
 	Timeout           time.Duration
 	TLS               *tls.Config
+	// DialContext lets the panel pin a validated public IP for the entire scan.
+	// All transports, including raw HTTP/2, must use it to avoid DNS rebinding.
+	DialContext func(context.Context, string, string) (net.Conn, error)
 }
 
 func (r *Report) add(name, level, detail string) {
@@ -291,7 +294,11 @@ func dial(ctx context.Context, cfg Config, u *url.URL, alpn []string, sni string
 	}
 	part, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
-	raw, err := (&net.Dialer{Timeout: cfg.Timeout}).DialContext(part, "tcp", net.JoinHostPort(u.Hostname(), port))
+	dialer := cfg.DialContext
+	if dialer == nil {
+		dialer = (&net.Dialer{Timeout: cfg.Timeout}).DialContext
+	}
+	raw, err := dialer(part, "tcp", net.JoinHostPort(u.Hostname(), port))
 	if err != nil {
 		return nil, err
 	}
@@ -345,10 +352,29 @@ func request(ctx context.Context, cfg Config, u *url.URL, host, proto string, p 
 	var closeIdle func()
 	if proto == "h2" {
 		t := &http2.Transport{TLSClientConfig: settings, DisableCompression: true, MaxHeaderListSize: 64 << 10}
+		if cfg.DialContext != nil {
+			t.DialTLSContext = func(ctx context.Context, network, addr string, tc *tls.Config) (net.Conn, error) {
+				raw, err := cfg.DialContext(ctx, network, addr)
+				if err != nil {
+					return nil, err
+				}
+				c := tls.Client(raw, tc)
+				if err := c.HandshakeContext(ctx); err != nil {
+					c.Close()
+					return nil, err
+				}
+				if c.ConnectionState().NegotiatedProtocol != "h2" {
+					c.Close()
+					return nil, errors.New("h2 was not negotiated")
+				}
+				return c, nil
+			}
+		}
 		transport = t
 		closeIdle = t.CloseIdleConnections
 	} else {
 		t := &http.Transport{TLSClientConfig: settings, ForceAttemptHTTP2: false, TLSNextProto: map[string]func(string, *tls.Conn) http.RoundTripper{}, DisableCompression: true, DisableKeepAlives: true, MaxResponseHeaderBytes: 64 << 10}
+		t.DialContext = cfg.DialContext
 		transport = t
 		closeIdle = t.CloseIdleConnections
 	}

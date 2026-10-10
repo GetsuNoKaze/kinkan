@@ -734,6 +734,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/nodes/{id}/trusttunnel-probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Проверить TrustTunnel глазами сканера */
+        post: operations["probe-node-trusttunnel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/nodes/{id}/update": {
         parameters: {
             query?: never;
@@ -2299,6 +2316,11 @@ export interface components {
             /** @description Что закрывает почтовый пресет */
             mail_ports: string[];
         };
+        Finding: {
+            detail: string;
+            level: string;
+            name: string;
+        };
         FolderView: {
             /** @enum {string} */
             color: "gray" | "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple" | "pink";
@@ -3787,6 +3809,25 @@ export interface components {
             /** Format: int64 */
             proc_rss: number;
         };
+        TTProbeReport: {
+            findings: components["schemas"]["Finding"][];
+            reference?: string;
+            target: string;
+        };
+        TTProbeView: {
+            /** Format: int64 */
+            inbound_id: number;
+            /** Format: int64 */
+            node_id: number;
+            report: components["schemas"]["TTProbeReport"];
+            /** Format: date-time */
+            started_at: string;
+            /**
+             * @description Запросы идут с сервера панели, а не из браузера или сети клиента
+             * @enum {string}
+             */
+            vantage: "panel";
+        };
         TariffBody: {
             /**
              * Format: int64
@@ -4082,6 +4123,15 @@ export interface components {
             t: string;
             /** Format: int64 */
             up: number;
+        };
+        TtProbeInputBody: {
+            /** Format: int64 */
+            inbound_id: number;
+            /**
+             * Format: int64
+             * @description HTTPS cover-сайт на той же ноде; 0 — без сравнения
+             */
+            reference_port?: number;
         };
         Tune: {
             block_quic?: boolean;
@@ -6013,6 +6063,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TrafficOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "probe-node-trusttunnel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TtProbeInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TTProbeView"];
                 };
             };
             /** @description Error */
