@@ -168,3 +168,26 @@ func TestUnpackLimits(t *testing.T) {
 		t.Errorf("big archive: %v", err)
 	}
 }
+
+// The packed site unpacks to the same site, and packing is the same bytes every time.
+func TestArchiveRoundTrip(t *testing.T) {
+	s, err := Unpack(archive(t, minimal("my-site/")...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := s.Archive()
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := Unpack(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Hash != s.Hash || again.Title != s.Title {
+		t.Errorf("round trip changed the site: %s/%q → %s/%q", s.Hash, s.Title, again.Hash, again.Title)
+	}
+	b, _ := again.Archive()
+	if !bytes.Equal(a, b) {
+		t.Error("packing the same site twice gave different bytes")
+	}
+}

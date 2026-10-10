@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -259,3 +260,27 @@ func hash(files map[string][]byte) string {
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }
+
+// Archive packs the site again from its checked files: sorted, with fixed times, so the same
+// site always gives the same bytes. The panel keeps and sends this one, not the upload, and
+// a node checks it with Unpack all the same.
+func (s *Site) Archive() ([]byte, error) {
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	for _, p := range s.Paths() {
+		f, err := w.CreateHeader(&zip.FileHeader{Name: p, Method: zip.Deflate, Modified: archiveTime})
+		if err != nil {
+			return nil, err
+		}
+		if _, err := f.Write(s.Files[p]); err != nil {
+			return nil, err
+		}
+	}
+	if err := w.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// archiveTime is the time every file of a packed site carries (zip's earliest).
+var archiveTime = time.Date(1980, 1, 1, 0, 0, 0, 0, time.UTC)

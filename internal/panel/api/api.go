@@ -237,6 +237,7 @@ func New(d Deps) (http.Handler, huma.API, error) {
 	h.registerUpdates()
 	h.registerNodes()
 	h.registerTTProbe()
+	h.registerSites() // Kinkan: node sites (kinkan_sites.go)
 	h.registerTorrent()
 	h.registerFilters()
 	h.registerSpeedTests()
