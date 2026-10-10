@@ -1,6 +1,9 @@
 package api
 
 import (
+	"context"
+	"errors"
+	"net/netip"
 	"testing"
 
 	"mikan/internal/proto"
@@ -63,5 +66,51 @@ func TestQuietNodeAdvice(t *testing.T) {
 	}
 	if q := adviseQuiet([]quietItem{quietCase(1, "vless", "quiet", "https://n:443", nil)}, false); q.Verdict != "quiet" || len(q.Advice) != 0 {
 		t.Errorf("a quiet node: %+v", q)
+	}
+}
+
+// A REALITY target in another network than the node makes the node noticeable even when
+// the target answers well: a big site's certificate on a hosting address stands out.
+func TestQuietNodeFarRealityTarget(t *testing.T) {
+	ctx := context.Background()
+	node := netip.MustParseAddr("198.51.100.10")
+	geo := fakeGeo{
+		node:                                 {ASN: "64500", Organization: "Hosting"},
+		netip.MustParseAddr("203.0.113.80"):  {ASN: "8075", Organization: "Microsoft"},
+		netip.MustParseAddr("198.51.100.99"): {ASN: "64500", Organization: "Hosting"},
+	}
+	h := &handlers{d: Deps{KinkanDeps: KinkanDeps{GeoIP: geo}, Resolve: func(_ context.Context, host string) ([]netip.Addr, error) {
+		switch host {
+		case "www.microsoft.com":
+			return []netip.Addr{netip.MustParseAddr("203.0.113.80")}, nil
+		case "neighbour.example":
+			return []netip.Addr{netip.MustParseAddr("198.51.100.99")}, nil
+		}
+		return nil, errors.New("no such host")
+	}}}
+	reality := func(dest string) proto.Template {
+		return proto.Template{"type": "vless", "reality-config": map[string]any{"dest": dest}}
+	}
+	far := h.farTargetOf(ctx, reality("www.microsoft.com:443"), node)
+	if far == nil || far.TargetAS != "8075" || far.NodeAS != "64500" || far.Host != "www.microsoft.com" {
+		t.Fatalf("far target = %+v", far)
+	}
+	for name, tpl := range map[string]proto.Template{
+		"neighbour":   reality("neighbour.example:443"),
+		"own site":    reality("127.0.0.1:17443"),
+		"unresolved":  reality("nowhere.example:443"),
+		"not REALITY": {"type": "trusttunnel"},
+	} {
+		if f := h.farTargetOf(ctx, tpl, node); f != nil {
+			t.Errorf("%s: %+v", name, f)
+		}
+	}
+	if f := (&handlers{}).farTargetOf(ctx, reality("www.microsoft.com:443"), node); f != nil {
+		t.Errorf("without a GeoIP database: %+v", f)
+	}
+
+	q := adviseQuiet([]quietItem{{view: InboundProbeView{InboundID: 1, Name: "vless", Report: ProtocolProbeReport{Protocol: "vless", Verdict: "quiet"}}, template: reality("www.microsoft.com:443"), far: far}}, true)
+	if q.Verdict != "noticeable" || len(q.Advice) != 1 || q.Advice[0].Code != "reality_far" || q.Advice[0].Params["target_org"] != "Microsoft" {
+		t.Errorf("advice for a far target: %+v", q)
 	}
 }
