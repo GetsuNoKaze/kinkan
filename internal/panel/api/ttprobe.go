@@ -31,6 +31,8 @@ type TTProbeView struct {
 	NodeID    int64         `json:"node_id"`
 	InboundID int64         `json:"inbound_id"`
 	Vantage   string        `json:"vantage" enum:"panel" doc:"Запросы идут с сервера панели, а не из браузера или сети клиента"`
+	Address   string        `json:"address" doc:"IP, по которому шли все запросы проверки"`
+	LocalNode bool          `json:"local_node" doc:"Нода на сервере панели: панель проверяет свой же адрес снаружи"`
 	Report    TTProbeReport `json:"report"`
 }
 
@@ -47,7 +49,7 @@ func (h *handlers) registerTTProbe() {
 
 func (h *handlers) probeTrustTunnel(ctx context.Context, in *ttProbeInput) (*ttProbeOutput, error) {
 	if !ttProbing.TryLock() {
-		return nil, huma.Error409Conflict("scan_busy")
+		return nil, huma.Error409Conflict("probe_busy")
 	}
 	defer ttProbing.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, 75*time.Second)
@@ -85,7 +87,7 @@ func (h *handlers) probeTrustTunnel(ctx context.Context, in *ttProbeInput) (*ttP
 		}
 	}
 	resolveCtx, stop := context.WithTimeout(ctx, 5*time.Second)
-	dialer, err := publicProbeDialer(resolveCtx, host, h.d.Resolve)
+	dialer, ip, err := publicProbeDialer(resolveCtx, host, h.d.Resolve)
 	stop()
 	if err != nil {
 		return nil, huma.Error422UnprocessableEntity("probe_public_host")
@@ -104,14 +106,14 @@ func (h *handlers) probeTrustTunnel(ctx context.Context, in *ttProbeInput) (*ttP
 	if err != nil {
 		report.Findings = append(report.Findings, ttprobe.Finding{Name: "scan", Level: "ERROR", Detail: err.Error()})
 	}
-	return &ttProbeOutput{Body: TTProbeView{StartedAt: started, NodeID: node.ID, InboundID: ib.ID, Vantage: "panel", Report: TTProbeReport(report)}}, nil
+	return &ttProbeOutput{Body: TTProbeView{StartedAt: started, NodeID: node.ID, InboundID: ib.ID, Vantage: "panel", Address: ip.String(), LocalNode: node.Address == "", Report: TTProbeReport(report)}}, nil
 }
 
 // Resolve once, reject every non-public answer, then pin the IP for ALL probes.
 // Neither the target nor the reference accepts arbitrary hosts from the request.
-func publicProbeDialer(ctx context.Context, host string, resolve func(context.Context, string) ([]netip.Addr, error)) (func(context.Context, string, string) (net.Conn, error), error) {
+func publicProbeDialer(ctx context.Context, host string, resolve func(context.Context, string) ([]netip.Addr, error)) (func(context.Context, string, string) (net.Conn, error), netip.Addr, error) {
 	if !proto.PublicHost(host) {
-		return nil, errors.New("not a public host")
+		return nil, netip.Addr{}, errors.New("not a public host")
 	}
 	if resolve == nil {
 		resolve = func(ctx context.Context, host string) ([]netip.Addr, error) {
@@ -120,11 +122,11 @@ func publicProbeDialer(ctx context.Context, host string, resolve func(context.Co
 	}
 	addrs, err := resolve(ctx, host)
 	if err != nil || len(addrs) == 0 {
-		return nil, errors.New("no public address")
+		return nil, netip.Addr{}, errors.New("no public address")
 	}
 	for _, ip := range addrs {
 		if !ip.IsValid() || !proto.PublicAddr(ip) {
-			return nil, errors.New("non-public DNS answer")
+			return nil, netip.Addr{}, errors.New("non-public DNS answer")
 		}
 	}
 	ip := addrs[0].Unmap()
@@ -134,5 +136,5 @@ func publicProbeDialer(ctx context.Context, host string, resolve func(context.Co
 			return nil, errors.New("unexpected probe host")
 		}
 		return (&net.Dialer{}).DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
-	}, nil
+	}, ip, nil
 }

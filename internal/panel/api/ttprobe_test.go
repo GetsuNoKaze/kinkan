@@ -24,22 +24,22 @@ import (
 
 func TestTTProbeRejectsPrivateDNSAndPinsResolution(t *testing.T) {
 	for _, host := range []string{"localhost", "127.0.0.1", "169.254.169.254", "10.0.0.1", "[::1]"} {
-		if _, err := publicProbeDialer(context.Background(), host, nil); err == nil {
+		if _, _, err := publicProbeDialer(context.Background(), host, nil); err == nil {
 			t.Errorf("accepted %s", host)
 		}
 	}
 	for _, ips := range [][]netip.Addr{nil, {netip.MustParseAddr("127.0.0.1")}, {netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("10.0.0.1")}, {netip.MustParseAddr("::ffff:127.0.0.1")}, {netip.MustParseAddr("100.64.0.1")}} {
-		if _, err := publicProbeDialer(context.Background(), "node.example", func(context.Context, string) ([]netip.Addr, error) { return ips, nil }); err == nil {
+		if _, _, err := publicProbeDialer(context.Background(), "node.example", func(context.Context, string) ([]netip.Addr, error) { return ips, nil }); err == nil {
 			t.Errorf("accepted DNS %v", ips)
 		}
 	}
 	calls := 0
-	dial, err := publicProbeDialer(context.Background(), "node.example", func(context.Context, string) ([]netip.Addr, error) {
+	dial, ip, err := publicProbeDialer(context.Background(), "node.example", func(context.Context, string) ([]netip.Addr, error) {
 		calls++
 		return []netip.Addr{netip.MustParseAddr("8.8.8.8")}, nil
 	})
-	if err != nil {
-		t.Fatal(err)
+	if err != nil || ip.String() != "8.8.8.8" {
+		t.Fatal(ip, err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -145,7 +145,7 @@ func TestTTProbeAdminRoute(t *testing.T) {
 	ttProbing.Lock()
 	r := call(true, true, ib.ID)
 	ttProbing.Unlock()
-	if r.Code != 409 {
+	if r.Code != 409 || !strings.Contains(r.Body.String(), "probe_busy") {
 		t.Fatalf("concurrent scan %d %s", r.Code, r.Body)
 	}
 	r = call(true, true, ib.ID)
@@ -156,7 +156,7 @@ func TestTTProbeAdminRoute(t *testing.T) {
 	if err := json.Unmarshal(r.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if calls != 1 || result.Vantage != "panel" || len(result.Report.Findings) != 2 || result.Report.Findings[1].Level != "ERROR" {
+	if calls != 1 || result.Vantage != "panel" || result.Address != "8.8.8.8" || !result.LocalNode || len(result.Report.Findings) != 2 || result.Report.Findings[1].Level != "ERROR" {
 		t.Fatalf("partial report lost: calls=%d %+v", calls, result)
 	}
 	rows, err := st.Q.ListAudit(ctx, db.ListAuditParams{BeforeID: 1 << 62, Lim: 100})

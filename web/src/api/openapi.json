@@ -1563,6 +1563,9 @@
       "Finding": {
         "additionalProperties": false,
         "properties": {
+          "compare": {
+            "$ref": "#/components/schemas/H2Comparison"
+          },
           "detail": {
             "type": "string"
           },
@@ -1795,6 +1798,91 @@
           "package_name",
           "note",
           "created_at"
+        ],
+        "type": "object"
+      },
+      "H2Comparison": {
+        "additionalProperties": false,
+        "properties": {
+          "reference": {
+            "$ref": "#/components/schemas/H2Fingerprint"
+          },
+          "target": {
+            "$ref": "#/components/schemas/H2Fingerprint"
+          }
+        },
+        "required": [
+          "target",
+          "reference"
+        ],
+        "type": "object"
+      },
+      "H2Fingerprint": {
+        "additionalProperties": false,
+        "properties": {
+          "header_order": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "initial_window_updates": {
+            "items": {
+              "$ref": "#/components/schemas/H2Window"
+            },
+            "type": "array"
+          },
+          "settings": {
+            "items": {
+              "$ref": "#/components/schemas/H2Setting"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "settings",
+          "initial_window_updates",
+          "header_order"
+        ],
+        "type": "object"
+      },
+      "H2Setting": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "value": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "value"
+        ],
+        "type": "object"
+      },
+      "H2Window": {
+        "additionalProperties": false,
+        "properties": {
+          "increment": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stream": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "stream",
+          "increment"
         ],
         "type": "object"
       },
@@ -5761,9 +5849,17 @@
       "TTProbeView": {
         "additionalProperties": false,
         "properties": {
+          "address": {
+            "description": "IP, по которому шли все запросы проверки",
+            "type": "string"
+          },
           "inbound_id": {
             "format": "int64",
             "type": "integer"
+          },
+          "local_node": {
+            "description": "Нода на сервере панели: панель проверяет свой же адрес снаружи",
+            "type": "boolean"
           },
           "node_id": {
             "format": "int64",
@@ -5789,6 +5885,8 @@
           "node_id",
           "inbound_id",
           "vantage",
+          "address",
+          "local_node",
           "report"
         ],
         "type": "object"

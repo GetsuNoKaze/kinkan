@@ -2317,6 +2317,7 @@ export interface components {
             mail_ports: string[];
         };
         Finding: {
+            compare?: components["schemas"]["H2Comparison"];
             detail: string;
             level: string;
             name: string;
@@ -2397,6 +2398,27 @@ export interface components {
             remaining: number;
             /** @enum {string} */
             source: "purchase" | "admin";
+        };
+        H2Comparison: {
+            reference: components["schemas"]["H2Fingerprint"];
+            target: components["schemas"]["H2Fingerprint"];
+        };
+        H2Fingerprint: {
+            header_order: string[];
+            initial_window_updates: components["schemas"]["H2Window"][];
+            settings: components["schemas"]["H2Setting"][];
+        };
+        H2Setting: {
+            /** Format: int32 */
+            id: number;
+            /** Format: int32 */
+            value: number;
+        };
+        H2Window: {
+            /** Format: int32 */
+            increment: number;
+            /** Format: int32 */
+            stream: number;
         };
         HappLinkOutputBody: {
             /** @description happ://crypt5/…: Happ открывает подписку, не показывая её адрес; пусто — шифрованная ссылка выключена */
@@ -3815,8 +3837,12 @@ export interface components {
             target: string;
         };
         TTProbeView: {
+            /** @description IP, по которому шли все запросы проверки */
+            address: string;
             /** Format: int64 */
             inbound_id: number;
+            /** @description Нода на сервере панели: панель проверяет свой же адрес снаружи */
+            local_node: boolean;
             /** Format: int64 */
             node_id: number;
             report: components["schemas"]["TTProbeReport"];
