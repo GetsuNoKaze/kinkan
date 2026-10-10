@@ -2860,6 +2860,10 @@
             "format": "int64",
             "type": "integer"
           },
+          "quiet": {
+            "$ref": "#/components/schemas/QuietView",
+            "description": "Вердикт ноды целиком и что сделать (kinkan_quiet.go)"
+          },
           "started_at": {
             "format": "date-time",
             "type": "string"
@@ -2877,7 +2881,8 @@
           "vantage",
           "address",
           "local_node",
-          "inbounds"
+          "inbounds",
+          "quiet"
         ],
         "type": "object"
       },
@@ -5116,6 +5121,88 @@
         },
         "required": [
           "config"
+        ],
+        "type": "object"
+      },
+      "QuietAdvice": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "description": "Что предложить: выключить подключение, дать ноде сайт, повторить с эталоном или ничего",
+            "enum": [
+              "disable",
+              "site",
+              "reference",
+              "none"
+            ],
+            "type": "string"
+          },
+          "code": {
+            "description": "Что не так; текст — quietNode.advice.\u003ccode\u003e",
+            "enum": [
+              "tuic_auth",
+              "quic_obfs",
+              "quic_auth",
+              "tt_site",
+              "tt_differs",
+              "reality_site",
+              "reality_differs",
+              "exposed",
+              "noticeable",
+              "no_reference",
+              "obfuscated",
+              "incomplete"
+            ],
+            "type": "string"
+          },
+          "inbound_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "level": {
+            "enum": [
+              "exposed",
+              "noticeable",
+              "inconclusive"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "inbound_id",
+          "name",
+          "level",
+          "code",
+          "action"
+        ],
+        "type": "object"
+      },
+      "QuietView": {
+        "additionalProperties": false,
+        "properties": {
+          "advice": {
+            "items": {
+              "$ref": "#/components/schemas/QuietAdvice"
+            },
+            "type": "array"
+          },
+          "verdict": {
+            "description": "Нода не тише самого заметного подключения",
+            "enum": [
+              "quiet",
+              "noticeable",
+              "exposed",
+              "inconclusive"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "verdict",
+          "advice"
         ],
         "type": "object"
       },

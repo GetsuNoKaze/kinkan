@@ -125,5 +125,40 @@
     "showOwn": "Show the panel's own checks",
     "own": "Panel's check",
     "geoSource": "Country and network, where the node found none, from the panel's database:"
+  },
+  "quietNode": {
+    "title": "Quiet node",
+    "verdict": {
+      "quiet": "The node looks like an ordinary website: no inbound gave it away.",
+      "noticeable": "The node stands out: some inbounds answer unlike an ordinary website. Which, and what to do, below.",
+      "exposed": "The node gives itself away. One such port is enough for a scanner to learn the address, and blocking the address cuts every protocol on it at once.",
+      "inconclusive": "Not every inbound could be judged. A node is quiet only when each inbound was checked."
+    },
+    "level": {
+      "exposed": "Exposed",
+      "noticeable": "Noticeable",
+      "inconclusive": "Not judged"
+    },
+    "advice": {
+      "tuic_auth": "TUIC answers a wrong password with its own close code: that is the protocol, no setting hides it. Keep TUIC on a separate node with another address, or turn it off here.",
+      "quic_obfs": "Hysteria2 without obfs answers strangers like a proxy. Turn on obfs (Salamander) in the inbound's settings: without the password the port stays silent. Clients get the new subscription by themselves.",
+      "quic_auth": "This QUIC inbound answers strangers like a proxy even with obfs. Turn it off here or move it to a separate node.",
+      "tt_site": "TrustTunnel without a site answers strangers \"407 — proxy authentication required\". Give the node a site: TrustTunnel shows it by itself.",
+      "tt_differs": "TrustTunnel shows a site, but its answers differ from the reference. What differs is in the check's details below.",
+      "reality_site": "REALITY shows the panel's empty 404 instead of a site. Give the node a site: REALITY switches to it by itself.",
+      "reality_differs": "The REALITY target does not answer like an ordinary website. Check that a live site with this certificate stands behind the SNI; details below.",
+      "exposed": "The inbound answers strangers like a proxy. Turn it off here or move it to a separate node.",
+      "noticeable": "The inbound's answers differ from an ordinary website. Details below.",
+      "no_reference": "There was nothing to compare with. Check again with a reference: usually port 443, where REALITY shows the node's site.",
+      "obfuscated": "The port is silent without the password, as it should be with obfs. Nothing more can be checked from outside.",
+      "incomplete": "The check did not finish or the protocol is not supported yet. That does not mean quiet."
+    },
+    "disable": "Turn the inbound off",
+    "site": "Open \"Node site\"",
+    "reference": "Check with reference 443",
+    "disableTitle": "Turn \"{name}\" off?",
+    "disableText": "Clients lose this inbound: it is gone at their next subscription update. Turn it back on under Protocols.",
+    "disabledDone": "\"{name}\" is off",
+    "why": "A node is no quieter than its loudest inbound: all protocols share its address."
   }
 }

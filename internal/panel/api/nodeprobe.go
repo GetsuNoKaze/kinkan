@@ -42,6 +42,7 @@ type NodeProbeView struct {
 	Address   string             `json:"address"`
 	LocalNode bool               `json:"local_node"`
 	Inbounds  []InboundProbeView `json:"inbounds"`
+	Quiet     QuietView          `json:"quiet" doc:"Вердикт ноды целиком и что сделать (kinkan_quiet.go)"`
 }
 type nodeProbeOutput struct{ Body NodeProbeView }
 
@@ -73,6 +74,7 @@ func (h *handlers) probeNode(ctx context.Context, in *nodeProbeInput) (*nodeProb
 	}
 	views := []InboundProbeView{}
 	configs := []nodeprobe.Config{}
+	templates := []proto.Template{}
 	host := domain.NodeHost(node)
 	if node.Address == "" {
 		host, err = h.d.Settings.String(ctx, settings.KeyDomain)
@@ -156,6 +158,10 @@ func (h *handlers) probeNode(ctx context.Context, in *nodeProbeInput) (*nodeProb
 		}
 		views = append(views, view)
 		configs = append(configs, cfg)
+		if err != nil {
+			template = nil
+		}
+		templates = append(templates, template)
 	}
 	if len(views) == 0 {
 		return nil, huma.Error404NotFound("probe_no_inbounds")
@@ -188,5 +194,10 @@ func (h *handlers) probeNode(ctx context.Context, in *nodeProbeInput) (*nodeProb
 		report.Summarize()
 		views[i].Report = ProtocolProbeReport(report)
 	}
-	return &nodeProbeOutput{Body: NodeProbeView{StartedAt: started, NodeID: node.ID, Vantage: "panel", Address: ip.String(), LocalNode: node.Address == "", Inbounds: views}}, nil
+	items := make([]quietItem, len(views))
+	for i := range views {
+		items[i] = quietItem{view: views[i], template: templates[i]}
+	}
+	quiet := adviseQuiet(items, h.siteServedBy(node.ID))
+	return &nodeProbeOutput{Body: NodeProbeView{StartedAt: started, NodeID: node.ID, Vantage: "panel", Address: ip.String(), LocalNode: node.Address == "", Inbounds: views, Quiet: quiet}}, nil
 }

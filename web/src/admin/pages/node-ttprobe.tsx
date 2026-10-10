@@ -7,6 +7,7 @@ import { Button, Field, Pill } from "../../components/ui";
 import { t } from "../../i18n";
 import { dateLong, time } from "../../lib/format";
 import { nodeLabel } from "../../lib/node-label";
+import { QuietSummary } from "./node-quiet";
 
 type Result = Schemas["NodeProbeView"];
 type SingleResult = Schemas["TTProbeView"];
@@ -25,13 +26,13 @@ const rank = (level: string) => {
 const levelLabel = (level: string) => (LEVELS.includes(level as Level) ? t(`ttProbe.level${level as Level}`) : level);
 const tone = (level: string) => (level === "PASS" ? "ok" : level === "WARN" ? "warn" : level === "INFO" ? "off" : "bad");
 
-export function TTProbeDrawer({ node, onClose }: { node: Node | null; onClose: () => void }) {
+export function TTProbeDrawer({ node, onClose, onOpenSite }: { node: Node | null; onClose: () => void; onOpenSite?: () => void }) {
   return <Drawer open={!!node} onOpenChange={(v) => !v && onClose()} title={t("ttProbe.title")} meta={node ? nodeLabel(node) : undefined} wide>
-    {node ? <ProbeForm key={node.id} node={node} /> : null}
+    {node ? <ProbeForm key={node.id} node={node} onOpenSite={onOpenSite} /> : null}
   </Drawer>;
 }
 
-function ProbeForm({ node }: { node: Node }) {
+function ProbeForm({ node, onOpenSite }: { node: Node; onOpenSite?: () => void }) {
   const all = useQuery({ queryKey: ["inbounds"], queryFn: ({ signal }) => unwrap(api.GET("/api/v1/inbounds", { signal })) });
   const choices = (all.data ?? []).filter((i) => i.node_id === node.id && i.enabled);
   const [picked, setPicked] = useState(0);
@@ -81,6 +82,11 @@ function ProbeForm({ node }: { node: Node }) {
     {run.isPending ? <p role="status" aria-live="polite" className="text-sm">{t("ttProbe.wait")}</p> : null}
     {formError ? <p role="alert" className="text-sm text-[var(--berry-600)]">{formError}</p> : null}
     {result ? <>
+      <QuietSummary quiet={result.quiet} onSite={onOpenSite} onReference={() => {
+        // The node's own site on 443 is the usual reference (REALITY shows it there).
+        setReference("443");
+        document.getElementById("tt-probe-reference")?.focus();
+      }} />
       <Button onClick={download}><Download size={16} aria-hidden />{t("ttProbe.download")}</Button>
       <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr><th>{t("ttProbe.inbound")}</th><th>{t("nodeProbe.verdict")}</th></tr></thead>
         <tbody>{result.inbounds.map((item) => <tr key={item.inbound_id}><td>{item.name} · {item.report.protocol} · {item.port}/{item.network}</td><td><Pill tone={item.report.verdict === "quiet" ? "ok" : item.report.verdict === "exposed" ? "bad" : "warn"}>{verdictLabel(item.report.verdict)}</Pill>{item.report.incomplete ? ` · ${t("nodeProbe.incomplete")}` : ""}<p className="mt-1 text-xs text-[var(--ink-500)]">{reportReason(item.report)}</p></td></tr>)}</tbody>

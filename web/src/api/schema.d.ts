@@ -2857,6 +2857,8 @@ export interface components {
             local_node: boolean;
             /** Format: int64 */
             node_id: number;
+            /** @description Вердикт ноды целиком и что сделать (kinkan_quiet.go) */
+            quiet: components["schemas"]["QuietView"];
             /** Format: date-time */
             started_at: string;
             /** @enum {string} */
@@ -3666,6 +3668,31 @@ export interface components {
             /** @description #RRGGBB или пусто */
             brand_accent?: string;
             config: components["schemas"]["Page"];
+        };
+        QuietAdvice: {
+            /**
+             * @description Что предложить: выключить подключение, дать ноде сайт, повторить с эталоном или ничего
+             * @enum {string}
+             */
+            action: "disable" | "site" | "reference" | "none";
+            /**
+             * @description Что не так; текст — quietNode.advice.<code>
+             * @enum {string}
+             */
+            code: "tuic_auth" | "quic_obfs" | "quic_auth" | "tt_site" | "tt_differs" | "reality_site" | "reality_differs" | "exposed" | "noticeable" | "no_reference" | "obfuscated" | "incomplete";
+            /** Format: int64 */
+            inbound_id: number;
+            /** @enum {string} */
+            level: "exposed" | "noticeable" | "inconclusive";
+            name: string;
+        };
+        QuietView: {
+            advice: components["schemas"]["QuietAdvice"][];
+            /**
+             * @description Нода не тише самого заметного подключения
+             * @enum {string}
+             */
+            verdict: "quiet" | "noticeable" | "exposed" | "inconclusive";
         };
         RecoveryOutputBody: {
             /** @description Показываются один раз */

@@ -26,7 +26,7 @@ export function KinkanNodeButtons({ node }: { node: Node }) {
       <Globe size={16} aria-hidden /> {t("site.button")}
     </Button>
     <ScannerDrawer node={open === "scanners" ? node : null} onClose={close} />
-    <TTProbeDrawer node={open === "probe" ? node : null} onClose={close} />
+    <TTProbeDrawer node={open === "probe" ? node : null} onClose={close} onOpenSite={() => setOpen("site")} />
     <SiteDrawer node={open === "site" ? node : null} onClose={close} />
   </>;
 }
