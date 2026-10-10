@@ -101,7 +101,7 @@ func migrateUp(ctx context.Context, conn *sql.DB, fsys fs.FS) error {
 	if _, err := p.Up(ctx); err != nil {
 		return fmt.Errorf("PostgreSQL migrations: %w", err)
 	}
-	return nil
+	return migrateKinkan(ctx, conn) // Kinkan: the fork's own migrations (kinkan.go)
 }
 
 // schemaVersion is the applied PostgreSQL migration version.

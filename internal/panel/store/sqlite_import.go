@@ -415,7 +415,8 @@ func ConfirmPostgresRestore(ctx context.Context, pg *sql.DB, dir string) error {
 }
 
 func importSchema(ctx context.Context, sqlite *sql.DB, pg *sql.Tx) ([]importTable, error) {
-	rows, err := pg.QueryContext(ctx, "SELECT table_name,column_name,is_identity FROM information_schema.columns WHERE table_schema=current_schema() AND table_name NOT IN ('goose_db_version','mikan_sqlite_import') ORDER BY table_name,ordinal_position")
+	// Kinkan: the fork's tables (kinkan_*) were never in a SQLite database.
+	rows, err := pg.QueryContext(ctx, "SELECT table_name,column_name,is_identity FROM information_schema.columns WHERE table_schema=current_schema() AND table_name NOT IN ('goose_db_version','mikan_sqlite_import') AND table_name NOT LIKE 'kinkan\\_%' ORDER BY table_name,ordinal_position")
 	if err != nil {
 		return nil, err
 	}
