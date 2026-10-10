@@ -42,13 +42,17 @@ func TestOrdinaryHTTPSAndReference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(r.Findings) != 33 {
-		t.Fatalf("got %d checks, want 33", len(r.Findings))
+	if len(r.Findings) != 36 {
+		t.Fatalf("got %d checks, want 36", len(r.Findings))
 	}
 	for _, f := range r.Findings {
 		if f.Level == "FAIL" || f.Level == "ERROR" || f.Level == "WARN" {
 			t.Errorf("%+v", f)
 		}
+	}
+	last := r.Findings[len(r.Findings)-1]
+	if last.Name != "HTTP/2 fingerprint" || last.Compare == nil || len(last.Compare.Target.Settings) == 0 {
+		t.Fatalf("fingerprint comparison is not structured: %+v", last)
 	}
 }
 
@@ -100,7 +104,7 @@ func TestCoverMismatchIsWarningAndRedirectsStayOnOrigin(t *testing.T) {
 			t.Errorf("%+v", f)
 		}
 	}
-	if warnings != 24 || otherHits != 0 {
+	if warnings != 27 || otherHits != 0 {
 		t.Fatalf("warnings=%d redirected requests=%d target=%s", warnings, otherHits, s.URL)
 	}
 }
@@ -257,12 +261,146 @@ func TestPinnedDialerUsedByEveryTransport(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(addresses) != 58 {
+	if len(addresses) != 67 {
 		t.Fatalf("not every probe used the pinned dialer: calls=%d", len(addresses))
 	}
 	for _, a := range addresses {
 		if a != "example.com:443" && a != "example.com:8444" {
 			t.Errorf("unexpected address %s", a)
 		}
+	}
+}
+
+func findings(r Report, name string) []Finding {
+	var out []Finding
+	for _, f := range r.Findings {
+		if f.Name == name {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+func TestAbsoluteFormProxyDisclosure(t *testing.T) {
+	_, cfg := site(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.IsAbs() {
+			w.Header().Set("Proxy-Authenticate", `Basic realm="proxy"`)
+			w.WriteHeader(407)
+			return
+		}
+		io.WriteString(w, "cover")
+	}))
+	r, err := Scan(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := findings(r, "http/1.1 absolute-form request")
+	if len(got) != 1 || got[0].Level != "FAIL" {
+		t.Fatalf("absolute-form proxy answer not reported: %+v", got)
+	}
+}
+
+func TestForeignHostAndAbsoluteFormComparedWithCover(t *testing.T) {
+	// The target serves every name, the reference only its own: the default virtual
+	// host shows the difference a scanner would see.
+	_, cfg := site(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "cover") }))
+	ref, _ := site(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host == foreignHost {
+			http.NotFound(w, r)
+			return
+		}
+		io.WriteString(w, "cover")
+	}))
+	cfg.Reference = ref.URL
+	r, err := Scan(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"http/1.1 foreign Host", "h2 foreign Host", "http/1.1 absolute-form request"} {
+		got := findings(r, name)
+		if len(got) != 1 || got[0].Level != "WARN" {
+			t.Errorf("%s: %+v", name, got)
+		}
+	}
+	if got := findings(r, "http/1.1 GET /"); len(got) != 1 || got[0].Level != "PASS" {
+		t.Errorf("own host: %+v", got)
+	}
+}
+
+// rawSite answers every TLS connection with a fixed HTTP/1 response, like a front
+// server other than Go's would answer a bare HTTP/2 preface.
+func rawSite(t *testing.T, cert tls.Certificate, answer string) string {
+	t.Helper()
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{Certificates: []tls.Certificate{cert}, NextProtos: []string{"h2", "http/1.1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer c.Close()
+				c.SetDeadline(time.Now().Add(time.Second))
+				buf := make([]byte, 64)
+				if _, err := c.Read(buf); err != nil {
+					return
+				}
+				io.WriteString(c, answer)
+			}()
+		}
+	}()
+	return "https://" + ln.Addr().String()
+}
+
+func TestPrefaceAnswerComparedWithCover(t *testing.T) {
+	s, cfg := site(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	cfg.Reference = rawSite(t, s.TLS.Certificates[0], "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+	u, _ := endpoint(cfg.Reference)
+	ref, err := raw(context.Background(), cfg, u, nil, http2.ClientPreface+emptySettings)
+	if err != nil || ref.statusLine != "HTTP/1.1 400 Bad Request" {
+		t.Fatalf("raw reference answer: %+v %v", ref, err)
+	}
+	r, err := Scan(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"raw HTTP/2 preface without h2: ", "raw HTTP/2 preface without h2: http/1.1"} {
+		got := findings(r, name)
+		if len(got) != 1 || got[0].Level != "WARN" || !strings.Contains(got[0].Detail, "differs from cover") {
+			t.Errorf("%s: %+v", name, got)
+		}
+	}
+}
+
+func TestUnreachableReferenceSkipsComparisonsOnce(t *testing.T) {
+	_, cfg := site(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "cover") }))
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Reference = "https://" + ln.Addr().String()
+	ln.Close()
+	r, err := Scan(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	errorsSeen := 0
+	for _, f := range r.Findings {
+		if f.Level == "ERROR" {
+			errorsSeen++
+			if f.Name != "reference" {
+				t.Errorf("unexpected error: %+v", f)
+			}
+		}
+	}
+	if errorsSeen != 1 || r.Reference != cfg.Reference {
+		t.Fatalf("errors=%d reference=%q", errorsSeen, r.Reference)
+	}
+	if got := findings(r, "HTTP/2 fingerprint"); len(got) != 1 || got[0].Level != "INFO" {
+		t.Fatalf("fingerprint after an unreachable reference: %+v", got)
 	}
 }

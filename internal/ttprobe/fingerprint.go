@@ -11,22 +11,22 @@ import (
 	"golang.org/x/net/http2/hpack"
 )
 
-type setting struct {
+type h2Setting struct {
 	ID    uint16 `json:"id"`
 	Value uint32 `json:"value"`
 }
-type window struct {
+type h2Window struct {
 	Stream    uint32 `json:"stream"`
 	Increment uint32 `json:"increment"`
 }
 type h2Fingerprint struct {
-	Settings []setting `json:"settings"`
-	Windows  []window  `json:"initial_window_updates"`
-	Headers  []string  `json:"header_order"`
+	Settings []h2Setting `json:"settings"`
+	Windows  []h2Window  `json:"initial_window_updates"`
+	Headers  []string    `json:"header_order"`
 }
 
 func fingerprint(ctx context.Context, cfg Config, u *url.URL, host string) (h2Fingerprint, error) {
-	r := h2Fingerprint{Settings: []setting{}, Windows: []window{}, Headers: []string{}}
+	r := h2Fingerprint{Settings: []h2Setting{}, Windows: []h2Window{}, Headers: []string{}}
 	c, err := dial(ctx, cfg, u, []string{"h2"}, u.Hostname(), false)
 	if err != nil {
 		return r, err
@@ -85,7 +85,7 @@ func fingerprint(ctx context.Context, cfg Config, u *url.URL, host string) (h2Fi
 					if len(r.Settings) >= 128 {
 						return errors.New("too many SETTINGS")
 					}
-					r.Settings = append(r.Settings, setting{uint16(s.ID), s.Val})
+					r.Settings = append(r.Settings, h2Setting{uint16(s.ID), s.Val})
 					return nil
 				}); err != nil {
 					return r, err
@@ -95,7 +95,7 @@ func fingerprint(ctx context.Context, cfg Config, u *url.URL, host string) (h2Fi
 				}
 			}
 		case *http2.WindowUpdateFrame:
-			r.Windows = append(r.Windows, window{frame.StreamID, frame.Increment})
+			r.Windows = append(r.Windows, h2Window{frame.StreamID, frame.Increment})
 		case *http2.PingFrame:
 			if !frame.IsAck() {
 				if err := f.WritePing(true, frame.Data); err != nil {

@@ -119,14 +119,14 @@ func TestTrustTunnelFallbackOnNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(report.Findings) != 33 {
+	if len(report.Findings) != 36 {
 		t.Fatalf("scanner checks=%d", len(report.Findings))
 	}
 	for _, finding := range report.Findings {
 		if finding.Name == "HTTP/2 fingerprint" {
 			t.Logf("scanner: %+v", finding)
 		}
-		if finding.Level == "FAIL" || finding.Level == "ERROR" || strings.Contains(finding.Detail, "cover differs") {
+		if finding.Level == "FAIL" || finding.Level == "ERROR" || strings.Contains(finding.Detail, "cover differs") || strings.Contains(finding.Detail, "differs from cover") {
 			t.Errorf("scanner: %+v", finding)
 		}
 	}

@@ -29,6 +29,14 @@ type Finding struct {
 	Name   string `json:"name"`
 	Level  string `json:"level"`
 	Detail string `json:"detail"`
+	// Compare carries both sides of a structured comparison (the HTTP/2 fingerprint),
+	// so a UI can show what differs instead of two JSON strings.
+	Compare *H2Comparison `json:"compare,omitempty"`
+}
+
+type H2Comparison struct {
+	Target    h2Fingerprint `json:"target"`
+	Reference h2Fingerprint `json:"reference"`
 }
 
 type Report struct {
@@ -49,7 +57,7 @@ type Config struct {
 }
 
 func (r *Report) add(name, level, detail string) {
-	r.Findings = append(r.Findings, Finding{name, level, detail})
+	r.Findings = append(r.Findings, Finding{Name: name, Level: level, Detail: detail})
 }
 
 // CheckError means an observed leak or an incomplete check, rather than a CLI error.
@@ -187,34 +195,57 @@ func Scan(ctx context.Context, cfg Config) (Report, error) {
 		c.Close()
 		r.add(name, "INFO", fmt.Sprintf("diagnostic handshake only; unverified certificate DNS SAN=%q; IP SAN=%v", cert.DNSNames, cert.IPAddresses))
 	}
+	// One handshake with the reference first: when it is down, every comparison below
+	// would wait for its own timeout, and a bounded scan would end before the HTTP/2
+	// fingerprint, the check that matters most.
+	if ref != nil {
+		c, err := dial(ctx, cfg, ref, []string{"h2", "http/1.1"}, ref.Hostname(), false)
+		if err != nil {
+			r.add("reference", "ERROR", "reference unreachable, comparisons skipped: "+err.Error())
+			ref = nil
+		} else {
+			c.Close()
+		}
+	}
 	for _, alpn := range [][]string{nil, {"http/1.1"}} {
 		name := "raw HTTP/2 preface without h2: " + strings.Join(alpn, ",")
-		c, err := dial(ctx, cfg, u, alpn, u.Hostname(), false)
-		if err != nil {
-			r.add(name, "ERROR", err.Error())
-			continue
-		}
-		stop := context.AfterFunc(ctx, func() { c.Close() })
-		if _, err = io.WriteString(c, http2.ClientPreface); err == nil {
-			err = http2.NewFramer(c, c).WriteSettings()
-		}
-		var prefix [9]byte
-		if err == nil {
-			_, err = io.ReadFull(c, prefix[:])
-		}
-		c.Close()
-		stop()
+		payload := http2.ClientPreface + emptySettings
+		a, err := raw(ctx, cfg, u, alpn, payload)
 		if err != nil {
 			r.add(name, "WARN", "no complete response: "+err.Error())
 			continue
 		}
-		if strings.HasPrefix(string(prefix[:]), "HTTP/1.") {
-			r.add(name, "PASS", "HTTP/1 response")
-		} else if prefix[3] == byte(http2.FrameSettings) && prefix[5] == 0 && prefix[6] == 0 && prefix[7] == 0 && prefix[8] == 0 {
+		if a.h2Settings {
 			r.add(name, "FAIL", "HTTP/2 SETTINGS returned without negotiated h2")
-		} else {
-			r.add(name, "WARN", "unexpected response prefix: "+hex.EncodeToString(prefix[:]))
+			continue
 		}
+		if a.statusLine == "" {
+			r.add(name, "WARN", "unexpected response prefix: "+a.prefix)
+			continue
+		}
+		if ref == nil {
+			r.add(name, "PASS", "HTTP/1 response: "+a.statusLine)
+			continue
+		}
+		// A Go server and nginx answer the preface differently; only the cover's own
+		// front server answers it the same way.
+		b, err := raw(ctx, cfg, ref, alpn, payload)
+		switch {
+		case err != nil:
+			r.add(name, "ERROR", "reference: "+err.Error())
+		case a.statusLine != b.statusLine:
+			r.add(name, "WARN", fmt.Sprintf("HTTP/1 response differs from cover: target %q; reference %q", a.statusLine, b.statusLine))
+		default:
+			r.add(name, "PASS", "HTTP/1 response matches cover: "+a.statusLine)
+		}
+	}
+	// An absolute-form request is what an open-proxy scanner sends. A site answers it
+	// from one of its own virtual hosts; a proxy fetches the URL or fails to.
+	absolute := "GET http://" + foreignHost + "/ HTTP/1.1\r\nHost: " + foreignHost + "\r\nUser-Agent: kinkan-probe/1\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n"
+	if a, err := raw(ctx, cfg, u, []string{"http/1.1"}, absolute); err != nil {
+		r.add("http/1.1 absolute-form request", "ERROR", err.Error())
+	} else {
+		r.compareRaw(ctx, cfg, ref, "http/1.1 absolute-form request", absolute, a)
 	}
 	for _, proto := range []string{"http/1.1", "h2"} {
 		for _, p := range probes {
@@ -222,7 +253,11 @@ func Scan(ctx context.Context, cfg Config) (Report, error) {
 				return r, err
 			}
 			name := proto + " " + p.name
-			a, err := request(ctx, cfg, u, u.Host, proto, p)
+			host := u.Host
+			if p.host != "" {
+				host = p.host
+			}
+			a, err := request(ctx, cfg, u, host, proto, p)
 			if err != nil {
 				r.add(name, "ERROR", err.Error())
 				continue
@@ -239,7 +274,7 @@ func Scan(ctx context.Context, cfg Config) (Report, error) {
 				r.add(name, "PASS", fmt.Sprintf("status=%d; no explicit proxy authentication response", a.status))
 				continue
 			}
-			b, err := request(ctx, cfg, ref, u.Host, proto, p)
+			b, err := request(ctx, cfg, ref, host, proto, p)
 			if err != nil {
 				r.add(name, "ERROR", "reference: "+err.Error())
 				continue
@@ -268,10 +303,12 @@ func Scan(ctx context.Context, cfg Config) (Report, error) {
 			if string(ra) != string(rb) {
 				level = "WARN"
 			}
-			r.add("HTTP/2 fingerprint", level, fmt.Sprintf("target=%s reference=%s (SETTINGS order/values, initial windows, response header order)", ra, rb))
+			r.Findings = append(r.Findings, Finding{Name: "HTTP/2 fingerprint", Level: level,
+				Detail:  fmt.Sprintf("target=%s reference=%s (SETTINGS order/values, initial windows, response header order)", ra, rb),
+				Compare: &H2Comparison{Target: a, Reference: b}})
 		}
 	}
-	if ref == nil {
+	if cfg.Reference == "" {
 		r.add("reference comparison", "WARN", "not performed; pass --reference https://COVER_HOST:PORT to compare responses and HTTP/2 fingerprint")
 	}
 	return r, nil
@@ -314,21 +351,27 @@ func dial(ctx context.Context, cfg Config, u *url.URL, alpn []string, sni string
 	return conn, nil
 }
 
-type probe struct{ name, method, path, auth string }
+// host, when set, replaces the target's Host/:authority (and the reference's).
+type probe struct{ name, method, path, auth, host string }
+
+// foreignHost is a name no site serves (RFC 2606), for requests a site should answer
+// from its default virtual host and a proxy would try to reach.
+const foreignHost = "kinkan-probe.invalid"
 
 var probes = []probe{
-	{"GET /", "GET", "/", ""},
-	{"HEAD /", "HEAD", "/", ""},
-	{"OPTIONS /", "OPTIONS", "/", ""},
-	{"CONNECT", "CONNECT", "", ""},
-	{"wrong Basic", "GET", "/", "Basic a2lua2FuLXByb2JlOmludmFsaWQ="},
-	{"malformed Basic", "GET", "/", "Basic !!!"},
-	{"wrong Bearer", "GET", "/", "Bearer kinkan-probe-invalid"},
-	{"CONNECT wrong Basic", "CONNECT", "", "Basic a2lua2FuLXByb2JlOmludmFsaWQ="},
-	{"robots", "GET", "/robots.txt", ""},
-	{"favicon", "GET", "/favicon.ico", ""},
-	{"security.txt", "GET", "/.well-known/security.txt", ""},
-	{"missing path", "GET", "/__kinkan_probe_missing_9e74d4__", ""},
+	{"GET /", "GET", "/", "", ""},
+	{"HEAD /", "HEAD", "/", "", ""},
+	{"OPTIONS /", "OPTIONS", "/", "", ""},
+	{"CONNECT", "CONNECT", "", "", ""},
+	{"wrong Basic", "GET", "/", "Basic a2lua2FuLXByb2JlOmludmFsaWQ=", ""},
+	{"malformed Basic", "GET", "/", "Basic !!!", ""},
+	{"wrong Bearer", "GET", "/", "Bearer kinkan-probe-invalid", ""},
+	{"CONNECT wrong Basic", "CONNECT", "", "Basic a2lua2FuLXByb2JlOmludmFsaWQ=", ""},
+	{"robots", "GET", "/robots.txt", "", ""},
+	{"favicon", "GET", "/favicon.ico", "", ""},
+	{"security.txt", "GET", "/.well-known/security.txt", "", ""},
+	{"missing path", "GET", "/__kinkan_probe_missing_9e74d4__", "", ""},
+	{"foreign Host", "GET", "/", "", foreignHost},
 }
 
 type response struct {
@@ -411,6 +454,93 @@ func request(ctx context.Context, cfg Config, u *url.URL, host, proto string, p 
 	}
 	sum := sha256.Sum256(body)
 	return response{resp.StatusCode, resp.Proto, hex.EncodeToString(sum[:]), auth}, nil
+}
+
+// emptySettings is an HTTP/2 SETTINGS frame without parameters, as a client sends
+// right after the preface.
+var emptySettings = string([]byte{0, 0, 0, 4, 0, 0, 0, 0, 0})
+
+type rawResponse struct {
+	statusLine string // "HTTP/1.1 400 Bad Request"; empty when the answer is not HTTP/1
+	status     int
+	hash       string
+	proxyAuth  bool
+	h2Settings bool   // the answer starts with an HTTP/2 SETTINGS frame
+	prefix     string // hex of the first bytes, for an answer that is neither
+}
+
+// raw sends payload as is over TLS with the given ALPN and reads one answer: an
+// HTTP/1 response (status line, body hash) or the start of HTTP/2 frames.
+func raw(ctx context.Context, cfg Config, u *url.URL, alpn []string, payload string) (rawResponse, error) {
+	var result rawResponse
+	c, err := dial(ctx, cfg, u, alpn, u.Hostname(), false)
+	if err != nil {
+		return result, err
+	}
+	defer c.Close()
+	stop := context.AfterFunc(ctx, func() { c.Close() })
+	defer stop()
+	if _, err := io.WriteString(c, payload); err != nil {
+		return result, err
+	}
+	br := reader(c)
+	prefix, err := br.Peek(9)
+	if err != nil {
+		return result, err
+	}
+	if !strings.HasPrefix(string(prefix), "HTTP/1.") {
+		if prefix[3] == byte(http2.FrameSettings) && prefix[5] == 0 && prefix[6] == 0 && prefix[7] == 0 && prefix[8] == 0 {
+			result.h2Settings = true
+		}
+		result.prefix = hex.EncodeToString(prefix)
+		return result, nil
+	}
+	resp, err := http.ReadResponse(br, nil)
+	if err != nil {
+		return result, err
+	}
+	defer resp.Body.Close()
+	result.statusLine = resp.Proto + " " + resp.Status
+	result.status = resp.StatusCode
+	_, result.proxyAuth = resp.Header["Proxy-Authenticate"]
+	if resp.StatusCode == 407 || result.proxyAuth {
+		return result, nil
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
+	if err != nil {
+		return result, err
+	}
+	if len(body) > maxBody {
+		return result, errors.New("response exceeds 2 MiB; comparison incomplete")
+	}
+	sum := sha256.Sum256(body)
+	result.hash = hex.EncodeToString(sum[:])
+	return result, nil
+}
+
+// compareRaw reports a raw HTTP/1 exchange: proxy authentication is a failure, and
+// with a reference the same payload must get the same status line and body.
+func (r *Report) compareRaw(ctx context.Context, cfg Config, ref *url.URL, name, payload string, a rawResponse) {
+	switch {
+	case a.status == 407 || a.proxyAuth:
+		r.add(name, "FAIL", fmt.Sprintf("proxy disclosure: status=%d Proxy-Authenticate=%t", a.status, a.proxyAuth))
+		return
+	case a.statusLine == "":
+		r.add(name, "WARN", "not an HTTP/1 response: "+a.prefix)
+		return
+	case ref == nil:
+		r.add(name, "PASS", a.statusLine+"; no explicit proxy authentication response")
+		return
+	}
+	b, err := raw(ctx, cfg, ref, []string{"http/1.1"}, payload)
+	switch {
+	case err != nil:
+		r.add(name, "ERROR", "reference: "+err.Error())
+	case a.statusLine != b.statusLine || a.hash != b.hash:
+		r.add(name, "WARN", fmt.Sprintf("cover differs: target %q sha256=%s; reference %q sha256=%s", a.statusLine, a.hash, b.statusLine, b.hash))
+	default:
+		r.add(name, "PASS", a.statusLine+" and body match cover")
+	}
 }
 
 // Used by the raw framer to bound reads without buffering an untrusted body.
