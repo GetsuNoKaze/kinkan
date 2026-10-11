@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"sync"
 	"time"
 
 	"mikan/internal/nodeapi"
@@ -12,6 +13,16 @@ import (
 
 // Kinkan's part of the syncer. Mikan's files call into it with one line each, so that
 // merges from upstream meet as few of the fork's lines as possible.
+
+type kinkanManager struct {
+	// Locks stay with the node ID when its syncer is replaced or reconnected.
+	scannerLocks sync.Map // node ID -> *sync.Mutex
+}
+
+func (m *Manager) scannerLock(id int64) *sync.Mutex {
+	lock, _ := m.scannerLocks.LoadOrStore(id, &sync.Mutex{})
+	return lock.(*sync.Mutex)
+}
 
 // runKinkan starts the fork's own loops for the node; the function it returns waits for
 // them once ctx is done.
@@ -77,11 +88,26 @@ func (m *Manager) pruneKinkan(ctx context.Context, now time.Time) {
 	}
 }
 
-// ResetScanners empties a node's scanner journal on the node itself, under a new epoch.
-func (m *Manager) ResetScanners(ctx context.Context, id int64) error {
-	c, err := clientOf[interface{ ResetScanners(context.Context) error }](m, id)
-	if err != nil {
+// ClearScanners waits for an in-flight collection, then resets the node and removes
+// the panel's copy before the next collection can start. An old snapshot cannot be
+// stored after clearing has succeeded.
+func (m *Manager) ClearScanners(ctx context.Context, id int64) error {
+	lock := m.scannerLock(id)
+	lock.Lock()
+	defer lock.Unlock()
+	s, ok := m.Syncer(id)
+	if !ok {
+		return nodeapi.ErrUnavailable
+	}
+	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return c.ResetScanners(ctx)
+	c, ok := s.node.(interface{ ResetScanners(context.Context) error })
+	if !ok {
+		return nodeapi.ErrScannersUnsupported
+	}
+	if err := c.ResetScanners(ctx); err != nil {
+		return err
+	}
+	return m.st.DeleteScanners(ctx, id)
 }

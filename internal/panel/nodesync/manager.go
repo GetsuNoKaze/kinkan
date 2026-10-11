@@ -45,6 +45,7 @@ var ErrNoNode = errors.New("no node")
 // pool, devices. Every node gets the same slots and policies, so one subscription works
 // on all of them; traffic and devices add up across nodes.
 type Manager struct {
+	kinkanManager
 	st      *store.Store
 	set     *settings.Settings
 	pool    *domain.Pool

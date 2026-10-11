@@ -160,3 +160,27 @@ func TestQuietNodeAdviceFollowsFindings(t *testing.T) {
 		t.Errorf("on 443: %+v", a)
 	}
 }
+
+func TestQuietNodeObfsNeedsTimeoutsWithoutResponses(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		findings []ttprobe.Finding
+		code     string
+	}{
+		{"no observations", nil, "incomplete"},
+		{"timeouts", []ttprobe.Finding{timedOut, {Name: "HTTP/3 GET /", Level: "ERROR", Detail: "context deadline exceeded"}}, "obfuscated"},
+		{"QUIC answered", []ttprobe.Finding{{Name: "QUIC TLS", Level: "INFO", Detail: "ALPN=h3"}, timedOut}, "incomplete"},
+		{"HTTP3 answered", []ttprobe.Finding{{Name: "HTTP/3 GET /", Level: "INFO", Detail: "status=404"}, timedOut}, "incomplete"},
+		{"cancelled before probing", []ttprobe.Finding{{Name: "scan", Level: "ERROR", Detail: "context deadline exceeded"}}, "incomplete"},
+		{"expired certificate", []ttprobe.Finding{{Name: "QUIC handshake", Level: "ERROR", Detail: "x509: certificate has expired"}, timedOut}, "failed"},
+		{"certificate name contains timeout", []ttprobe.Finding{{Name: "QUIC handshake", Level: "ERROR", Detail: "x509: certificate is valid for cover.example, not timeout.example"}}, "failed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			item := quietCase(1, "hysteria2", "inconclusive", "", proto.Template{"type": "hysteria2", "obfs": "salamander"}, tc.findings...)
+			got := adviseQuiet([]quietItem{item}, false)
+			if len(got.Advice) != 1 || got.Advice[0].Code != tc.code {
+				t.Fatalf("advice=%+v, want %s", got.Advice, tc.code)
+			}
+		})
+	}
+}

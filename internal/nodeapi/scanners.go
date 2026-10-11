@@ -2,8 +2,26 @@ package nodeapi
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"time"
 )
+
+var ErrScannersUnsupported = errors.New("node does not support the scanner journal")
+
+// IsScannerUnsupported distinguishes a missing journal endpoint from a transport
+// failure. Older Kinkan nodes can also explicitly report an unavailable journal.
+func IsScannerUnsupported(err error) bool {
+	if errors.Is(err, ErrScannersUnsupported) {
+		return true
+	}
+	var status *StatusError
+	if errors.As(err, &status) {
+		return status.Path == "/v1/scanners" && (status.Status == http.StatusNotFound || status.Status == http.StatusMethodNotAllowed)
+	}
+	var coded *Error
+	return errors.As(err, &coded) && coded.Code == "invalid_state" && coded.Message == "no scanner journal"
+}
 
 // ScannerRecord contains rejected-auth metadata only, aggregated by day/source.
 // An unauthenticated request may be a browser; it is not proof of a scanner.

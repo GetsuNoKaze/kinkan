@@ -19,12 +19,14 @@ import (
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/nodesync"
 	"mikan/internal/panel/settings"
+	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/store/storetest"
 )
 
 type resettingNodes struct {
-	NodeRuntime // only ResetScanners is called
+	NodeRuntime // only ClearScanners is called
+	st          *store.Store
 	resets      int
 	fail        error
 }
@@ -33,9 +35,12 @@ func (n *resettingNodes) Health(int64) (nodesync.HealthView, bool) {
 	return nodesync.HealthView{}, false
 }
 
-func (n *resettingNodes) ResetScanners(context.Context, int64) error {
+func (n *resettingNodes) ClearScanners(ctx context.Context, id int64) error {
 	n.resets++
-	return n.fail
+	if n.fail != nil {
+		return n.fail
+	}
+	return n.st.DeleteScanners(ctx, id)
 }
 
 // A finished check is kept and can be read back, deleted alone or with the node's whole
@@ -70,7 +75,7 @@ func TestProbeHistoryAndJournalClearing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	nodes := &resettingNodes{}
+	nodes := &resettingNodes{st: st}
 	deps := Deps{Store: st, Settings: set, Sessions: sessions, Now: clock, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), IPLimit: auth.NewLimiter(10, time.Minute, time.Minute, time.Hour),
 		Resolve: func(context.Context, string) ([]netip.Addr, error) {
 			return []netip.Addr{netip.MustParseAddr("8.8.8.8")}, nil
@@ -126,15 +131,25 @@ func TestProbeHistoryAndJournalClearing(t *testing.T) {
 	if err := st.SaveScanners(ctx, 1, snap, now); err != nil {
 		t.Fatal(err)
 	}
-	nodes.fail = nodeapi.ErrUnavailable
-	if code := call("DELETE", "/api/v1/nodes/1/scanners", "", nil); code != 409 {
-		t.Fatalf("a node without a journal: %d", code)
-	}
-	if rows, _ := st.ScannerRows(ctx, 1, now); len(rows) != 1 {
-		t.Fatal("the panel's copy went although the node's journal stayed")
+	for _, tc := range []struct {
+		name string
+		err  error
+		code int
+	}{
+		{"unavailable", nodeapi.ErrUnavailable, 502},
+		{"unsupported", nodeapi.ErrScannersUnsupported, 409},
+		{"old node", &nodeapi.StatusError{Method: "DELETE", Path: "/v1/scanners", Status: 404}, 409},
+	} {
+		nodes.fail = tc.err
+		if code := call("DELETE", "/api/v1/nodes/1/scanners", "", nil); code != tc.code {
+			t.Fatalf("%s: %d, want %d", tc.name, code, tc.code)
+		}
+		if rows, err := st.ScannerRows(ctx, 1, now); err != nil || len(rows) != 1 {
+			t.Fatalf("the panel's copy changed after %s: %+v %v", tc.name, rows, err)
+		}
 	}
 	nodes.fail = nil
-	if code := call("DELETE", "/api/v1/nodes/1/scanners", "", nil); code != 204 || nodes.resets != 2 {
+	if code := call("DELETE", "/api/v1/nodes/1/scanners", "", nil); code != 204 || nodes.resets != 4 {
 		t.Fatalf("clear journal: %d resets=%d", code, nodes.resets)
 	}
 	if rows, _ := st.ScannerRows(ctx, 1, now); len(rows) != 0 {

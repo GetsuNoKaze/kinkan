@@ -120,19 +120,16 @@ func (h *handlers) clearScanners(ctx context.Context, in *nodeIDInput) (*struct{
 		return nil, err
 	}
 	resetter, ok := h.d.Nodes.(interface {
-		ResetScanners(ctx context.Context, id int64) error
+		ClearScanners(ctx context.Context, id int64) error
 	})
 	if !ok || h.d.Nodes == nil {
 		return nil, huma.Error409Conflict("nodes_disabled")
 	}
-	if err := resetter.ResetScanners(ctx, in.ID); err != nil {
-		if errors.Is(err, nodeapi.ErrUnavailable) {
+	if err := resetter.ClearScanners(ctx, in.ID); err != nil {
+		if nodeapi.IsScannerUnsupported(err) {
 			return nil, huma.Error409Conflict("node_too_old")
 		}
 		return nil, huma.Error502BadGateway("scanner_reset_failed", err)
-	}
-	if err := h.d.Store.DeleteScanners(ctx, in.ID); err != nil {
-		return nil, err
 	}
 	h.audit(ctx, sessionOf(ctx).AdminID, "node.scanners_clear", "node", strconv.FormatInt(in.ID, 10), nil)
 	return nil, nil
