@@ -215,8 +215,23 @@ func TestSiteServingTLS(t *testing.T) {
 	defer held.Close()
 	st.Site.HTTPPort = held.Addr().(*net.TCPAddr).Port
 	e.applySite(st)
+	busy := e.siteStatus()
+	if busy.Error == "" || busy.HTTP != "" || busy.HTTPS == "" {
+		t.Fatalf("a port in use: %+v", busy)
+	}
+	// Once the other program lets the port go, the site takes it by itself; the address
+	// that listened all along is left as it was.
+	e.retrySite(time.Now())
 	if e.siteStatus().Error == "" {
-		t.Error("a port in use is not reported")
+		t.Fatal("tried again before siteRetryEvery")
+	}
+	_ = held.Close()
+	e.retrySite(time.Now().Add(siteRetryEvery))
+	if got := e.siteStatus(); got.Error != "" || got.HTTP == "" || got.HTTPS != busy.HTTPS {
+		t.Fatalf("after the port was freed: %+v", got)
+	}
+	if r, err := http.Get("http://" + e.siteStatus().HTTP + "/"); err != nil || r.StatusCode != 200 {
+		t.Fatalf("the site on the freed port: %v %v", r, err)
 	}
 }
 

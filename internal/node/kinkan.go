@@ -2,6 +2,7 @@ package node
 
 import (
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
 	"sync/atomic"
@@ -35,6 +36,7 @@ func (e *Engine) kinkanApply(st nodeapi.DesiredState, res *nodeapi.ApplyResult, 
 // kinkanHealth adds what the node's site is to its health.
 func (e *Engine) kinkanHealth(h *nodeapi.Health) {
 	e.mu.Lock()
+	e.retrySite(time.Now())
 	h.Site = e.siteStatus()
 	e.mu.Unlock()
 }
@@ -64,6 +66,9 @@ func kinkanHandlers(mux *http.ServeMux, e *Engine, log *slog.Logger) {
 		if err != nil {
 			fail(w, log, err)
 			return
+		}
+		if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+			s.Observer = host
 		}
 		writeJSON(w, http.StatusOK, s)
 	})

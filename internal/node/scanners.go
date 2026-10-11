@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/netip"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -49,14 +50,16 @@ func (e *Engine) startScannerJournal() {
 				continue
 			}
 			host = ip.Unmap().String()
-			_, port, err := net.SplitHostPort(ev.Local)
+			// A listener on a port range (Hysteria2) reports its addresses as a list.
+			local, _, _ := strings.Cut(ev.Local, ",")
+			_, port, err := net.SplitHostPort(local)
 			if err != nil {
 				continue
 			}
 			name := ""
 			e.mu.Lock()
 			for _, ib := range e.applied.Inbounds {
-				if ib.Port != port {
+				if !portIn(ib.Port, port) {
 					continue
 				}
 				t, err := proto.FromJSON(ib.Config)
@@ -179,4 +182,30 @@ func scannerMetadata(ip string) scannerlog.Metadata {
 		m.Evidence = evidence
 	}
 	return m
+}
+
+// portIn says whether port is in an inbound's port spec: one port, a range (20000-20010)
+// or a list of them (443,20000-20010).
+func portIn(spec, port string) bool {
+	p, err := strconv.Atoi(port)
+	if err != nil {
+		return false
+	}
+	for _, part := range strings.Split(spec, ",") {
+		lo, hi, ranged := strings.Cut(strings.TrimSpace(part), "-")
+		a, err := strconv.Atoi(lo)
+		if err != nil {
+			continue
+		}
+		b := a
+		if ranged {
+			if b, err = strconv.Atoi(hi); err != nil {
+				continue
+			}
+		}
+		if a <= p && p <= b {
+			return true
+		}
+	}
+	return false
 }

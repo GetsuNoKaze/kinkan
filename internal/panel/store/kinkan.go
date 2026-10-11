@@ -58,3 +58,21 @@ func migrateKinkan(ctx context.Context, conn *sql.DB) error {
 	}
 	return nil
 }
+
+// KinkanSchemaVersion is the fork's applied schema version: 0 before its first migration
+// (no version table yet). The installer compares it before and after a migration, since
+// an older Kinkan refuses a newer fork schema just as an older mikan refuses a newer one.
+func KinkanSchemaVersion(ctx context.Context, dsn string) (int64, error) {
+	conn, err := connectPostgres(ctx, dsn, maintenanceSession)
+	if err != nil {
+		return 0, err
+	}
+	defer conn.Close()
+	var exists bool
+	if err := conn.QueryRowContext(ctx, `SELECT to_regclass(current_schema() || '.`+kinkanTable+`') IS NOT NULL`).Scan(&exists); err != nil || !exists {
+		return 0, err
+	}
+	var v sql.NullInt64
+	err = conn.QueryRowContext(ctx, `SELECT max(version_id) FROM `+kinkanTable+` WHERE is_applied`).Scan(&v)
+	return v.Int64, err
+}

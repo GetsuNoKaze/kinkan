@@ -3679,7 +3679,7 @@ export interface components {
              * @description Что не так; текст — quietNode.advice.<code>
              * @enum {string}
              */
-            code: "tuic_auth" | "quic_obfs" | "quic_auth" | "tt_site" | "tt_differs" | "reality_site" | "reality_differs" | "reality_far" | "exposed" | "noticeable" | "no_reference" | "obfuscated" | "incomplete";
+            code: "tuic_auth" | "quic_obfs" | "quic_auth" | "tt_site" | "tt_differs" | "reality_site" | "reality_differs" | "reality_far" | "exposed" | "noticeable" | "no_reference" | "no_reference_443" | "self_reference" | "obfuscated" | "failed" | "incomplete";
             /** Format: int64 */
             inbound_id: number;
             /** @enum {string} */
@@ -3846,11 +3846,30 @@ export interface components {
             reason: string;
             scanner: string;
         };
+        ScannerStatusView: {
+            /**
+             * Format: int64
+             * @description Сколько событий нода не записала (переполнение очереди или лимитов)
+             */
+            dropped: number;
+            /** @description Ошибка последнего сбора, если он не удался */
+            error?: string;
+            /** Format: date-time */
+            error_at?: string;
+            /**
+             * Format: date-time
+             * @description Последний удачный сбор журнала с ноды
+             */
+            last_ok?: string;
+            /** @description Нода не ведёт журнал (Mikan или старый Kinkan) */
+            unsupported: boolean;
+        };
         ScannerView: {
             coverage: string;
             days: components["schemas"]["ScannerDay"][];
             records: components["schemas"]["ScannerRecord"][];
             spike: boolean;
+            status: components["schemas"]["ScannerStatusView"];
         };
         Servers: {
             auto?: string;

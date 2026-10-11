@@ -31,6 +31,10 @@ type ScannerSnapshot struct {
 	Epoch   string          `json:"epoch"`
 	Rows    []ScannerRecord `json:"rows"`
 	Dropped int64           `json:"dropped"`
+	// Observer is the address the request for this snapshot came from, as the node saw
+	// it: the panel's own outgoing address, which its checks of the node come from too
+	// (behind Cloudflare or NAT it is not what the panel's domain resolves to).
+	Observer string `json:"observer,omitempty"`
 }
 
 func (c *Client) Scanners(ctx context.Context) (ScannerSnapshot, error) {

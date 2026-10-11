@@ -161,7 +161,7 @@ func compare(a, b string) int {
 	case pb[5] == "":
 		return -1
 	}
-	return comparePrerelease(pa[5], pb[5])
+	return compareForkPrerelease(pa[5], pb[5]) // Kinkan: tt.N after its candidates (fork.go)
 }
 
 func versionParts(v string) []string {

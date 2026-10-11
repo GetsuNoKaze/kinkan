@@ -124,7 +124,12 @@
     "unknown": "Unknown",
     "showOwn": "Show the panel's own checks",
     "own": "Panel's check",
-    "geoSource": "Country and network, where the node found none, from the panel's database:"
+    "geoSource": "Country and network, where the node found none, from the panel's database:",
+    "statusUnsupported": "The node keeps no journal: it runs Mikan or an older Kinkan. An empty table here does not mean there were no scanners.",
+    "statusError": "The node's journal is not being collected: {error}. Last collected: {last}. The table may be incomplete.",
+    "statusDropped": "The node did not record {n} events: the journal's queue or limits were full. The table and chart are incomplete.",
+    "statusUpdated": "Journal collected: {at}.",
+    "statusNever": "never"
   },
   "quietNode": {
     "title": "Quiet node",
@@ -152,7 +157,10 @@
       "no_reference": "There was nothing to compare with. Check again with a reference: usually port 443, where REALITY shows the node's site.",
       "obfuscated": "The port is silent without the password, as it should be with obfs. Nothing more can be checked from outside.",
       "incomplete": "The check did not finish or the protocol is not supported yet. That does not mean quiet.",
-      "reality_far": "The REALITY target \"{target}\" lives in another network (AS{target_as} {target_org}) than the node (AS{node_as} {node_org}). A scanner sees that site's certificate on a hosting address, a known sign of REALITY. Pick a target near the server (Protocols → the inbound → Find near the server) or give the node its own site."
+      "reality_far": "The REALITY target \"{target}\" lives in another network (AS{target_as} {target_org}) than the node (AS{node_as} {node_org}). A scanner sees that site's certificate on a hosting address, a known sign of REALITY. Pick a target near the server (Protocols → the inbound → Find near the server) or give the node its own site.",
+      "failed": "The check failed: {error}. That does not mean quiet: fix the cause (certificate, port, network) and check again.",
+      "self_reference": "The reference given is this inbound itself (the same port and name), so there was nothing to compare with. Give a site on another port or under another name.",
+      "no_reference_443": "There was nothing to compare with, and on 443 the site is this inbound itself. Give as the reference a site on another port or under another name on this node."
     },
     "disable": "Turn the inbound off",
     "site": "Open \"Node site\"",

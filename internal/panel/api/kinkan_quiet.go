@@ -5,11 +5,13 @@ import (
 	"net"
 	"net/netip"
 	"strconv"
+	"strings"
 	"time"
 
 	"mikan/internal/nodeapi"
 	"mikan/internal/panel/domain"
 	"mikan/internal/proto"
+	"mikan/internal/ttprobe"
 )
 
 // Kinkan: the quiet node (ROADMAP). The protocol check says how each inbound answers a
@@ -29,7 +31,7 @@ type QuietAdvice struct {
 	InboundID int64  `json:"inbound_id"`
 	Name      string `json:"name"`
 	Level     string `json:"level" enum:"exposed,noticeable,inconclusive"`
-	Code      string `json:"code" enum:"tuic_auth,quic_obfs,quic_auth,tt_site,tt_differs,reality_site,reality_differs,reality_far,exposed,noticeable,no_reference,obfuscated,incomplete" doc:"Что не так; текст — quietNode.advice.<code>"`
+	Code      string `json:"code" enum:"tuic_auth,quic_obfs,quic_auth,tt_site,tt_differs,reality_site,reality_differs,reality_far,exposed,noticeable,no_reference,no_reference_443,self_reference,obfuscated,failed,incomplete" doc:"Что не так; текст — quietNode.advice.<code>"`
 	Action    string `json:"action" enum:"disable,site,reference,none" doc:"Что предложить: выключить подключение, дать ноде сайт, повторить с эталоном или ничего"`
 	// Params fill the advice's text: for reality_far the target and both networks.
 	Params map[string]string `json:"params,omitempty"`
@@ -39,6 +41,9 @@ type quietItem struct {
 	view     InboundProbeView
 	template proto.Template // nil when it does not parse
 	far      *farTarget     // a REALITY target in another network than the node's
+	// selfReference: the reference asked for is this inbound itself (the same port and
+	// name), so it was not compared with.
+	selfReference bool
 }
 
 // farTarget is a REALITY target whose address is in another network (AS) than the node:
@@ -84,7 +89,7 @@ func adviseQuiet(items []quietItem, siteServed bool) QuietView {
 			continue
 		}
 		a := QuietAdvice{InboundID: it.view.InboundID, Name: it.view.Name, Level: r.Verdict, Action: "none"}
-		a.Code, a.Action = adviceFor(r, it.template, siteServed)
+		a.Code, a.Action, a.Params = adviceFor(r, it.template, siteServed, it.selfReference, it.view.Port)
 		out.Advice = append(out.Advice, a)
 	}
 	// Worst first; the order of the inbounds otherwise.
@@ -96,55 +101,110 @@ func adviseQuiet(items []quietItem, siteServed bool) QuietView {
 	return out
 }
 
-func adviceFor(r ProtocolProbeReport, t proto.Template, siteServed bool) (code, action string) {
+// adviceFor picks the advice from what the check saw, not from the protocol alone: a
+// protocol's own giveaway is named only when its finding is there, and a check that failed
+// for another reason says so instead of being read as silence.
+func adviceFor(r ProtocolProbeReport, t proto.Template, siteServed bool, selfReference bool, port string) (code, action string, params map[string]string) {
 	obfuscated := false
 	if t != nil {
 		obfs, _ := t["obfs"].(string)
 		obfuscated = obfs != ""
 	}
 	if r.Verdict == "inconclusive" {
+		failure := firstFailure(r)
 		switch {
-		case obfuscated:
+		case selfReference:
+			return "self_reference", "none", nil
+		case obfuscated && failure == "":
 			// Silence is what obfuscation is for; no check from outside can say more.
-			return "obfuscated", "none"
+			return "obfuscated", "none", nil
+		case failure != "":
+			return "failed", "none", map[string]string{"error": failure}
 		case r.Reference == "" && r.Protocol != "tuic" && r.Protocol != "hysteria2":
-			return "no_reference", "reference"
+			if port == "443" {
+				// The site on 443 is this inbound itself: there is no other to compare with.
+				return "no_reference_443", "none", nil
+			}
+			return "no_reference", "reference", nil
 		}
-		return "incomplete", "none"
+		return "incomplete", "none", nil
 	}
-	switch r.Protocol {
-	case "tuic":
-		if r.Verdict == "exposed" {
-			// TUIC answers a wrong password with its own close code: no setting hides it.
-			return "tuic_auth", "disable"
-		}
-	case "hysteria2":
+	switch {
+	case r.Protocol == "tuic" && hasFinding(r, isTUICClose):
+		// TUIC answers a wrong password with its own close code: no setting hides it.
+		return "tuic_auth", "disable", nil
+	case r.Protocol == "hysteria2" && hasFinding(r, isAuthResponse):
 		if !obfuscated {
 			// Salamander (obfs) keeps the port silent to whoever lacks the password.
-			return "quic_obfs", "none"
+			return "quic_obfs", "none", nil
 		}
-		if r.Verdict == "exposed" {
-			return "quic_auth", "disable"
-		}
-	case "trusttunnel":
+		return "quic_auth", "disable", nil
+	case r.Protocol == "trusttunnel":
 		if fallback, _ := t["fallback"].(string); fallback == "" && !siteServed {
-			return "tt_site", "site"
+			return "tt_site", "site", nil
 		}
-		return "tt_differs", "none"
+		return "tt_differs", "none", nil
 	}
 	if t != nil {
 		if reality, ok := t["reality-config"].(map[string]any); ok {
 			dest, _ := reality["dest"].(string)
 			if selfSteal(dest) && !siteServed {
-				return "reality_site", "site"
+				return "reality_site", "site", nil
 			}
-			return "reality_differs", "none"
+			return "reality_differs", "none", nil
 		}
 	}
 	if r.Verdict == "exposed" {
-		return "exposed", "disable"
+		return "exposed", "disable", nil
 	}
-	return "noticeable", "none"
+	return "noticeable", "none", nil
+}
+
+// isTUICClose is TUIC's own close code for an unauthenticated client (v4 and v5).
+func isTUICClose(f ttprobe.Finding) bool {
+	return f.Level == "FAIL" && (strings.Contains(f.Detail, "code=0xfffffff1") || strings.Contains(f.Detail, "code=0xfffffff2"))
+}
+
+// isAuthResponse is a proxy's own answer to a request without credentials (407, 233).
+func isAuthResponse(f ttprobe.Finding) bool {
+	return f.Level == "FAIL" && strings.HasPrefix(f.Detail, "protocol-specific authentication response")
+}
+
+func hasFinding(r ProtocolProbeReport, match func(ttprobe.Finding) bool) bool {
+	for _, f := range r.Findings {
+		if match(f) {
+			return true
+		}
+	}
+	return false
+}
+
+// silence is what an obfuscated or filtered port gives a probe: no answer in time.
+var silence = []string{"timeout", "deadline exceeded", "no recent network activity", "no remote close", "i/o timeout"}
+
+// firstFailure is the first error of the check that is not silence (an expired
+// certificate, a refused connection), cut to a line; "" when there is none.
+func firstFailure(r ProtocolProbeReport) string {
+	for _, f := range r.Findings {
+		if f.Level != "ERROR" {
+			continue
+		}
+		quiet := false
+		for _, s := range silence {
+			if strings.Contains(strings.ToLower(f.Detail), s) {
+				quiet = true
+				break
+			}
+		}
+		if !quiet {
+			d := f.Name + ": " + f.Detail
+			if len(d) > 200 {
+				d = strings.ToValidUTF8(d[:200], "")
+			}
+			return d
+		}
+	}
+	return ""
 }
 
 // selfSteal says whether a REALITY dest is the panel's own HTTPS on loopback rather than

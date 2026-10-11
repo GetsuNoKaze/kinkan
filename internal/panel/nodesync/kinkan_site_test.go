@@ -128,9 +128,15 @@ func TestFitToSite(t *testing.T) {
 	if got := s.fitToSite(tt, st); got["fallback"] != nil {
 		t.Error("fallback before the node serves the site")
 	}
+	// A new site on its way: the node still serves the old one, and TrustTunnel keeps
+	// falling back to it instead of answering 407 until the new one arrives.
 	health(&nodeapi.SiteStatus{Hash: "other", HTTP: "127.0.0.1:17080", HTTPS: "127.0.0.1:17443"})
+	if got := s.fitToSite(tt, st); got["fallback"] != "127.0.0.1:17080" {
+		t.Errorf("fallback while the node still serves the previous site = %v", got["fallback"])
+	}
+	health(&nodeapi.SiteStatus{Hash: "h1", Error: "listen tcp 127.0.0.1:17080: address already in use"})
 	if got := s.fitToSite(tt, st); got["fallback"] != nil {
-		t.Error("fallback while the node serves another site")
+		t.Error("fallback to a site the node does not serve")
 	}
 
 	health(&nodeapi.SiteStatus{Hash: "h1", HTTP: "127.0.0.1:17080"})

@@ -72,14 +72,16 @@ func servedSite(v *HealthView) nodeapi.SiteStatus {
 	return nodeapi.SiteStatus{Hash: v.Health.Site.Hash, HTTP: v.Health.Site.HTTP, HTTPS: v.Health.Site.HTTPS}
 }
 
-// fitToSite points a template at the node's site once the node says it serves it, never
-// before: a node that cannot (Mikan's, a port another program holds) keeps working as it
-// did. TrustTunnel without a fallback of its own falls back to the site. REALITY aimed at
-// the panel's own HTTPS (self-steal on the panel's node) aims at the site instead — the
-// same certificate and name, a website instead of the panel's empty 404.
+// fitToSite points a template at the site the node says it serves, never before: a node
+// that cannot (Mikan's, a port another program holds) keeps working as it did. While a new
+// site is on its way the node keeps serving the one it has, and the templates keep
+// pointing at that one, so TrustTunnel never answers 407 in between. TrustTunnel without a
+// fallback of its own falls back to the site. REALITY aimed at the panel's own HTTPS
+// (self-steal on the panel's node) aims at the site instead: the same certificate and
+// name, a website instead of the panel's empty 404. A state without a site takes it away.
 func (s *Syncer) fitToSite(t proto.Template, st nodeapi.DesiredState) proto.Template {
 	served := servedSite(s.health.Load())
-	if st.Site == nil || served.Hash != st.Site.Hash {
+	if st.Site == nil || served.Hash == "" {
 		return t
 	}
 	out := make(proto.Template, len(t))
@@ -88,7 +90,7 @@ func (s *Syncer) fitToSite(t proto.Template, st nodeapi.DesiredState) proto.Temp
 	}
 	if t.Type() == "trusttunnel" && served.HTTP != "" {
 		if _, own := t["fallback"]; !own {
-			out["fallback"] = "127.0.0.1:" + strconv.Itoa(st.Site.HTTPPort)
+			out["fallback"] = served.HTTP
 		}
 	}
 	if r, ok := t["reality-config"].(map[string]any); ok && served.HTTPS != "" && st.SelfStealPort > 0 {
@@ -98,7 +100,7 @@ func (s *Syncer) fitToSite(t proto.Template, st nodeapi.DesiredState) proto.Temp
 			for k, v := range r {
 				rc[k] = v
 			}
-			rc["dest"] = "127.0.0.1:" + strconv.Itoa(st.Site.HTTPSPort)
+			rc["dest"] = served.HTTPS
 			out["reality-config"] = rc
 		}
 	}

@@ -5151,7 +5151,10 @@
               "exposed",
               "noticeable",
               "no_reference",
+              "no_reference_443",
+              "self_reference",
               "obfuscated",
+              "failed",
               "incomplete"
             ],
             "type": "string"
@@ -5679,6 +5682,38 @@
         ],
         "type": "object"
       },
+      "ScannerStatusView": {
+        "additionalProperties": false,
+        "properties": {
+          "dropped": {
+            "description": "Сколько событий нода не записала (переполнение очереди или лимитов)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "error": {
+            "description": "Ошибка последнего сбора, если он не удался",
+            "type": "string"
+          },
+          "error_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "last_ok": {
+            "description": "Последний удачный сбор журнала с ноды",
+            "format": "date-time",
+            "type": "string"
+          },
+          "unsupported": {
+            "description": "Нода не ведёт журнал (Mikan или старый Kinkan)",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "dropped",
+          "unsupported"
+        ],
+        "type": "object"
+      },
       "ScannerView": {
         "additionalProperties": false,
         "properties": {
@@ -5699,9 +5734,13 @@
           },
           "spike": {
             "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ScannerStatusView"
           }
         },
         "required": [
+          "status",
           "records",
           "days",
           "spike",
