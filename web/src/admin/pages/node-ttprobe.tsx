@@ -92,20 +92,20 @@ function ProbeForm({ node, onOpenSite }: { node: Node; onOpenSite?: () => void }
         <tbody>{result.inbounds.map((item) => <tr key={item.inbound_id}><td>{item.name} · {item.report.protocol} · {item.port}/{item.network}</td><td><Pill tone={item.report.verdict === "quiet" ? "ok" : item.report.verdict === "exposed" ? "bad" : "warn"}>{verdictLabel(item.report.verdict)}</Pill>{item.report.incomplete ? ` · ${t("nodeProbe.incomplete")}` : ""}<p className="mt-1 text-xs text-[var(--ink-500)]">{reportReason(item.report)}</p></td></tr>)}</tbody>
       </table></div>
       {result.inbounds.map((item) => <details key={item.inbound_id} className="rounded-xl border border-[var(--hairline)] p-3"><summary className="cursor-pointer text-sm">{item.name} · {verdictLabel(item.report.verdict)}</summary>
-        <Report result={{ ...result, inbound_id: item.inbound_id, report: item.report }} onDownload={download} />
+        <Report result={{ ...result, inbound_id: item.inbound_id, report: item.report }} verdict={item.report.verdict} reason={reportReason(item.report)} onDownload={download} />
       </details>)}
     </> : null}
   </div>;
 }
 
-function Report({ result, onDownload }: { result: SingleResult; onDownload: () => void }) {
+function Report({ result, verdict, reason, onDownload }: { result: SingleResult; verdict?: string; reason?: string; onDownload: () => void }) {
   const [filter, setFilter] = useState<Level | null>(null);
   const findings = result.report.findings;
   const count = (level: Level) => findings.filter((f) => f.level === level).length;
   const sorted = findings.map((f, i) => ({ f, i })).sort((a, b) => rank(a.f.level) - rank(b.f.level) || a.i - b.i);
   const shown = filter ? sorted.filter(({ f }) => f.level === filter) : sorted;
   return <>
-    <Verdict result={result} count={count} />
+    <Verdict result={result} verdict={verdict} reason={reason} count={count} />
     {result.local_node ? <div className="banner warn">{t("ttProbe.localNode")}</div> : null}
     <div className="flex flex-wrap gap-2" role="group" aria-live="polite">
       <button type="button" className="chip-btn" aria-pressed={filter === null} onClick={() => setFilter(null)}>{t("ttProbe.filterAll", { n: findings.length })}</button>
@@ -125,9 +125,13 @@ function Report({ result, onDownload }: { result: SingleResult; onDownload: () =
   </>;
 }
 
-function Verdict({ result, count }: { result: SingleResult; count: (level: Level) => number }) {
+// verdict and reason come from the protocol check (one inbound of all): when it found too
+// little to judge, the banner says that instead of "no differences", which its row count
+// alone would suggest.
+function Verdict({ result, verdict, reason, count }: { result: SingleResult; verdict?: string; reason?: string; count: (level: Level) => number }) {
   const [cls, text] = count("FAIL") > 0 ? ["err", t("ttProbe.verdictFAIL", { n: count("FAIL") })]
     : count("ERROR") > 0 ? ["err", t("ttProbe.verdictERROR", { n: count("ERROR") })]
+    : verdict === "inconclusive" ? ["warn", reason ?? t("nodeProbe.insufficient")]
     : !result.report.reference ? ["warn", t("ttProbe.verdictNoReference")]
     : count("WARN") > 0 ? ["warn", t("ttProbe.verdictWARN", { n: count("WARN") })]
     : ["info", t("ttProbe.verdictPASS")];

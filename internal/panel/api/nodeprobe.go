@@ -75,6 +75,7 @@ func (h *handlers) probeNode(ctx context.Context, in *nodeProbeInput) (*nodeProb
 	views := []InboundProbeView{}
 	configs := []nodeprobe.Config{}
 	templates := []proto.Template{}
+	selfRefs := []bool{} // Kinkan: the reference is this inbound itself (kinkan_quiet.go)
 	host := domain.NodeHost(node)
 	if node.Address == "" {
 		host, err = h.d.Settings.String(ctx, settings.KeyDomain)
@@ -136,12 +137,17 @@ func (h *handlers) probeNode(ctx context.Context, in *nodeProbeInput) (*nodeProb
 		// SNI/Host may name a REALITY cover elsewhere; all packets still go to
 		// the validated node IP, never the cover's destination or client's server.
 		cfg.Target = "https://" + net.JoinHostPort(sni, port)
+		selfRef := false
 		if in.Body.ReferencePort != 0 {
 			refName := sni
 			if referenceHost != "" {
 				refName = referenceHost
 			}
-			cfg.Reference = "https://" + net.JoinHostPort(refName, strconv.Itoa(in.Body.ReferencePort))
+			// The same name on the same port is this inbound: comparing it with itself would
+			// find no difference and say nothing about how it differs from a real site.
+			if selfRef = strconv.Itoa(in.Body.ReferencePort) == port && strings.EqualFold(refName, sni); !selfRef {
+				cfg.Reference = "https://" + net.JoinHostPort(refName, strconv.Itoa(in.Body.ReferencePort))
+			}
 		}
 		if obfs, ok := template["obfs"].(string); ok && obfs != "" {
 			cfg.Obfuscated = true
@@ -162,6 +168,7 @@ func (h *handlers) probeNode(ctx context.Context, in *nodeProbeInput) (*nodeProb
 			template = nil
 		}
 		templates = append(templates, template)
+		selfRefs = append(selfRefs, selfRef)
 	}
 	if len(views) == 0 {
 		return nil, huma.Error404NotFound("probe_no_inbounds")
@@ -196,7 +203,7 @@ func (h *handlers) probeNode(ctx context.Context, in *nodeProbeInput) (*nodeProb
 	}
 	items := make([]quietItem, len(views))
 	for i := range views {
-		items[i] = quietItem{view: views[i], template: templates[i], far: h.farTargetOf(ctx, templates[i], ip)}
+		items[i] = quietItem{view: views[i], template: templates[i], far: h.farTargetOf(ctx, templates[i], ip), selfReference: selfRefs[i]}
 	}
 	quiet := adviseQuiet(items, h.siteServedBy(node.ID))
 	return &nodeProbeOutput{Body: NodeProbeView{StartedAt: started, NodeID: node.ID, Vantage: "panel", Address: ip.String(), LocalNode: node.Address == "", Inbounds: views, Quiet: quiet}}, nil

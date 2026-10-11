@@ -17,6 +17,7 @@ import (
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/geoip"
 	"mikan/internal/panel/settings"
+	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/store/storetest"
 )
@@ -61,8 +62,13 @@ func TestScannerJournalMarksOwnChecksAndFillsNetworks(t *testing.T) {
 		rec("192.0.2.4", 3, func(r *nodeapi.ScannerRecord) { r.Country, r.ASN, r.Organization = "NL", "64501", "Node's" }),
 		// A node cannot call itself the panel.
 		rec("192.0.2.5", 2, func(r *nodeapi.ScannerRecord) { r.Own = true }),
+		// The panel behind NAT: its domain leads elsewhere, the node saw this address.
+		rec("198.51.100.77", 40, nil),
 	}}
 	if err := st.SaveScanners(ctx, 1, snap, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetScannerStatus(ctx, 1, store.ScannerStatus{LastOK: now.Unix(), Dropped: 7, Observer: "198.51.100.77"}); err != nil {
 		t.Fatal(err)
 	}
 	sessions := auth.NewSessions(st.Q, clock, nil)
@@ -99,7 +105,7 @@ func TestScannerJournalMarksOwnChecksAndFillsNetworks(t *testing.T) {
 	for _, r := range view.Records {
 		byIP[r.IP] = r
 	}
-	if !byIP["203.0.113.7"].Own || byIP["198.51.100.9"].Own || byIP["192.0.2.5"].Own {
+	if !byIP["203.0.113.7"].Own || !byIP["198.51.100.77"].Own || byIP["198.51.100.9"].Own || byIP["192.0.2.5"].Own {
 		t.Errorf("own marks: %+v", view.Records)
 	}
 	if r := byIP["198.51.100.9"]; r.Country != "US" || r.ASN != "398324" || r.Organization != "Censys, Inc." {
@@ -109,7 +115,10 @@ func TestScannerJournalMarksOwnChecksAndFillsNetworks(t *testing.T) {
 		t.Errorf("the node's own lookup was replaced: %+v", r)
 	}
 	today := view.Days[len(view.Days)-1]
-	if today.Own != 150 || today.Count != 10 || view.Spike {
+	if view.Status.Dropped != 7 || view.Status.LastOK == nil {
+		t.Errorf("status = %+v", view.Status)
+	}
+	if today.Own != 190 || today.Count != 10 || view.Spike {
 		t.Errorf("today = %+v spike=%v", today, view.Spike)
 	}
 }

@@ -31,6 +31,7 @@ function Journal({ node }: { node: Node }) {
   return <div className="space-y-5 pt-5">
     <p className="text-sm text-[var(--ink-500)]">{t("scanners.intro")}</p>
     <div className="banner info">{t("scanners.coverage")}</div>
+    <CollectionStatus status={result.data.status} />
     {result.data.spike ? <div role="alert" className="banner warn">{t("scanners.spike")}</div> : null}
     <figure><figcaption className="text-sm">{t("scanners.days")}</figcaption>
       <svg viewBox="0 0 620 130" role="img" aria-label={t("scanners.days")} className="w-full">
@@ -50,4 +51,16 @@ function Journal({ node }: { node: Node }) {
     </tbody></table></div>}
     <p className="text-xs text-[var(--ink-500)]">{t("scanners.geoSource")} <a href="https://db-ip.com" target="_blank" rel="noreferrer" className="underline">IP Geolocation by DB-IP</a></p>
   </div>;
+}
+
+// How collecting the node's journal goes: an empty table is quiet only when the last pull
+// worked and the node dropped nothing.
+function CollectionStatus({ status }: { status: Schemas["ScannerStatusView"] }) {
+  const when = (at?: string | null) => (at ? new Date(at).toLocaleString() : t("scanners.statusNever"));
+  return <>
+    {status.unsupported ? <div className="banner warn">{t("scanners.statusUnsupported")}</div> : null}
+    {status.error ? <div role="alert" className="banner warn">{t("scanners.statusError", { error: status.error, last: when(status.last_ok) })}</div> : null}
+    {status.dropped > 0 ? <div className="banner warn">{t("scanners.statusDropped", { n: status.dropped })}</div> : null}
+    {!status.error && !status.unsupported ? <p className="text-xs text-[var(--ink-500)]">{t("scanners.statusUpdated", { at: when(status.last_ok) })}</p> : null}
+  </>;
 }

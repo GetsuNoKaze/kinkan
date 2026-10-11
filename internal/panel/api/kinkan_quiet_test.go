@@ -7,11 +7,18 @@ import (
 	"testing"
 
 	"mikan/internal/proto"
+	"mikan/internal/ttprobe"
 )
 
-func quietCase(id int64, protocol, verdict, reference string, t proto.Template) quietItem {
-	return quietItem{view: InboundProbeView{InboundID: id, Name: protocol, Report: ProtocolProbeReport{Protocol: protocol, Verdict: verdict, Reference: reference}}, template: t}
+func quietCase(id int64, protocol, verdict, reference string, t proto.Template, findings ...ttprobe.Finding) quietItem {
+	return quietItem{view: InboundProbeView{InboundID: id, Name: protocol, Report: ProtocolProbeReport{Protocol: protocol, Verdict: verdict, Reference: reference, Findings: findings}}, template: t}
 }
+
+var (
+	tuicClose    = ttprobe.Finding{Name: "TUIC wrong authentication", Level: "FAIL", Detail: `remote application close: code=0xfffffff1 reason="AuthenticationFailed"`}
+	authResponse = ttprobe.Finding{Name: "HTTP/3 POST /auth", Level: "FAIL", Detail: "protocol-specific authentication response: 233"}
+	timedOut     = ttprobe.Finding{Name: "QUIC handshake", Level: "ERROR", Detail: "timeout: no recent network activity"}
+)
 
 // The node is as quiet as its loudest inbound, and each inbound that is not quiet gets
 // the advice that fits it, worst first.
@@ -22,9 +29,9 @@ func TestQuietNodeAdvice(t *testing.T) {
 	items := []quietItem{
 		quietCase(1, "vless", "quiet", "https://n:443", reality("127.0.0.1:17443")),
 		quietCase(2, "trusttunnel", "noticeable", "https://n:443", proto.Template{"type": "trusttunnel"}),
-		quietCase(3, "tuic", "exposed", "", proto.Template{"type": "tuic"}),
-		quietCase(4, "hysteria2", "noticeable", "", proto.Template{"type": "hysteria2"}),
-		quietCase(5, "hysteria2", "inconclusive", "", proto.Template{"type": "hysteria2", "obfs": "salamander"}),
+		quietCase(3, "tuic", "exposed", "", proto.Template{"type": "tuic"}, tuicClose),
+		quietCase(4, "hysteria2", "noticeable", "", proto.Template{"type": "hysteria2"}, authResponse),
+		quietCase(5, "hysteria2", "inconclusive", "", proto.Template{"type": "hysteria2", "obfs": "salamander"}, timedOut),
 		quietCase(6, "vless", "noticeable", "https://n:443", reality("127.0.0.1:21973")),
 		quietCase(7, "anytls", "inconclusive", "", proto.Template{"type": "anytls"}),
 		quietCase(8, "trojan", "exposed", "https://n:443", nil),
@@ -112,5 +119,44 @@ func TestQuietNodeFarRealityTarget(t *testing.T) {
 	q := adviseQuiet([]quietItem{{view: InboundProbeView{InboundID: 1, Name: "vless", Report: ProtocolProbeReport{Protocol: "vless", Verdict: "quiet"}}, template: reality("www.microsoft.com:443"), far: far}}, true)
 	if q.Verdict != "noticeable" || len(q.Advice) != 1 || q.Advice[0].Code != "reality_far" || q.Advice[0].Params["target_org"] != "Microsoft" {
 		t.Errorf("advice for a far target: %+v", q)
+	}
+}
+
+// The advice names a protocol's giveaway only when the check saw it, and a check that
+// failed for another reason says why instead of passing for silence (review findings).
+func TestQuietNodeAdviceFollowsFindings(t *testing.T) {
+	expired := ttprobe.Finding{Name: "QUIC handshake", Level: "ERROR", Detail: "tls: failed to verify certificate: x509: certificate has expired"}
+	pageDiffers := ttprobe.Finding{Name: "HTTP/3 GET /", Level: "WARN", Detail: "200; cover: 404"}
+	proxyAuth := ttprobe.Finding{Name: "HTTPS GET /", Level: "FAIL", Detail: "407 Proxy Authentication Required"}
+	for _, c := range []struct {
+		name         string
+		item         quietItem
+		code, action string
+	}{
+		{"an expired certificate is not obfs", quietCase(1, "hysteria2", "inconclusive", "", proto.Template{"type": "hysteria2", "obfs": "salamander"}, expired), "failed", "none"},
+		{"a page that differs is not a proxy answer", quietCase(2, "hysteria2", "noticeable", "https://n:443", proto.Template{"type": "hysteria2"}, pageDiffers), "noticeable", "none"},
+		{"a 407 is not TUIC's close code", quietCase(3, "tuic", "exposed", "", proto.Template{"type": "tuic"}, proxyAuth), "exposed", "disable"},
+		{"Hysteria2's auth answer with obfs", quietCase(4, "hysteria2", "exposed", "", proto.Template{"type": "hysteria2", "obfs": "salamander"}, authResponse), "quic_auth", "disable"},
+	} {
+		got := adviseQuiet([]quietItem{c.item}, false)
+		if len(got.Advice) != 1 || got.Advice[0].Code != c.code || got.Advice[0].Action != c.action {
+			t.Errorf("%s: %+v", c.name, got.Advice)
+		}
+	}
+	if a := adviseQuiet([]quietItem{quietCase(1, "hysteria2", "inconclusive", "", proto.Template{"type": "hysteria2", "obfs": "x"}, expired)}, false).Advice[0]; a.Params["error"] == "" {
+		t.Errorf("the failure is not named: %+v", a)
+	}
+
+	// Compared with itself, or on 443 where the only site is the inbound itself, the
+	// advice does not send the admin back to the same comparison.
+	self := quietCase(5, "vless", "inconclusive", "", nil)
+	self.selfReference = true
+	if a := adviseQuiet([]quietItem{self}, false).Advice[0]; a.Code != "self_reference" || a.Action != "none" {
+		t.Errorf("compared with itself: %+v", a)
+	}
+	on443 := quietCase(6, "vless", "inconclusive", "", nil)
+	on443.view.Port = "443"
+	if a := adviseQuiet([]quietItem{on443}, false).Advice[0]; a.Code != "no_reference_443" || a.Action != "none" {
+		t.Errorf("on 443: %+v", a)
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"mikan/internal/nodeapi"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
+	"mikan/internal/panel/store"
 	"mikan/internal/proto"
 )
 
@@ -23,6 +24,9 @@ type ScannerDay struct {
 	Own     int64 `json:"own" doc:"Проверки самой панели"`
 }
 type ScannerView struct {
+	// Status is how collecting the node's journal goes: an empty table is quiet only when
+	// the last pull worked and nothing was dropped.
+	Status   ScannerStatusView       `json:"status"`
 	Records  []nodeapi.ScannerRecord `json:"records"`
 	Days     []ScannerDay            `json:"days"`
 	Spike    bool                    `json:"spike"`
@@ -42,7 +46,15 @@ func (h *handlers) scannersOf(ctx context.Context, in *scannerInput) (*scannerOu
 	if err != nil {
 		return nil, err
 	}
+	status, err := h.d.Store.ScannerStatusOf(ctx, in.ID)
+	if err != nil {
+		return nil, err
+	}
 	own := h.panelAddrs(ctx)
+	if ip, err := netip.ParseAddr(status.Observer); err == nil {
+		// The address the node saw the panel come from: right behind Cloudflare or NAT too.
+		own[ip.Unmap()] = true
+	}
 	for i := range records {
 		r := &records[i]
 		ip, err := netip.ParseAddr(r.IP)
@@ -95,7 +107,7 @@ func (h *handlers) scannersOf(ctx context.Context, in *scannerInput) (*scannerOu
 	current := days[len(days)-1].Count
 	// The panel's own checks (Nodes → the check) come from its address and are not
 	// scanners: they stay out of Count and so out of the spike.
-	return &scannerOutput{Body: ScannerView{Records: records, Days: days, Spike: current >= 100 && current > 3*max(1, prior/7), Coverage: "TrustTunnel unauthenticated HTTP; REALITY rejected handshakes; TUIC timeout/wrong auth; Hysteria2 rejected /auth; AnyTLS wrong auth. Ordinary Hysteria2 HTTP, pre-QUIC/obfs failures and other protocols are not recorded yet."}}, nil
+	return &scannerOutput{Body: ScannerView{Status: scannerStatusView(status), Records: records, Days: days, Spike: current >= 100 && current > 3*max(1, prior/7), Coverage: "TrustTunnel unauthenticated HTTP; REALITY rejected handshakes; TUIC timeout/wrong auth; Hysteria2 rejected /auth; AnyTLS wrong auth. Ordinary Hysteria2 HTTP, pre-QUIC/obfs failures and other protocols are not recorded yet."}}, nil
 }
 
 // panelAddrs are the panel's public addresses: what its domain and public host lead to.
@@ -123,4 +135,26 @@ func (h *handlers) panelAddrs(ctx context.Context) map[netip.Addr]bool {
 		}
 	}
 	return out
+}
+
+// ScannerStatusView is the collection status the page shows.
+type ScannerStatusView struct {
+	LastOK      *time.Time `json:"last_ok,omitempty" doc:"Последний удачный сбор журнала с ноды"`
+	Error       string     `json:"error,omitempty" doc:"Ошибка последнего сбора, если он не удался"`
+	ErrorAt     *time.Time `json:"error_at,omitempty"`
+	Dropped     int64      `json:"dropped" doc:"Сколько событий нода не записала (переполнение очереди или лимитов)"`
+	Unsupported bool       `json:"unsupported" doc:"Нода не ведёт журнал (Mikan или старый Kinkan)"`
+}
+
+func scannerStatusView(st store.ScannerStatus) ScannerStatusView {
+	v := ScannerStatusView{Error: st.Error, Dropped: st.Dropped, Unsupported: st.Unsupported}
+	if st.LastOK > 0 {
+		t := time.Unix(st.LastOK, 0).UTC()
+		v.LastOK = &t
+	}
+	if st.ErrorAt > 0 {
+		t := time.Unix(st.ErrorAt, 0).UTC()
+		v.ErrorAt = &t
+	}
+	return v
 }

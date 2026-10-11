@@ -2,6 +2,7 @@ package node
 
 import (
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
 	"sync/atomic"
@@ -65,6 +66,9 @@ func kinkanHandlers(mux *http.ServeMux, e *Engine, log *slog.Logger) {
 		if err != nil {
 			fail(w, log, err)
 			return
+		}
+		if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+			s.Observer = host
 		}
 		writeJSON(w, http.StatusOK, s)
 	})

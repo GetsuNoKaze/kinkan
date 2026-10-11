@@ -3,12 +3,15 @@ package store
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"mikan/internal/nodeapi"
+	"mikan/internal/panel/store/db"
 	"mikan/internal/scannerlog"
 	"net/netip"
+	"strconv"
 	"time"
 )
 
@@ -96,4 +99,40 @@ func (s *Store) ScannerRows(ctx context.Context, nodeID int64, now time.Time) ([
 		}
 	}
 	return out, rows.Err()
+}
+
+// ScannerStatus is how the panel's collection of a node's scanner journal goes: when it
+// last worked and what failed since, how many events the node had to drop, and the
+// address the node saw the panel come from (its own checks come from there too).
+type ScannerStatus struct {
+	LastOK      int64  `json:"last_ok,omitempty"`
+	Error       string `json:"error,omitempty"`
+	ErrorAt     int64  `json:"error_at,omitempty"`
+	Dropped     int64  `json:"dropped,omitempty"`
+	Observer    string `json:"observer,omitempty"`
+	Unsupported bool   `json:"unsupported,omitempty"`
+}
+
+func scannerStatusKey(nodeID int64) string { return "kinkan_scanners/" + strconv.FormatInt(nodeID, 10) }
+
+// ScannerStatusOf is the stored collection status of a node; zero before the first pull.
+func (s *Store) ScannerStatusOf(ctx context.Context, nodeID int64) (ScannerStatus, error) {
+	var st ScannerStatus
+	raw, err := s.Q.GetNodeState(ctx, scannerStatusKey(nodeID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return st, nil
+	}
+	if err != nil {
+		return st, err
+	}
+	return st, json.Unmarshal([]byte(raw), &st)
+}
+
+// SetScannerStatus keeps a node's collection status.
+func (s *Store) SetScannerStatus(ctx context.Context, nodeID int64, st ScannerStatus) error {
+	raw, err := json.Marshal(st)
+	if err != nil {
+		return err
+	}
+	return s.Q.SetNodeState(ctx, db.SetNodeStateParams{Key: scannerStatusKey(nodeID), Value: string(raw)})
 }
