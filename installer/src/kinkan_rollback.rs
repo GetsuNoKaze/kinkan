@@ -124,13 +124,17 @@ pub(super) fn run(from: &str, version: &str, say: &mut dyn FnMut(&str)) -> Resul
         }
         let mut c: Candidate = serde_json::from_slice(&raw)?;
         validate(&c, &actual, from, version)?;
+        // A pruned image is the usual reason; say so instead of "does not start".
+        if !docker::image_present(&c.image) {
+            bail!("the image of mikan {version} is no longer on this server (docker image prune removes it); rollback is unavailable");
+        }
         if setup::image_version(&c.image)?.trim_start_matches('v') != version {
             bail!("the previous image does not match its recorded version");
         }
         let current_image = image_id().context("the current image could not be retained for recovery")?;
         // No migrations and no database restore: the old image must run on today's
         // data. A failed start returns to the image that was running before rollback.
-        let gate = backup::backup_as(backup::PRE_UPDATE, say)?;
+        let gate = backup::backup_as(backup::PRE_UPDATE, say).context("the backup before rollback failed; the panel was not stopped")?;
         let _critical = signals::critical();
         let mut recovery = EnvFile::from_text(root.join(".env"), &install.env.render());
         recovery.set("MIKAN_IMAGE", &current_image)?;
