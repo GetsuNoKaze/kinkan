@@ -919,6 +919,19 @@
         ],
         "type": "object"
       },
+      "ClearedOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "type": "object"
+      },
       "ClientEndpoint": {
         "additionalProperties": false,
         "properties": {
@@ -4626,6 +4639,46 @@
           "no_link",
           "statuses",
           "on_hold"
+        ],
+        "type": "object"
+      },
+      "ProbeRunView": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "inbound_id": {
+            "description": "0: все подключения ноды",
+            "format": "int64",
+            "type": "integer"
+          },
+          "inbounds": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "started_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "verdict": {
+            "description": "Вердикт ноды целиком",
+            "enum": [
+              "quiet",
+              "noticeable",
+              "exposed",
+              "inconclusive"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "started_at",
+          "inbound_id",
+          "verdict",
+          "inbounds"
         ],
         "type": "object"
       },
@@ -10029,7 +10082,131 @@
         "x-session-only": true
       }
     },
+    "/api/v1/nodes/{id}/protocol-probes": {
+      "delete": {
+        "operationId": "delete-node-protocol-probes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClearedOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Очистить историю проверок ноды",
+        "tags": [
+          "node"
+        ],
+        "x-session-only": true
+      },
+      "get": {
+        "operationId": "node-protocol-probes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProbeRunView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "История проверок протоколов",
+        "tags": [
+          "node"
+        ],
+        "x-session-only": true
+      }
+    },
     "/api/v1/nodes/{id}/scanners": {
+      "delete": {
+        "operationId": "delete-node-scanners",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Очистить журнал сканеров ноды",
+        "tags": [
+          "node"
+        ],
+        "x-session-only": true
+      },
       "get": {
         "operationId": "node-scanners",
         "parameters": [
@@ -11550,6 +11727,85 @@
         "tags": [
           "promocodes"
         ]
+      }
+    },
+    "/api/v1/protocol-probes/{id}": {
+      "delete": {
+        "operationId": "delete-protocol-probe",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Удалить проверку из истории",
+        "tags": [
+          "node"
+        ],
+        "x-session-only": true
+      },
+      "get": {
+        "operationId": "protocol-probe",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeProbeView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Сохранённая проверка протоколов",
+        "tags": [
+          "node"
+        ],
+        "x-session-only": true
       }
     },
     "/api/v1/settings": {

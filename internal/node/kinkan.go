@@ -1,6 +1,7 @@
 package node
 
 import (
+	"context"
 	"log/slog"
 	"net"
 	"net/http"
@@ -73,4 +74,20 @@ func kinkanHandlers(mux *http.ServeMux, e *Engine, log *slog.Logger) {
 		writeJSON(w, http.StatusOK, s)
 	})
 	mux.HandleFunc("PUT /v1/site/{hash}", siteHandler(e, log))
+	mux.HandleFunc("DELETE /v1/scanners", func(w http.ResponseWriter, r *http.Request) {
+		if err := e.ResetScanners(r.Context()); err != nil {
+			fail(w, log, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+}
+
+// ResetScanners empties the scanner journal under a new epoch (the admin's "clear").
+func (e *Engine) ResetScanners(context.Context) error {
+	if e.scanners == nil {
+		return &nodeapi.Error{Code: "invalid_state", Message: "no scanner journal"}
+	}
+	e.scannerDropped.Store(0)
+	return e.scanners.Reset(time.Now())
 }

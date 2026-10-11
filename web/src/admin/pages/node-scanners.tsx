@@ -1,8 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Trash2 } from "lucide-react";
 import { useState } from "react";
 import { api, errorText, unwrap, type Schemas } from "../../api/client";
-import { Drawer } from "../../components/overlay";
-import { Pill } from "../../components/ui";
+import { Confirm, Drawer } from "../../components/overlay";
+import { useToast } from "../../components/toast";
+import { Button, Pill } from "../../components/ui";
 import { t } from "../../i18n";
 import { nodeLabel } from "../../lib/node-label";
 
@@ -32,6 +34,7 @@ function Journal({ node }: { node: Node }) {
     <p className="text-sm text-[var(--ink-500)]">{t("scanners.intro")}</p>
     <div className="banner info">{t("scanners.coverage")}</div>
     <CollectionStatus status={result.data.status} />
+    <ClearJournal nodeId={node.id} />
     {result.data.spike ? <div role="alert" className="banner warn">{t("scanners.spike")}</div> : null}
     <figure><figcaption className="text-sm">{t("scanners.days")}</figcaption>
       <svg viewBox="0 0 620 130" role="img" aria-label={t("scanners.days")} className="w-full">
@@ -62,5 +65,22 @@ function CollectionStatus({ status }: { status: Schemas["ScannerStatusView"] }) 
     {status.error ? <div role="alert" className="banner warn">{t("scanners.statusError", { error: status.error, last: when(status.last_ok) })}</div> : null}
     {status.dropped > 0 ? <div className="banner warn">{t("scanners.statusDropped", { n: status.dropped })}</div> : null}
     {!status.error && !status.unsupported ? <p className="text-xs text-[var(--ink-500)]">{t("scanners.statusUpdated", { at: when(status.last_ok) })}</p> : null}
+  </>;
+}
+
+// Clearing goes to the node first (a new, empty journal), then the panel's copy: cleared on
+// the panel only, the next collection would bring the rows back.
+function ClearJournal({ nodeId }: { nodeId: number }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [asking, setAsking] = useState(false);
+  const clear = useMutation({
+    mutationFn: () => unwrap(api.DELETE("/api/v1/nodes/{id}/scanners", { params: { path: { id: nodeId } } })),
+    onSuccess: async () => { setAsking(false); toast.ok(t("scanners.cleared")); await qc.invalidateQueries({ queryKey: ["scanners", nodeId] }); },
+    onError: (e) => { setAsking(false); toast.error(errorText(e)); },
+  });
+  return <>
+    <Button size="sm" onClick={() => setAsking(true)}><Trash2 size={16} aria-hidden />{t("scanners.clear")}</Button>
+    <Confirm open={asking} onOpenChange={setAsking} title={t("scanners.clearTitle")} text={t("scanners.clearText")} confirm={t("scanners.clear")} danger loading={clear.isPending} onConfirm={() => clear.mutate()} />
   </>;
 }

@@ -694,6 +694,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/nodes/{id}/protocol-probes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** История проверок протоколов */
+        get: operations["node-protocol-probes"];
+        put?: never;
+        post?: never;
+        /** Очистить историю проверок ноды */
+        delete: operations["delete-node-protocol-probes"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/nodes/{id}/scanners": {
         parameters: {
             query?: never;
@@ -705,7 +723,8 @@ export interface paths {
         get: operations["node-scanners"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Очистить журнал сканеров ноды */
+        delete: operations["delete-node-scanners"];
         options?: never;
         head?: never;
         patch?: never;
@@ -956,6 +975,24 @@ export interface paths {
         /** Вернуть Stars покупателю */
         post: operations["refund-payment"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/protocol-probes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Сохранённая проверка протоколов */
+        get: operations["protocol-probe"];
+        put?: never;
+        post?: never;
+        /** Удалить проверку из истории */
+        delete: operations["delete-protocol-probe"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2185,6 +2222,10 @@ export interface components {
             dest: string;
             /** @description Имя для клиентов; по умолчанию — хост из dest */
             sni?: string;
+        };
+        ClearedOutputBody: {
+            /** Format: int64 */
+            deleted: number;
         };
         ClientEndpoint: {
             /**
@@ -3668,6 +3709,24 @@ export interface components {
             /** @description #RRGGBB или пусто */
             brand_accent?: string;
             config: components["schemas"]["Page"];
+        };
+        ProbeRunView: {
+            /** Format: int64 */
+            id: number;
+            /**
+             * Format: int64
+             * @description 0: все подключения ноды
+             */
+            inbound_id: number;
+            /** Format: int64 */
+            inbounds: number;
+            /** Format: date-time */
+            started_at: string;
+            /**
+             * @description Вердикт ноды целиком
+             * @enum {string}
+             */
+            verdict: "quiet" | "noticeable" | "exposed" | "inconclusive";
         };
         QuietAdvice: {
             /**
@@ -6313,6 +6372,68 @@ export interface operations {
             };
         };
     };
+    "node-protocol-probes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProbeRunView"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-node-protocol-probes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClearedOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "node-scanners": {
         parameters: {
             query?: never;
@@ -7669,6 +7790,95 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SiteOutputBody"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-node-scanners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "protocol-probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeProbeView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-protocol-probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {

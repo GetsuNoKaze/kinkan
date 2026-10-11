@@ -264,3 +264,21 @@ func AttributePTR(ptr string, confirmed bool) (string, string) {
 	}
 	return "unknown", ""
 }
+
+// Reset empties the journal under a new epoch and saves it at once: the panel stores
+// snapshots by epoch, so rows of the old one cannot come back with the next snapshot.
+func (j *Journal) Reset(now time.Time) error {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return err
+	}
+	j.mu.Lock()
+	j.rows = map[key]nodeapi.ScannerRecord{}
+	j.meta = map[string]Metadata{}
+	j.epoch = hex.EncodeToString(b)
+	j.dropped = 0
+	j.count()
+	j.mu.Unlock()
+	_, err := j.Export(now)
+	return err
+}

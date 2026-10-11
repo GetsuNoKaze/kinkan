@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, errorText, unwrap, type Schemas } from "../../api/client";
@@ -8,6 +8,7 @@ import { t } from "../../i18n";
 import { dateLong, time } from "../../lib/format";
 import { nodeLabel } from "../../lib/node-label";
 import { QuietSummary } from "./node-quiet";
+import { ProbeHistory, probeHistoryKey } from "./node-probe-history";
 
 type Result = Schemas["NodeProbeView"];
 type SingleResult = Schemas["TTProbeView"];
@@ -33,6 +34,7 @@ export function TTProbeDrawer({ node, onClose, onOpenSite }: { node: Node | null
 }
 
 function ProbeForm({ node, onOpenSite }: { node: Node; onOpenSite?: () => void }) {
+  const qc = useQueryClient();
   const all = useQuery({ queryKey: ["inbounds"], queryFn: ({ signal }) => unwrap(api.GET("/api/v1/inbounds", { signal })) });
   const choices = (all.data ?? []).filter((i) => i.node_id === node.id && i.enabled);
   const [picked, setPicked] = useState(0);
@@ -52,7 +54,7 @@ function ProbeForm({ node, onOpenSite }: { node: Node; onOpenSite?: () => void }
         signal: controller.current.signal,
       }));
     },
-    onSuccess: (r) => setResult(r),
+    onSuccess: (r) => { setResult(r); void qc.invalidateQueries({ queryKey: probeHistoryKey(node.id) }); },
     onError: (e) => setFormError(errorText(e)),
   });
   const start = () => {
@@ -95,6 +97,7 @@ function ProbeForm({ node, onOpenSite }: { node: Node; onOpenSite?: () => void }
         <Report result={{ ...result, inbound_id: item.inbound_id, report: item.report }} verdict={item.report.verdict} reason={reportReason(item.report)} onDownload={download} />
       </details>)}
     </> : null}
+    <ProbeHistory nodeId={node.id} inboundName={(id) => (all.data ?? []).find((i) => i.id === id)?.name} onOpen={(r) => { setFormError(""); setResult(r); }} />
   </div>;
 }
 

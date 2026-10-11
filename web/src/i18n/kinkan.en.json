@@ -20,7 +20,9 @@
       "probe_public_host": "A public node address is required: private addresses and mixed DNS answers are rejected.",
       "probe_disabled_node": "This node is disabled.",
       "probe_no_inbounds": "No enabled inbounds to probe.",
-      "probe_too_many_inbounds": "A run supports up to 64 inbounds; select one."
+      "probe_too_many_inbounds": "A run supports up to 64 inbounds; select one.",
+      "probe_run_not_found": "No such check in the history: refresh the page",
+      "scanner_reset_failed": "The node did not clear its journal: try again once it is online"
     }
   },
   "site": {
@@ -129,7 +131,11 @@
     "statusError": "The node's journal is not being collected: {error}. Last collected: {last}. The table may be incomplete.",
     "statusDropped": "The node did not record {n} events: the journal's queue or limits were full. The table and chart are incomplete.",
     "statusUpdated": "Journal collected: {at}.",
-    "statusNever": "never"
+    "statusNever": "never",
+    "clear": "Clear journal",
+    "clearTitle": "Clear the scanner journal?",
+    "clearText": "The node starts its journal over and the panel deletes its copy. The records cannot be brought back. The node must be online.",
+    "cleared": "Scanner journal cleared"
   },
   "quietNode": {
     "title": "Quiet node",
@@ -169,5 +175,17 @@
     "disableText": "Clients lose this inbound: it is gone at their next subscription update. Turn it back on under Protocols.",
     "disabledDone": "\"{name}\" is off",
     "why": "A node is no quieter than its loudest inbound: all protocols share its address."
+  },
+  "probeHistory": {
+    "title": "Check history",
+    "intro": "Each check is kept 30 days (at most 100 per node). Open an earlier one, delete one, or clear the whole history.",
+    "empty": "No checks yet.",
+    "all": "all inbounds ({n})",
+    "open": "Open the check",
+    "delete": "Delete the check",
+    "clear": "Clear history",
+    "clearTitle": "Clear the check history?",
+    "clearText": "All of this node's kept checks ({n}) are deleted. The scanner journal stays as it is.",
+    "cleared": "Check history cleared"
   }
 }

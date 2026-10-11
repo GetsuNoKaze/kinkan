@@ -206,5 +206,7 @@ func (h *handlers) probeNode(ctx context.Context, in *nodeProbeInput) (*nodeProb
 		items[i] = quietItem{view: views[i], template: templates[i], far: h.farTargetOf(ctx, templates[i], ip), selfReference: selfRefs[i]}
 	}
 	quiet := adviseQuiet(items, h.siteServedBy(node.ID))
-	return &nodeProbeOutput{Body: NodeProbeView{StartedAt: started, NodeID: node.ID, Vantage: "panel", Address: ip.String(), LocalNode: node.Address == "", Inbounds: views, Quiet: quiet}}, nil
+	view := NodeProbeView{StartedAt: started, NodeID: node.ID, Vantage: "panel", Address: ip.String(), LocalNode: node.Address == "", Inbounds: views, Quiet: quiet}
+	h.keepProbeRun(context.WithoutCancel(ctx), in.Body.InboundID, view)
+	return &nodeProbeOutput{Body: view}, nil
 }

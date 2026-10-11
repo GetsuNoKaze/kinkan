@@ -37,6 +37,11 @@ type ScannerSnapshot struct {
 	Observer string `json:"observer,omitempty"`
 }
 
+// ResetScanners empties the node's scanner journal under a new epoch.
+func (c *Client) ResetScanners(ctx context.Context) error {
+	return c.do(ctx, "DELETE", "/v1/scanners", nil, nil, 10*time.Second)
+}
+
 func (c *Client) Scanners(ctx context.Context) (ScannerSnapshot, error) {
 	var out ScannerSnapshot
 	err := c.do(ctx, "GET", "/v1/scanners", nil, &out, 10*time.Second)

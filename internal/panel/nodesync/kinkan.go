@@ -72,4 +72,16 @@ func (m *Manager) pruneKinkan(ctx context.Context, now time.Time) {
 	if err := m.st.PruneScanners(ctx, now); err != nil {
 		m.log.Error("prune scanner journal", "err", err)
 	}
+	if err := m.st.PruneProbeRuns(ctx, now); err != nil {
+		m.log.Error("prune protocol check history", "err", err)
+	}
+}
+
+// ResetScanners empties a node's scanner journal on the node itself, under a new epoch.
+func (m *Manager) ResetScanners(ctx context.Context, id int64) error {
+	c, err := clientOf[interface{ ResetScanners(context.Context) error }](m, id)
+	if err != nil {
+		return err
+	}
+	return c.ResetScanners(ctx)
 }
