@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Merges upstream mikan's main into the sync/upstream branch and regenerates
 # third_party/mihomo (and third_party/metacubex-http, which mihomo's version decides)
-# if the merge moved mikan to another mihomo version, and the API schema (openapi.json and
+# if the merge moved mikan to another mihomo version or source (Mikan's own core,
+# Citrus: see scripts/tt/mihomo.sh), and the API schema (openapi.json and
 # its TypeScript types) from the merged code: a conflict only in those is resolved by
 # making them again, since both sides' endpoints are in the code.
 #
@@ -44,10 +45,23 @@ branch="sync/upstream"
 echo "branch=$branch" >>"$out"
 git checkout --quiet -B "$branch"
 
+# Where upstream takes mihomo from: its go.mod's replace for the module (Mikan's own core,
+# Citrus, or a copy in its repository), or nothing for MetaCubeX's at the required version.
+# scripts/tt/mihomo.sh builds third_party/mihomo from there; this fork's go.mod replaces
+# the module with that copy either way.
+upstream_mihomo="$(git show "$up:go.mod" | awk '
+	{ sub(/^replace[ \t]+/, "") }
+	$1 == "github.com/metacubex/mihomo" {
+		for (i = 2; i <= NF; i++) if ($i == "=>") { print $(i + 1), (i + 2 <= NF ? $(i + 2) : ""); exit }
+	}')"
+
 generated=(web/src/api/openapi.json web/src/api/schema.d.ts)
+# go.mod and go.sum are made again too: upstream's, with this fork's replaces put back by
+# the scripts below and go mod tidy.
+regenerated=("${generated[@]}" go.mod go.sum)
 if ! git merge --no-edit -m "Merge upstream $what" "$up"; then
 	conflicts="$(git diff --name-only --diff-filter=U)"
-	rest="$(grep -vxF "${generated[@]/#/-e}" <<<"$conflicts" || true)"
+	rest="$(grep -vxF "${regenerated[@]/#/-e}" <<<"$conflicts" || true)"
 	if [ -n "$rest" ]; then
 		git merge --abort || true
 		fail "merging $what conflicts in: $(tr '\n' ' ' <<<"$conflicts")"
@@ -59,13 +73,27 @@ if ! git merge --no-edit -m "Merge upstream $what" "$up"; then
 	echo "resolved by regeneration: $(tr '\n' ' ' <<<"$conflicts")"
 fi
 
+# The Go build embeds web/dist, which is not in git; a placeholder lets go mod tidy and
+# the schema generator below build, as scripts/tt/check.sh does.
+if [ ! -d web/dist ]; then
+	mkdir -p web/dist
+	echo '<!doctype html><title>sync build</title>' >web/dist/index.html
+fi
+
+if [ -n "$upstream_mihomo" ]; then
+	echo "$upstream_mihomo" >patches/mihomo/UPSTREAM
+	echo "upstream takes mihomo from: $upstream_mihomo"
+else
+	rm -f patches/mihomo/UPSTREAM
+fi
 before="$(cat third_party/mihomo/.mihomo-version 2>/dev/null || true)"
 scripts/tt/mihomo.sh
 scripts/tt/http.sh
-if [ -n "$(git status --porcelain -- third_party go.mod go.sum)" ]; then
+go mod tidy
+if [ -n "$(git status --porcelain -- third_party go.mod go.sum patches/mihomo/UPSTREAM)" ]; then
 	after="$(cat third_party/mihomo/.mihomo-version)"
 	http="$(cat third_party/metacubex-http/.http-version)"
-	git add -A third_party go.mod go.sum
+	git add -A third_party go.mod go.sum patches/mihomo
 	git commit --quiet -m "third_party: mihomo $after (was ${before:-none}), metacubex/http $http, with their patches"
 fi
 
