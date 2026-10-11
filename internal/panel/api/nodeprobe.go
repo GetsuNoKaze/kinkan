@@ -143,9 +143,11 @@ func (h *handlers) probeNode(ctx context.Context, in *nodeProbeInput) (*nodeProb
 			if referenceHost != "" {
 				refName = referenceHost
 			}
-			// The same name on the same port is this inbound: comparing it with itself would
-			// find no difference and say nothing about how it differs from a real site.
-			if selfRef = strconv.Itoa(in.Body.ReferencePort) == port && strings.EqualFold(refName, sni); !selfRef {
+			// The same name on the same TCP port is this inbound: comparing it with itself
+			// would find no difference and say nothing about how it differs from a real site.
+			// An inbound on UDP (QUIC: Hysteria2, TUIC) shares only the number with the HTTPS
+			// site on that port, which is another service.
+			if selfRef = view.Network != "udp" && strconv.Itoa(in.Body.ReferencePort) == port && strings.EqualFold(refName, sni); !selfRef {
 				cfg.Reference = "https://" + net.JoinHostPort(refName, strconv.Itoa(in.Body.ReferencePort))
 			}
 		}
