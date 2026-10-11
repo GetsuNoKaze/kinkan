@@ -40,6 +40,11 @@ case "$1" in
     case "$*" in 'volume inspect --format {{.Mountpoint}} mikan_pg-data') exit 1 ;; *) unexpected "$@" ;; esac ;;
   rm)
     case "$*" in 'rm -f mikan-database-'*) exit 0 ;; *) unexpected "$@" ;; esac ;;
+  inspect)
+    # Kinkan: the rollback point records the image of the container that served the
+    # previous version (kinkan_rollback::image_id)
+    case "$*" in 'inspect --format {{.Image}} c0ffee') echo "sha256:$(printf '%064d' 0)" ;; *) unexpected "$@" ;; esac
+    exit 0 ;;
   compose) ;;
   *) unexpected "$@" ;;
 esac
@@ -74,6 +79,7 @@ case "$*" in
   'stop panel' | 'stop') rm -f "$TEST_STATE/healthy" ;;
   'stop postgres') ;;
   'logs --tail 30') echo 'panel: last log line' ;;
+  'ps -aq panel') echo c0ffee ;; # Kinkan: kinkan_rollback::image_id
   *) unexpected compose "$@" ;;
 esac
 DOCKER
