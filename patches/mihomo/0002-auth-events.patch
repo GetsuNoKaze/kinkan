@@ -1,3 +1,34 @@
+diff --git a/component/authevent/event.go b/component/authevent/event.go
+new file mode 100644
+index 0000000..0b71b00
+--- /dev/null
++++ b/component/authevent/event.go
+@@ -0,0 +1,25 @@
++// Package authevent exposes bounded metadata about rejected authentication to
++// embedders. Credentials, URLs, headers and user payloads are never included.
++package authevent
++
++import "sync/atomic"
++
++type Event struct{ Protocol, Local, Remote, Reason, Method string }
++type handler struct{ fn func(Event) }
++
++var sink atomic.Pointer[handler]
++
++// SetHandler installs a callback. It must return immediately; embedders should
++// enqueue events in a bounded queue rather than do I/O on handshake goroutines.
++func SetHandler(fn func(Event)) {
++	if fn == nil {
++		sink.Store(nil)
++	} else {
++		sink.Store(&handler{fn})
++	}
++}
++func Emit(e Event) {
++	if h := sink.Load(); h != nil {
++		h.fn(e)
++	}
++}
 diff --git a/listener/anytls/server.go b/listener/anytls/server.go
 index c5c6060..fa5f798 100644
 --- a/listener/anytls/server.go
@@ -39,7 +70,7 @@ index 256dbcf..40de0c9 100644
  		}
  		// Due to low implementation quality, the reality server intercepted half-close and caused memory leaks.
 diff --git a/listener/sing_hysteria2/server.go b/listener/sing_hysteria2/server.go
-index 08f9cbc..c9c98b5 100644
+index 08f9cbc..1260693 100644
 --- a/listener/sing_hysteria2/server.go
 +++ b/listener/sing_hysteria2/server.go
 @@ -4,9 +4,11 @@ import (
@@ -84,18 +115,18 @@ index 08f9cbc..c9c98b5 100644
  		Context:               context.Background(),
  		Logger:                log.SingLogger,
 diff --git a/transport/trusttunnel/service.go b/transport/trusttunnel/service.go
-index 0b46344..01f16af 100644
+index b650963..0d498d4 100644
 --- a/transport/trusttunnel/service.go
 +++ b/transport/trusttunnel/service.go
-@@ -4,6 +4,7 @@ import (
- 	"context"
+@@ -5,6 +5,7 @@ import (
+ 	"crypto/sha256"
  	"crypto/subtle"
  	"errors"
 +	"github.com/metacubex/mihomo/component/authevent"
  	"io"
  	"net"
  	"net/netip"
-@@ -317,6 +318,15 @@ func (s *Service) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+@@ -337,6 +338,15 @@ func (s *Service) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
  	authorization := request.Header.Get("Proxy-Authorization")
  	username, loaded := s.verify(authorization)
  	if !loaded {
@@ -167,34 +198,3 @@ index 352a864..a8d4ff8 100644
  				_ = s.quicConn.CloseWithError(AuthenticationFailed, "AuthenticationFailed")
  			}
  			s.authOk.Store(authOk)
-diff --git a/component/authevent/event.go b/component/authevent/event.go
-new file mode 100644
-index 0000000..0b71b00
---- /dev/null
-+++ b/component/authevent/event.go
-@@ -0,0 +1,25 @@
-+// Package authevent exposes bounded metadata about rejected authentication to
-+// embedders. Credentials, URLs, headers and user payloads are never included.
-+package authevent
-+
-+import "sync/atomic"
-+
-+type Event struct{ Protocol, Local, Remote, Reason, Method string }
-+type handler struct{ fn func(Event) }
-+
-+var sink atomic.Pointer[handler]
-+
-+// SetHandler installs a callback. It must return immediately; embedders should
-+// enqueue events in a bounded queue rather than do I/O on handshake goroutines.
-+func SetHandler(fn func(Event)) {
-+	if fn == nil {
-+		sink.Store(nil)
-+	} else {
-+		sink.Store(&handler{fn})
-+	}
-+}
-+func Emit(e Event) {
-+	if h := sink.Load(); h != nil {
-+		h.fn(e)
-+	}
-+}

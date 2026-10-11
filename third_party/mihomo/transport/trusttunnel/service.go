@@ -2,6 +2,7 @@ package trusttunnel
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
 	"github.com/metacubex/mihomo/component/authevent"
@@ -55,7 +56,7 @@ type ServiceOptions struct {
 type Service struct {
 	ctx                   context.Context
 	logger                logger.ContextLogger
-	users                 map[string]string
+	users                 map[string][sha256.Size]byte
 	handler               Handler
 	icmpHandler           ICMPHandler
 	quicCongestionControl string
@@ -102,7 +103,14 @@ const (
 	authFailureLogInterval = 10 * time.Second
 )
 
-var errFallbackAddress = errors.New("fallback address is link-local, multicast or unspecified")
+var errFallbackAddress = errors.New("fallback address is link-local, multicast, unspecified or a cloud metadata service")
+
+// cloudMetadata are metadata services outside the link-local range, which the check
+// below covers already (169.254.169.254 and fe80::/10).
+var cloudMetadata = []netip.Addr{
+	netip.MustParseAddr("fd00:ec2::254"),   // AWS, IPv6
+	netip.MustParseAddr("100.100.100.200"), // Alibaba Cloud
+}
 
 // fallbackDialControl refuses backend addresses that unauthenticated clients must
 // never reach through the fallback, such as the cloud metadata service. The panel
@@ -115,6 +123,11 @@ func fallbackDialControl(_, address string, _ syscall.RawConn) error {
 	ip := addrPort.Addr().Unmap()
 	if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
 		return errFallbackAddress
+	}
+	for _, metadata := range cloudMetadata {
+		if ip == metadata {
+			return errFallbackAddress
+		}
 	}
 	return nil
 }
@@ -184,13 +197,16 @@ func NewService(options ServiceOptions) *Service {
 		s.fallbackProxy = &httputil.ReverseProxy{
 			Transport:     s.fallbackTransport,
 			FlushInterval: -1, // flush each write so SSE and streaming are not buffered
-			// Rewrite (unlike Director) drops any Forwarded/X-Forwarded-* the client
-			// sent, so a prober cannot spoof the IP, scheme or host the backend sees.
+			// Rewrite drops Forwarded and the standard X-Forwarded-For, -Host and
+			// -Proto headers before SetXForwarded supplies the values for this request.
 			Rewrite: func(r *httputil.ProxyRequest) {
 				r.Out.URL.Scheme = "http"
 				r.Out.URL.Host = target
 				// Keep the client's Host header: named virtual hosts keep working and
-				// the internal backend address is not leaked in redirects.
+				// the internal backend address is not leaked in redirects. The backend
+				// therefore routes on a Host the client chose: point the fallback at a
+				// server that serves only the cover site, not at one whose other virtual
+				// hosts are meant to stay internal.
 				r.Out.Host = r.In.Host
 				r.SetXForwarded()
 			},
@@ -284,7 +300,11 @@ func (s *Service) Start(tcpListener net.Listener, udpConn net.PacketConn, tlsCon
 }
 
 func (s *Service) UpdateUsers(users map[string]string) {
-	s.users = users
+	hashedUsers := make(map[string][sha256.Size]byte, len(users))
+	for username, password := range users {
+		hashedUsers[username] = sha256.Sum256([]byte(password))
+	}
+	s.users = hashedUsers
 }
 
 func (s *Service) Close() error {
@@ -454,12 +474,12 @@ func (s *Service) verify(authorization string) (username string, loaded bool) {
 	if !loaded {
 		return "", false
 	}
-	recordedPassword, loaded := s.users[username]
-	if !loaded {
-		return "", false
-	}
-	// Constant time, so response timing does not tell a prober how much of a guess matched.
-	if subtle.ConstantTimeCompare([]byte(password), []byte(recordedPassword)) != 1 {
+	recordedHash, known := s.users[username]
+	passwordHash := sha256.Sum256([]byte(password))
+	// Compare fixed-size digests even for unknown users: comparing raw passwords
+	// would return immediately when their lengths differ. This does not make the
+	// entire authentication path (including the map lookup) constant-time.
+	if subtle.ConstantTimeCompare(passwordHash[:], recordedHash[:]) != 1 || !known {
 		return "", false
 	}
 	return username, true
