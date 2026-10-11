@@ -16,6 +16,7 @@ import { fieldErrors } from "../../../lib/fields";
 import { inlineMarkdown } from "../../../lib/inline-md";
 import { ago, utcHourLabel } from "../../../lib/format";
 import { useSaveSettings } from "./shared";
+import { KinkanRollback } from "./kinkan-rollback"; // Kinkan
 
 /** What the service is called, where it lives and where its people ask for help: the first things to fill in. */
 export function ServiceCard({ s }: { s: Schemas["SettingsView"] }) {
@@ -277,6 +278,7 @@ export function UpdatesCard() {
         loading={request.isPending}
         onConfirm={() => request.mutate()}
       />
+      <KinkanRollback busy={waiting || request.isPending} /> {/* Kinkan */}
     </section>
   );
 }

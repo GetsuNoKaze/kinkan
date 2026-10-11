@@ -198,6 +198,8 @@ The panel checks for a new release once a day and shows what changed. Turn on **
 
 On 0.4.4 or older, update to 0.4.5 first; the move to 0.5 and PostgreSQL then comes through the Update button too. If you skipped 0.4.5, the install command above updates an existing server.
 
+Kinkan also offers **Roll back** in Settings → Updates: return to the version before the last successful update while keeping current PostgreSQL data. It requires an unchanged database schema and the previous image still on the server. A backup is made first and automatic updates are disabled. The built-in node follows the image; remote nodes are not rolled back. See [rollback details and limitations](ROLLBACK.md).
+
 ## Building from source
 
 ```bash

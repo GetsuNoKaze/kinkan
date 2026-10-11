@@ -73,6 +73,16 @@ Repository settings the workflows need (release setup is in RELEASE-TT.md):
 - Optional secret `SYNC_TOKEN`: a fine-grained token with Contents, Pull requests and Workflows write access to this repository. GitHub refuses pushes that change workflow files from the default token, so without it a sync that brings changes to mikan's workflows fails. It also opens the sync pull request: one opened with the default token does not trigger `ci.yml`, so without `SYNC_TOKEN` mikan's full suite does not run on syncs.
 - Optional secrets `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` to get the failure and recovery messages in Telegram.
 
+## Panel rollback
+
+Kinkan's rollback code lives in `internal/panel/updates/kinkan_rollback.go`,
+`internal/panel/api/kinkan_rollback.go`, `installer/src/kinkan_rollback.rs` and
+the `kinkan-rollback.tsx` settings component. The host records the last running
+image outside container data and permits a return only after an update with
+unchanged Mikan and Kinkan database schemas. The shared updater has hooks to
+capture that image, record the candidate and dispatch a rollback request under
+the same host lock. [User-facing behavior and limits](ROLLBACK.md).
+
 ## Licence
 
 GPL-3.0, like mikan and mihomo.

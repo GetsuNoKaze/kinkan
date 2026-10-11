@@ -980,24 +980,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/protocol-probes/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Сохранённая проверка протоколов */
-        get: operations["protocol-probe"];
-        put?: never;
-        post?: never;
-        /** Удалить проверку из истории */
-        delete: operations["delete-protocol-probe"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/pools": {
         parameters: {
             query?: never;
@@ -1133,6 +1115,24 @@ export interface paths {
         /** Включить или выключить промокод */
         post: operations["enable-promocode"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/protocol-probes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Сохранённая проверка протоколов */
+        get: operations["protocol-probe"];
+        put?: never;
+        post?: never;
+        /** Удалить проверку из истории */
+        delete: operations["delete-protocol-probe"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1632,6 +1632,40 @@ export interface paths {
         put?: never;
         /** Обновить сейчас: заявка серверу */
         post: operations["request-update"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/updates/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Доступный откат панели */
+        get: operations["get-rollback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/updates/rollback/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Откатить панель к предыдущей совместимой версии */
+        post: operations["request-rollback"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3536,6 +3570,24 @@ export interface components {
             /** Format: int64 */
             total: number;
         };
+        ProbeRunView: {
+            /** Format: int64 */
+            id: number;
+            /**
+             * Format: int64
+             * @description 0: все подключения ноды
+             */
+            inbound_id: number;
+            /** Format: int64 */
+            inbounds: number;
+            /** Format: date-time */
+            started_at: string;
+            /**
+             * @description Вердикт ноды целиком
+             * @enum {string}
+             */
+            verdict: "quiet" | "noticeable" | "exposed" | "inconclusive";
+        };
         ProbeView: {
             /** Format: date-time */
             checked_at: string;
@@ -3710,24 +3762,6 @@ export interface components {
             brand_accent?: string;
             config: components["schemas"]["Page"];
         };
-        ProbeRunView: {
-            /** Format: int64 */
-            id: number;
-            /**
-             * Format: int64
-             * @description 0: все подключения ноды
-             */
-            inbound_id: number;
-            /** Format: int64 */
-            inbounds: number;
-            /** Format: date-time */
-            started_at: string;
-            /**
-             * @description Вердикт ноды целиком
-             * @enum {string}
-             */
-            verdict: "quiet" | "noticeable" | "exposed" | "inconclusive";
-        };
         QuietAdvice: {
             /**
              * @description Что предложить: выключить подключение, дать ноде сайт, повторить с эталоном или ничего
@@ -3796,6 +3830,16 @@ export interface components {
             sni: string;
             tls13: boolean;
             x25519: boolean;
+        };
+        Rollback: {
+            at: string;
+            available: boolean;
+            current: string;
+            reason: string;
+            version: string;
+        };
+        RollbackInputBody: {
+            version: string;
         };
         RouteDirectSet: {
             id: string;
@@ -6465,6 +6509,35 @@ export interface operations {
             };
         };
     };
+    "delete-node-scanners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "node-site-served": {
         parameters: {
             query?: never;
@@ -7497,6 +7570,66 @@ export interface operations {
             };
         };
     };
+    "protocol-probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeProbeView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-protocol-probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "get-settings": {
         parameters: {
             query?: never;
@@ -7790,95 +7923,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SiteOutputBody"];
                 };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "delete-node-scanners": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "protocol-probe": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NodeProbeView"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "delete-protocol-probe": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Error */
             default: {
@@ -8904,6 +8948,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UpdatesView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Rollback"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "request-rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RollbackInputBody"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Rollback"];
                 };
             };
             /** @description Error */

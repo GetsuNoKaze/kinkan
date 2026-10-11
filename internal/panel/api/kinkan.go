@@ -31,4 +31,5 @@ func (h *handlers) registerKinkan() {
 	h.registerScanners()
 	h.registerSites()
 	h.registerHistory()
+	h.registerRollback()
 }

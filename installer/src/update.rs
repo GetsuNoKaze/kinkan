@@ -41,6 +41,9 @@ use crate::panelfs::{self, Dir};
 use crate::release::Channel;
 use crate::{DIR, addon, backup, clock, docker, host, net, release, setup, signals};
 
+#[path = "kinkan_rollback.rs"]
+mod kinkan_rollback; // Kinkan
+
 /// What `mikan update` was asked for.
 #[derive(clap::Args, Clone, Debug, Default)]
 pub struct UpdateArgs {
@@ -213,6 +216,7 @@ fn next_hop(newest: Option<&str>, daily: bool, at: &mut Attempt, say: &mut dyn F
 /// What the panel, or a node's container, put at update/request.
 #[derive(Debug, PartialEq, Eq)]
 enum Asked {
+    Rollback(String, String), // Kinkan: expected current and previous version
     Nothing,
     /// The panel's Update button: the newest release.
     Update,
@@ -245,6 +249,7 @@ fn take_request(dir: &Dir, node: bool) -> Result<Asked> {
         },
         Ok(Some(data)) => match serde_json::from_slice::<serde_json::Value>(&data) {
             Ok(v) if v["do"] == "addons" => Asked::Addons,
+            Ok(v) if v["do"] == "rollback" => kinkan_rollback::asked(&v), // Kinkan
             _ => Asked::Update,
         },
         Ok(None) => Asked::Nothing,
@@ -349,6 +354,7 @@ pub fn update(a: &UpdateArgs, say: &mut dyn FnMut(&str), progress: &mut dyn FnMu
                 return Ok(());
             }
             Asked::Update => {}
+            Asked::Rollback(from, version) => return kinkan_rollback::run(&from, &version, say), // Kinkan
             Asked::Version(v) => at.upto = Some(v),
         }
     }
@@ -539,6 +545,7 @@ fn update_to(a: &UpdateArgs, say: &mut dyn FnMut(&str), progress: &mut dyn FnMut
     let _critical = signals::critical();
     let old_compose = fs::read_to_string(root.join("compose.yaml")).context("read the current compose file")?;
     let old_env = install.env.render();
+    let previous_image = if install.node { None } else { kinkan_rollback::image_id().ok() }; // Kinkan
     let saved = if install.node {
         gate
     } else {
@@ -587,9 +594,13 @@ fn update_to(a: &UpdateArgs, say: &mut dyn FnMut(&str), progress: &mut dyn FnMut
         });
     }
     let mut schema = None;
+    let mut rollback_unchanged = false; // Kinkan
     if !install.node {
         match docker::database(&["migrate"]) {
-            Ok(out) => schema = kinkan_schema_change(&String::from_utf8_lossy(&out.stdout), &current), // Kinkan
+            Ok(out) => {
+                schema = kinkan_schema_change(&String::from_utf8_lossy(&out.stdout), &current); // Kinkan
+                rollback_unchanged = kinkan_rollback::schema_unchanged(&String::from_utf8_lossy(&out.stdout), &current); // Kinkan
+            }
             // On PostgreSQL already the previous version is tried on what the migration
             // left (each of its steps commits whole or not at all); one that refuses a
             // schema moved forward leaves the panel stopped.
@@ -618,6 +629,7 @@ fn update_to(a: &UpdateArgs, say: &mut dyn FnMut(&str), progress: &mut dyn FnMut
         say(&format!("mikan {version} did not start: going back to {current}"));
         return Err(roll_back(&mut install, &before, &format!("mikan {version} did not start: {e:#}")));
     }
+    kinkan_rollback::remember(&install, &current, previous_image, was_postgres && rollback_unchanged, say); // Kinkan
     seal_when_current(root, install.node, say);
     say(&format!("mikan {version} is running."));
     if let Some(m) = manifest

@@ -306,8 +306,7 @@ func (c *Checker) SetPolicy(p Policy) error {
 
 // Request asks the host to update now.
 func (c *Checker) Request() error {
-	data, _ := json.Marshal(map[string]string{"at": c.now().UTC().Format(time.RFC3339)})
-	return c.write("request", data)
+	return c.kinkanRequestUpdate() // Kinkan: serialize update and rollback requests.
 }
 
 // Requested returns when the Update button was pressed, while the host has not taken

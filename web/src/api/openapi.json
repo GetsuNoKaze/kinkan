@@ -5390,6 +5390,48 @@
         ],
         "type": "object"
       },
+      "Rollback": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "current": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "current",
+          "version",
+          "available",
+          "reason",
+          "at"
+        ],
+        "type": "object"
+      },
+      "RollbackInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "type": "object"
+      },
       "RouteDirectSet": {
         "additionalProperties": false,
         "properties": {
@@ -13447,6 +13489,79 @@
           }
         },
         "summary": "Обновить сейчас: заявка серверу",
+        "tags": [
+          "settings"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/updates/rollback": {
+      "get": {
+        "operationId": "get-rollback",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rollback"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Доступный откат панели",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/updates/rollback/request": {
+      "post": {
+        "operationId": "request-rollback",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RollbackInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rollback"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Откатить панель к предыдущей совместимой версии",
         "tags": [
           "settings"
         ],
