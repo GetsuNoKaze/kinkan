@@ -2,6 +2,16 @@
 
 Fork release notes. Upstream history remains in CHANGELOG.md.
 
+## 0.5.0.5-tt.11
+### en
+- Rollback from the panel: Settings → Updates can go back to the version that ran before the last update, keeping today's data, when that update did not change the database schema (Mikan's or Kinkan's). Automatic updates are turned off first, and the server backs up twice and goes back to the current version if the previous one does not start. Only an admin session can ask for it; the image comes from the server's own record, never from the request. Remote nodes are not rolled back. See ROLLBACK.md.
+- Quiet node: a UDP inbound (Hysteria2, TUIC) on 443 is no longer taken for the HTTPS site on TCP 443 as its own reference.
+- Fork upkeep: syncing with Mikan follows it to its own core, Citrus, and a Mikan beta that would conflict with the fork is reported early.
+### ru
+- Откат из панели: в Настройках → Обновления можно вернуться к версии, которая работала до последнего обновления, с сегодняшними данными, если обновление не меняло схему базы (Mikan и Kinkan). Сначала выключается автообновление; сервер делает две резервные копии и возвращает текущую версию, если прежняя не запустилась. Попросить откат может только сессия админа; образ сервер берёт из своей записи, а не из запроса. Удалённые ноды не откатываются. Подробно в ROLLBACK.md.
+- Тихая нода: подключение по UDP (Hysteria2, TUIC) на 443 больше не принимается за HTTPS-сайт на TCP 443 как за собственный эталон.
+- Обслуживание форка: синхронизация с Mikan следует за ним на его ядро Citrus, а о бете Mikan, которая конфликтовала бы с форком, становится известно заранее.
+
 ## 0.5.0.5-tt.10
 ### en
 - Quiet node: advice now follows what the check saw. TUIC's close code, Hysteria2's proxy answer and "obfs keeps it silent" are named only when their findings are there; a check that failed for another reason (an expired certificate, say) names that reason. A REALITY target in another network than the node is flagged (both networks from the panel's DB-IP database). An inbound is no longer compared with itself as its own reference, and on 443 the check does not suggest 443 as the reference.
