@@ -55,12 +55,14 @@ func TestNodeProbeAllInboundsArePinnedAndSessionOnly(t *testing.T) {
 	expectedReference := "https://cover.example:8444"
 	calls := 0
 	lookups := 0
+	refs := map[string]string{} // the reference each protocol was compared with
 	handler, _, err := New(Deps{Store: st, Settings: set, Sessions: sessions, Now: clock, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), IPLimit: auth.NewLimiter(10, time.Minute, time.Minute, time.Hour), Resolve: func(context.Context, string) ([]netip.Addr, error) {
 		lookups++
 		return []netip.Addr{netip.MustParseAddr("8.8.8.8")}, nil
 	}, NodeProbeScan: func(ctx context.Context, cfg nodeprobe.Config) (nodeprobe.Report, error) {
 		calls++
-		if cfg.Address != "8.8.8.8" || cfg.Reference != expectedReference {
+		refs[cfg.Protocol] = cfg.Reference
+		if cfg.Address != "8.8.8.8" || (expectedReference != "*" && cfg.Reference != expectedReference) {
 			t.Errorf("unpinned scan: %+v", cfg)
 		}
 		if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) > 75*time.Second {
@@ -118,6 +120,22 @@ func TestNodeProbeAllInboundsArePinnedAndSessionOnly(t *testing.T) {
 	}
 	if calls != before {
 		t.Fatal("invalid reference triggered a scan")
+	}
+
+	// A reference on a TCP inbound's own port and name is the inbound itself and is not
+	// compared with; a QUIC inbound (TUIC, UDP) shares only the number with that site.
+	expectedReference = "*"
+	if r := call(true, true, `{"reference_port":24443}`); r.Code != 200 {
+		t.Fatalf("reference on the TrustTunnel port: %d %s", r.Code, r.Body)
+	}
+	if refs["trusttunnel"] != "" {
+		t.Errorf("TrustTunnel compared with itself: %q", refs["trusttunnel"])
+	}
+	if r := call(true, true, `{"reference_port":24444}`); r.Code != 200 {
+		t.Fatalf("reference on the TUIC port number: %d %s", r.Code, r.Body)
+	}
+	if refs["tuic"] != "https://node.example:24444" {
+		t.Errorf("TUIC on UDP not compared with the HTTPS site on its port number: %q", refs["tuic"])
 	}
 
 }
