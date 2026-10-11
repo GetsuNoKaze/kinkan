@@ -208,6 +208,9 @@ func (h *handlers) requestUpdate(ctx context.Context, _ *struct{}) (*updatesOutp
 		return nil, huma.Error409Conflict("update_none")
 	}
 	if err := h.d.Updates.Request(); err != nil {
+		if errors.Is(err, updates.ErrUpdateBusy) {
+			return nil, huma.Error409Conflict("update_busy")
+		} // Kinkan
 		if errors.Is(err, updates.ErrUnavailable) {
 			return nil, huma.Error409Conflict("updates_unavailable")
 		}
