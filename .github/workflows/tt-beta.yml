@@ -1,0 +1,72 @@
+name: tt beta
+
+# Every 6 hours: tries upstream mikan's dev (its betas) against this fork's main without
+# committing (scripts/tt/preview.sh). Files that would conflict are listed in one open
+# issue labelled upstream-beta, updated in place, with a Telegram message when the list
+# changes; the issue closes once the betas merge cleanly. A heads-up before a release,
+# so the sync of the release itself (tt-sync.yml) holds no surprises.
+on:
+  schedule:
+    - cron: "11 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: tt-beta
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: try the betas
+        id: preview
+        run: scripts/tt/preview.sh
+
+      - name: report
+        env:
+          WHAT: ${{ steps.preview.outputs.what }}
+          CONFLICTS: ${{ steps.preview.outputs.conflicts }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          label=upstream-beta
+          issue="$(gh issue list --label "$label" --state open --json number --jq '.[0].number // empty')"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          telegram() {
+            [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ] || return 0
+            curl -fsS -o /dev/null "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+              --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" --data-urlencode "text=$1" || echo "::warning::Telegram message not sent"
+          }
+          if [ -z "$CONFLICTS" ]; then
+            if [ -n "$issue" ]; then
+              gh issue close "$issue" --comment "$WHAT merges into main without conflicts now: $run_url"
+              telegram "kinkan: upstream betas merge cleanly again ($WHAT)"
+            fi
+            exit 0
+          fi
+          list="$(printf -- '- `%s`\n' $CONFLICTS)"
+          body="$(printf 'Merging %s into main would conflict in:\n\n%s\n\nThe API schema is left out: the sync makes it again. Checked: %s\n\nThis issue is updated every 6 hours and closes once the betas merge cleanly.\n' "$WHAT" "$list" "$run_url")"
+          if [ -z "$issue" ]; then
+            gh label create "$label" --color fbca04 --description "Upstream betas would conflict with the fork" --force >/dev/null
+            gh issue create --title "Upstream betas would conflict" --label "$label" --body "$body"
+            telegram "kinkan: upstream betas ($WHAT) would conflict in: $CONFLICTS"
+          else
+            old="$(gh issue view "$issue" --json body --jq .body | sed -n 's/^- `\(.*\)`$/\1/p' | tr '\n' ' ' | sed 's/ $//')"
+            gh issue edit "$issue" --body "$body" >/dev/null
+            if [ "$old" != "$CONFLICTS" ]; then
+              gh issue comment "$issue" --body "The list changed with $WHAT: $CONFLICTS"
+              telegram "kinkan: upstream betas ($WHAT) now conflict in: $CONFLICTS"
+            fi
+          fi
