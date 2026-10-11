@@ -117,3 +117,30 @@ func TestJournalFloodLeavesRoomForOthers(t *testing.T) {
 		t.Error("the next day is kept out")
 	}
 }
+
+// A reset starts a new epoch with nothing in it, saved at once, so the panel, which
+// keeps snapshots by epoch, cannot get the old rows back.
+func TestJournalReset(t *testing.T) {
+	now := time.Now()
+	path := filepath.Join(t.TempDir(), "scanners.json")
+	j, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j.Record(nodeapi.ScannerRecord{IP: "192.0.2.1", Inbound: "tt", Protocol: "trusttunnel", Reason: "no_credentials"}, now)
+	before := j.Snapshot(now).Epoch
+	if err := j.Reset(now); err != nil {
+		t.Fatal(err)
+	}
+	after := j.Snapshot(now)
+	if after.Epoch == before || len(after.Rows) != 0 || after.Dropped != 0 {
+		t.Fatalf("after reset: %+v (epoch before %s)", after, before)
+	}
+	reopened, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := reopened.Snapshot(now); s.Epoch != after.Epoch || len(s.Rows) != 0 {
+		t.Fatalf("reset not saved: %+v", s)
+	}
+}

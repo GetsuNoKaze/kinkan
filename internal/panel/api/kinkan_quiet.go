@@ -115,7 +115,7 @@ func adviceFor(r ProtocolProbeReport, t proto.Template, siteServed bool, selfRef
 		switch {
 		case selfReference:
 			return "self_reference", "none", nil
-		case obfuscated && failure == "":
+		case obfuscated && obfsSilent(r):
 			// Silence is what obfuscation is for; no check from outside can say more.
 			return "obfuscated", "none", nil
 		case failure != "":
@@ -180,7 +180,36 @@ func hasFinding(r ProtocolProbeReport, match func(ttprobe.Finding) bool) bool {
 }
 
 // silence is what an obfuscated or filtered port gives a probe: no answer in time.
-var silence = []string{"timeout", "deadline exceeded", "no recent network activity", "no remote close", "i/o timeout"}
+var silence = []string{"deadline exceeded", "no recent network activity", "no remote close", "i/o timeout"}
+
+// obfsSilent requires actual probe timeouts and no successful response. A completed
+// QUIC handshake or HTTP/3 response is evidence that the port did answer, even when
+// the report remains inconclusive because it cannot assess obfuscation.
+func obfsSilent(r ProtocolProbeReport) bool {
+	timedOut := false
+	for _, f := range r.Findings {
+		if f.Name == "obfuscation" && f.Level == "INFO" {
+			continue
+		}
+		if f.Level != "ERROR" || !isSilence(f.Detail) {
+			return false
+		}
+		if f.Name != "QUIC handshake" && !strings.HasPrefix(f.Name, "HTTP/3 ") {
+			return false
+		}
+		timedOut = true
+	}
+	return timedOut
+}
+
+func isSilence(detail string) bool {
+	for _, s := range silence {
+		if strings.Contains(strings.ToLower(detail), s) {
+			return true
+		}
+	}
+	return false
+}
 
 // firstFailure is the first error of the check that is not silence (an expired
 // certificate, a refused connection), cut to a line; "" when there is none.
@@ -189,14 +218,7 @@ func firstFailure(r ProtocolProbeReport) string {
 		if f.Level != "ERROR" {
 			continue
 		}
-		quiet := false
-		for _, s := range silence {
-			if strings.Contains(strings.ToLower(f.Detail), s) {
-				quiet = true
-				break
-			}
-		}
-		if !quiet {
+		if !isSilence(f.Detail) {
 			d := f.Name + ": " + f.Detail
 			if len(d) > 200 {
 				d = strings.ToValidUTF8(d[:200], "")

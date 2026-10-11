@@ -30,4 +30,5 @@ func (h *handlers) registerKinkan() {
 	h.registerNodeProbe()
 	h.registerScanners()
 	h.registerSites()
+	h.registerHistory()
 }

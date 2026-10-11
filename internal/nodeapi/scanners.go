@@ -2,8 +2,26 @@ package nodeapi
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"time"
 )
+
+var ErrScannersUnsupported = errors.New("node does not support the scanner journal")
+
+// IsScannerUnsupported distinguishes a missing journal endpoint from a transport
+// failure. Older Kinkan nodes can also explicitly report an unavailable journal.
+func IsScannerUnsupported(err error) bool {
+	if errors.Is(err, ErrScannersUnsupported) {
+		return true
+	}
+	var status *StatusError
+	if errors.As(err, &status) {
+		return status.Path == "/v1/scanners" && (status.Status == http.StatusNotFound || status.Status == http.StatusMethodNotAllowed)
+	}
+	var coded *Error
+	return errors.As(err, &coded) && coded.Code == "invalid_state" && coded.Message == "no scanner journal"
+}
 
 // ScannerRecord contains rejected-auth metadata only, aggregated by day/source.
 // An unauthenticated request may be a browser; it is not proof of a scanner.
@@ -35,6 +53,11 @@ type ScannerSnapshot struct {
 	// it: the panel's own outgoing address, which its checks of the node come from too
 	// (behind Cloudflare or NAT it is not what the panel's domain resolves to).
 	Observer string `json:"observer,omitempty"`
+}
+
+// ResetScanners empties the node's scanner journal under a new epoch.
+func (c *Client) ResetScanners(ctx context.Context) error {
+	return c.do(ctx, "DELETE", "/v1/scanners", nil, nil, 10*time.Second)
 }
 
 func (c *Client) Scanners(ctx context.Context) (ScannerSnapshot, error) {
