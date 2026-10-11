@@ -622,7 +622,7 @@ fn update_to(a: &UpdateArgs, say: &mut dyn FnMut(&str), progress: &mut dyn FnMut
         // The previous image runs on what this update left only when that was PostgreSQL
         // already and the schema did not move: going back from SQLite would lose every
         // write since the import, and an older binary refuses a newer schema.
-        if !(install.node || was_postgres && schema.is_some_and(|(from, to)| from == to)) {
+        if !install.node && !(was_postgres && schema.is_some_and(|(from, to)| from == to)) {
             let _ = docker::compose_run(&["stop", "panel"]);
             return Err(e.context(format!("PostgreSQL is preserved and the panel is stopped. No automatic database rollback is safe; retry mikan update after fixing startup. Backup: {}", saved.display())));
         }
