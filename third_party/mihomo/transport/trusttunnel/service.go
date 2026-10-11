@@ -102,7 +102,14 @@ const (
 	authFailureLogInterval = 10 * time.Second
 )
 
-var errFallbackAddress = errors.New("fallback address is link-local, multicast or unspecified")
+var errFallbackAddress = errors.New("fallback address is link-local, multicast, unspecified or a cloud metadata service")
+
+// cloudMetadata are metadata services outside the link-local range, which the check
+// below covers already (169.254.169.254 and fe80::/10).
+var cloudMetadata = []netip.Addr{
+	netip.MustParseAddr("fd00:ec2::254"),   // AWS, IPv6
+	netip.MustParseAddr("100.100.100.200"), // Alibaba Cloud
+}
 
 // fallbackDialControl refuses backend addresses that unauthenticated clients must
 // never reach through the fallback, such as the cloud metadata service. The panel
@@ -115,6 +122,11 @@ func fallbackDialControl(_, address string, _ syscall.RawConn) error {
 	ip := addrPort.Addr().Unmap()
 	if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
 		return errFallbackAddress
+	}
+	for _, metadata := range cloudMetadata {
+		if ip == metadata {
+			return errFallbackAddress
+		}
 	}
 	return nil
 }
@@ -190,7 +202,10 @@ func NewService(options ServiceOptions) *Service {
 				r.Out.URL.Scheme = "http"
 				r.Out.URL.Host = target
 				// Keep the client's Host header: named virtual hosts keep working and
-				// the internal backend address is not leaked in redirects.
+				// the internal backend address is not leaked in redirects. The backend
+				// therefore routes on a Host the client chose: point the fallback at a
+				// server that serves only the cover site, not at one whose other virtual
+				// hosts are meant to stay internal.
 				r.Out.Host = r.In.Host
 				r.SetXForwarded()
 			},
@@ -454,12 +469,10 @@ func (s *Service) verify(authorization string) (username string, loaded bool) {
 	if !loaded {
 		return "", false
 	}
-	recordedPassword, loaded := s.users[username]
-	if !loaded {
-		return "", false
-	}
-	// Constant time, so response timing does not tell a prober how much of a guess matched.
-	if subtle.ConstantTimeCompare([]byte(password), []byte(recordedPassword)) != 1 {
+	recordedPassword, known := s.users[username]
+	// Constant time, so response timing does not tell a prober how much of a guess
+	// matched; an unknown user is compared too, so it does not tell which users exist.
+	if subtle.ConstantTimeCompare([]byte(password), []byte(recordedPassword)) != 1 || !known {
 		return "", false
 	}
 	return username, true

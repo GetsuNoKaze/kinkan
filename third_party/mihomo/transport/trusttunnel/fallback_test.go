@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/pem"
 	"io"
 	"math/big"
@@ -690,12 +691,12 @@ func TestFallbackSourceGroupsIPv6ByPrefix(t *testing.T) {
 }
 
 func TestFallbackDialRefusesMetadataAddresses(t *testing.T) {
-	for _, address := range []string{"169.254.169.254:80", "[fe80::1]:80", "0.0.0.0:80", "[::]:80", "224.0.0.1:80", "[::ffff:169.254.169.254]:80"} {
+	for _, address := range []string{"169.254.169.254:80", "[fe80::1]:80", "0.0.0.0:80", "[::]:80", "224.0.0.1:80", "[::ffff:169.254.169.254]:80", "[fd00:ec2::254]:80", "100.100.100.200:80"} {
 		if err := fallbackDialControl("tcp4", address, nil); err == nil {
 			t.Errorf("dial to %s allowed", address)
 		}
 	}
-	for _, address := range []string{"127.0.0.1:8080", "[::1]:8080", "10.0.0.5:80", "203.0.113.9:443"} {
+	for _, address := range []string{"127.0.0.1:8080", "[::1]:8080", "10.0.0.5:80", "203.0.113.9:443", "100.100.100.201:80", "[fd00:ec2::1]:80"} {
 		if err := fallbackDialControl("tcp4", address, nil); err != nil {
 			t.Errorf("dial to %s refused: %v", address, err)
 		}
@@ -801,5 +802,23 @@ func TestFallbackHTTP2LooksLikeCaddy(t *testing.T) {
 	}
 	if strings.Contains(date, "2001") {
 		t.Errorf("backend Date %q passed through", date)
+	}
+}
+
+// An unknown user is refused like a wrong password, and with the same comparison, so
+// the time of a refusal does not tell which users exist.
+func TestVerifyUnknownUser(t *testing.T) {
+	s := NewService(ServiceOptions{Ctx: context.Background()})
+	s.UpdateUsers(map[string]string{"alice": "secret"})
+	basic := func(user, password string) string {
+		return "Basic " + base64.StdEncoding.EncodeToString([]byte(user+":"+password))
+	}
+	if _, ok := s.verify(basic("alice", "secret")); !ok {
+		t.Fatal("the right password refused")
+	}
+	for _, auth := range []string{basic("alice", "wrong"), basic("bob", "secret"), basic("bob", ""), basic("", ""), ""} {
+		if _, ok := s.verify(auth); ok {
+			t.Errorf("%q accepted", auth)
+		}
 	}
 }
