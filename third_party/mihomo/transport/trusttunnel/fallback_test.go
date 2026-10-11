@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -805,20 +806,63 @@ func TestFallbackHTTP2LooksLikeCaddy(t *testing.T) {
 	}
 }
 
-// An unknown user is refused like a wrong password, and with the same comparison, so
-// the time of a refusal does not tell which users exist.
+// Unknown users are refused, including an empty password; known users with an
+// intentionally empty password remain valid. Timing is not asserted by this test.
 func TestVerifyUnknownUser(t *testing.T) {
 	s := NewService(ServiceOptions{Ctx: context.Background()})
-	s.UpdateUsers(map[string]string{"alice": "secret"})
+	s.UpdateUsers(map[string]string{"alice": "secret", "empty": "", "unicode": "風" + strings.Repeat("x", 1000)})
 	basic := func(user, password string) string {
 		return "Basic " + base64.StdEncoding.EncodeToString([]byte(user+":"+password))
 	}
-	if _, ok := s.verify(basic("alice", "secret")); !ok {
-		t.Fatal("the right password refused")
+	for user, password := range map[string]string{"alice": "secret", "empty": "", "unicode": "風" + strings.Repeat("x", 1000)} {
+		if got, ok := s.verify(basic(user, password)); !ok || got != user {
+			t.Fatalf("correct credentials for %q refused: user=%q, ok=%v", user, got, ok)
+		}
 	}
 	for _, auth := range []string{basic("alice", "wrong"), basic("bob", "secret"), basic("bob", ""), basic("", ""), ""} {
 		if _, ok := s.verify(auth); ok {
 			t.Errorf("%q accepted", auth)
 		}
+	}
+}
+
+// Exercise the public handler, including the no-fallback compatibility path.
+func TestFallbackAuthenticationRouting(t *testing.T) {
+	for _, fallback := range []bool{false, true} {
+		t.Run(map[bool]string{false: "without_fallback", true: "with_fallback"}[fallback], func(t *testing.T) {
+			var backendCalls atomic.Int32
+			backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				backendCalls.Add(1)
+				w.WriteHeader(http.StatusAccepted)
+			}))
+			defer backend.Close()
+			options := ServiceOptions{Ctx: context.Background(), Logger: logger.NOP()}
+			if fallback {
+				options.Fallback = strings.TrimPrefix(backend.URL, "http://")
+			}
+			s := NewService(options)
+			defer s.Close()
+			s.UpdateUsers(map[string]string{"alice": "secret"})
+			for _, credentials := range []string{"", "alice:wrong", "bob:secret", "alice:secret"} {
+				request := httptest.NewRequest(http.MethodGet, "https://cover.example/", nil)
+				if credentials != "" {
+					request.Header.Set("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(credentials)))
+				}
+				before := backendCalls.Load()
+				recorder := httptest.NewRecorder()
+				s.ServeHTTP(recorder, request)
+				want := http.StatusProxyAuthRequired
+				wantCalls := before
+				if credentials == "alice:secret" {
+					want = http.StatusMethodNotAllowed // valid credentials, but GET cannot create a tunnel
+				} else if fallback {
+					want = http.StatusAccepted
+					wantCalls++
+				}
+				if recorder.Code != want || backendCalls.Load() != wantCalls {
+					t.Fatalf("credentials %q: status=%d calls=%d, want status=%d calls=%d", credentials, recorder.Code, backendCalls.Load(), want, wantCalls)
+				}
+			}
+		})
 	}
 }

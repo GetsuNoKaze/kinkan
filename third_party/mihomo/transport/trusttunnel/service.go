@@ -2,6 +2,7 @@ package trusttunnel
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
 	"github.com/metacubex/mihomo/component/authevent"
@@ -55,7 +56,7 @@ type ServiceOptions struct {
 type Service struct {
 	ctx                   context.Context
 	logger                logger.ContextLogger
-	users                 map[string]string
+	users                 map[string][sha256.Size]byte
 	handler               Handler
 	icmpHandler           ICMPHandler
 	quicCongestionControl string
@@ -196,8 +197,8 @@ func NewService(options ServiceOptions) *Service {
 		s.fallbackProxy = &httputil.ReverseProxy{
 			Transport:     s.fallbackTransport,
 			FlushInterval: -1, // flush each write so SSE and streaming are not buffered
-			// Rewrite (unlike Director) drops any Forwarded/X-Forwarded-* the client
-			// sent, so a prober cannot spoof the IP, scheme or host the backend sees.
+			// Rewrite drops Forwarded and the standard X-Forwarded-For, -Host and
+			// -Proto headers before SetXForwarded supplies the values for this request.
 			Rewrite: func(r *httputil.ProxyRequest) {
 				r.Out.URL.Scheme = "http"
 				r.Out.URL.Host = target
@@ -299,7 +300,11 @@ func (s *Service) Start(tcpListener net.Listener, udpConn net.PacketConn, tlsCon
 }
 
 func (s *Service) UpdateUsers(users map[string]string) {
-	s.users = users
+	hashedUsers := make(map[string][sha256.Size]byte, len(users))
+	for username, password := range users {
+		hashedUsers[username] = sha256.Sum256([]byte(password))
+	}
+	s.users = hashedUsers
 }
 
 func (s *Service) Close() error {
@@ -469,10 +474,12 @@ func (s *Service) verify(authorization string) (username string, loaded bool) {
 	if !loaded {
 		return "", false
 	}
-	recordedPassword, known := s.users[username]
-	// Constant time, so response timing does not tell a prober how much of a guess
-	// matched; an unknown user is compared too, so it does not tell which users exist.
-	if subtle.ConstantTimeCompare([]byte(password), []byte(recordedPassword)) != 1 || !known {
+	recordedHash, known := s.users[username]
+	passwordHash := sha256.Sum256([]byte(password))
+	// Compare fixed-size digests even for unknown users: comparing raw passwords
+	// would return immediately when their lengths differ. This does not make the
+	// entire authentication path (including the map lookup) constant-time.
+	if subtle.ConstantTimeCompare(passwordHash[:], recordedHash[:]) != 1 || !known {
 		return "", false
 	}
 	return username, true
