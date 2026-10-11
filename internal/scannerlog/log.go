@@ -22,6 +22,39 @@ import (
 const MaxRows = 10000
 const Keep = 30 * 24 * time.Hour
 
+// One day's and one source's share of the rows, so that a flood from one address, or
+// from many on one day, cannot fill the journal and keep every later source out until
+// its rows expire. A source is an IPv4 address or an IPv6 /64.
+const (
+	MaxRowsPerDay       = 2000
+	MaxRowsPerSourceDay = 32
+)
+
+// methods are the request methods kept as they are; any other is recorded as OTHER, so a
+// prober cannot make a row of every made-up method.
+var methods = map[string]bool{"GET": true, "HEAD": true, "POST": true, "PUT": true, "DELETE": true, "OPTIONS": true, "CONNECT": true, "PATCH": true, "TRACE": true, "PRI": true}
+
+func normalizeMethod(m string) string {
+	if m == "" || methods[m] {
+		return m
+	}
+	return "OTHER"
+}
+
+type sourceDay struct {
+	day    int64
+	source netip.Prefix
+}
+
+func sourceOf(ip netip.Addr) netip.Prefix {
+	bits := 32
+	if ip.Is6() {
+		bits = 64
+	}
+	p, _ := ip.Prefix(bits)
+	return p
+}
+
 type Metadata struct{ ASN, Organization, Country, PTR, Scanner, Evidence string }
 type key struct {
 	Day                                   int64
@@ -37,6 +70,8 @@ type Journal struct {
 	dropped   int64
 	path      string
 	lastSave  time.Time
+	perDay    map[int64]int
+	perSource map[sourceDay]int
 }
 
 func Open(path string) (*Journal, error) {
@@ -67,9 +102,11 @@ func Open(path string) (*Journal, error) {
 			if _, err := netip.ParseAddr(r.IP); err != nil {
 				continue
 			}
+			r.Method = normalizeMethod(r.Method)
 			j.rows[keyOf(r)] = r
 		}
 	}
+	j.count()
 	if j.epoch == "" {
 		b := make([]byte, 16)
 		if _, err := rand.Read(b); err != nil {
@@ -90,7 +127,9 @@ func (j *Journal) Record(r nodeapi.ScannerRecord, now time.Time) bool {
 	if err != nil {
 		return false
 	}
-	r.IP = ip.Unmap().String()
+	ip = ip.Unmap()
+	r.IP = ip.String()
+	r.Method = normalizeMethod(r.Method)
 	r.Day = now.UTC().Truncate(24 * time.Hour).Unix()
 	k := keyOf(r)
 	j.mu.Lock()
@@ -108,6 +147,13 @@ func (j *Journal) Record(r nodeapi.ScannerRecord, now time.Time) bool {
 			return false
 		}
 	}
+	sd := sourceDay{r.Day, sourceOf(ip)}
+	if j.perDay[r.Day] >= MaxRowsPerDay || j.perSource[sd] >= MaxRowsPerSourceDay {
+		j.dropped++
+		return false
+	}
+	j.perDay[r.Day]++
+	j.perSource[sd]++
 	r.Count = 1
 	r.First = now.Unix()
 	r.Last = r.First
@@ -135,6 +181,19 @@ func (j *Journal) prune(now time.Time) {
 	for ip := range j.meta {
 		if !alive[ip] {
 			delete(j.meta, ip)
+		}
+	}
+	j.count()
+}
+
+// count recounts the rows per day and per source.
+func (j *Journal) count() {
+	j.perDay = map[int64]int{}
+	j.perSource = map[sourceDay]int{}
+	for k := range j.rows {
+		j.perDay[k.Day]++
+		if ip, err := netip.ParseAddr(k.IP); err == nil {
+			j.perSource[sourceDay{k.Day, sourceOf(ip.Unmap())}]++
 		}
 	}
 }

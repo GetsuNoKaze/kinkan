@@ -233,12 +233,22 @@ func title(page []byte) string {
 	if m == nil {
 		return ""
 	}
-	t := strings.Join(strings.Fields(html.UnescapeString(string(m[1]))), " ")
-	if len(t) > 200 {
-		t = t[:200]
+	// The title goes to the database as text, which takes neither invalid UTF-8 (a page
+	// in another charset) nor a zero byte, nor a character cut in half.
+	t := strings.ToValidUTF8(html.UnescapeString(string(m[1])), "")
+	t = strings.Join(strings.Fields(strings.ReplaceAll(t, "\x00", "")), " ")
+	if len(t) > maxTitle {
+		cut := maxTitle
+		for cut > 0 && !utf8.RuneStart(t[cut]) {
+			cut--
+		}
+		t = t[:cut]
 	}
 	return t
 }
+
+// maxTitle is the longest title kept, in bytes.
+const maxTitle = 200
 
 // hash is over the paths and contents in order, each length-prefixed, so no two different
 // sites hash alike by moving bytes between a name and a file.

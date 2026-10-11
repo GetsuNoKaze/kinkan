@@ -35,6 +35,7 @@ func (e *Engine) kinkanApply(st nodeapi.DesiredState, res *nodeapi.ApplyResult, 
 // kinkanHealth adds what the node's site is to its health.
 func (e *Engine) kinkanHealth(h *nodeapi.Health) {
 	e.mu.Lock()
+	e.retrySite(time.Now())
 	h.Site = e.siteStatus()
 	e.mu.Unlock()
 }

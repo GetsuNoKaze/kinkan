@@ -78,7 +78,9 @@ func siteHandler(e *Engine, log *slog.Logger) http.HandlerFunc {
 // siteServer serves one site on the addresses of one state.
 type siteServer struct {
 	state  nodeapi.SiteState
-	cert   string // the certificate it serves TLS with, to notice a new one
+	cert   string            // the certificate it serves TLS with, to notice a new one
+	tls    *nodeapi.TLSFiles // the same, to listen again
+	tried  time.Time         // the last attempt to listen
 	files  map[string]siteFile
 	notFnd siteFile
 	srv    []*http.Server
@@ -112,7 +114,7 @@ func (e *Engine) applySite(st nodeapi.DesiredState) (missing bool) {
 	if errors.Is(err, os.ErrNotExist) {
 		return true
 	}
-	next := &siteServer{state: *want, cert: cert, status: nodeapi.SiteStatus{Hash: want.Hash}}
+	next := &siteServer{state: *want, cert: cert, tls: st.TLS, status: nodeapi.SiteStatus{Hash: want.Hash}}
 	if err == nil {
 		err = next.load(archive, e.siteTime(want.Hash))
 	}
@@ -199,7 +201,27 @@ func caddyETag(mod time.Time, size int) string {
 	return `"` + strconv.FormatInt(mod.Unix(), 36) + strconv.FormatInt(int64(size), 36) + `"`
 }
 
+// siteRetryEvery is how often a site that could not listen (a port another program held)
+// tries again: the panel sends the same state only when it changes.
+const siteRetryEvery = 15 * time.Second
+
+// retrySite listens again, under e.mu, when the site could not and siteRetryEvery has
+// passed; the node's health, which the panel reads every few seconds, calls it.
+func (e *Engine) retrySite(now time.Time) {
+	s := e.site
+	if s == nil || s.status.Error == "" || now.Sub(s.tried) < siteRetryEvery {
+		return
+	}
+	// The address that listens keeps serving; only the one that failed is tried again.
+	s.status.Error = ""
+	s.listen(s.tls, e.log)
+	if s.status.Error == "" {
+		e.log.Info("site listens again", "hash", s.state.Hash)
+	}
+}
+
 func (s *siteServer) listen(certs *nodeapi.TLSFiles, log *slog.Logger) {
+	s.tried = time.Now()
 	var errs []string
 	serve := func(port int, conf *tls.Config) string {
 		addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
@@ -221,10 +243,10 @@ func (s *siteServer) listen(certs *nodeapi.TLSFiles, log *slog.Logger) {
 		go func() { _ = srv.Serve(ln) }()
 		return addr
 	}
-	if s.state.HTTPPort > 0 {
+	if s.state.HTTPPort > 0 && s.status.HTTP == "" {
 		s.status.HTTP = serve(s.state.HTTPPort, nil)
 	}
-	if s.state.HTTPSPort > 0 && certs != nil && certs.CertPEM != "" {
+	if s.state.HTTPSPort > 0 && s.status.HTTPS == "" && certs != nil && certs.CertPEM != "" {
 		pair, err := tls.X509KeyPair([]byte(certs.CertPEM), []byte(certs.KeyPEM))
 		if err != nil {
 			errs = append(errs, "certificate: "+err.Error())

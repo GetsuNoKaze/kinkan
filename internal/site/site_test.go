@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 type entry struct {
@@ -189,5 +190,23 @@ func TestArchiveRoundTrip(t *testing.T) {
 	b, _ := again.Archive()
 	if !bytes.Equal(a, b) {
 		t.Error("packing the same site twice gave different bytes")
+	}
+}
+
+// A title goes to the database as text: always valid UTF-8, no zero byte, never a
+// character cut in half at the length limit.
+func TestTitleIsValidText(t *testing.T) {
+	for name, page := range map[string]string{
+		"cut in a character": "<title>" + strings.Repeat("a", maxTitle-1) + "風風</title>",
+		"another charset":    "<title>\xcf\xf0\xe8\xe2\xe5\xf2 site</title>",
+		"zero byte":          "<title>a\x00b</title>",
+	} {
+		got := title([]byte(page))
+		if !utf8.ValidString(got) || strings.ContainsRune(got, 0) || len(got) > maxTitle {
+			t.Errorf("%s: %q", name, got)
+		}
+	}
+	if got := title([]byte("<title>" + strings.Repeat("a", maxTitle-1) + "風</title>")); got != strings.Repeat("a", maxTitle-1) {
+		t.Errorf("cut = %q", got)
 	}
 }

@@ -283,6 +283,31 @@ pub fn kinkan_behind(current: &str, latest: &str) -> Option<String> {
     ))
 }
 
+/// Kinkan: a release (tt.4) comes after its own candidates (tt.4-rc.1), which plain
+/// pre-release order puts the other way round, since "4-rc" is not a number. Anything
+/// that is not the fork's (a Mikan rc.1) keeps plain order, as internal/release does.
+fn compare_fork_prerelease(a: &str, b: &str) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    fn split(p: &str) -> Option<(&str, Option<&str>)> {
+        let rest = p.strip_prefix("tt.")?;
+        let (n, more) = match rest.split_once('-') {
+            Some((n, m)) if !m.is_empty() => (n, Some(m)),
+            Some(_) => return None,
+            None => (rest, None),
+        };
+        (!n.is_empty() && n.bytes().all(|b| b.is_ascii_digit())).then_some((n, more))
+    }
+    match (split(a), split(b)) {
+        (Some((x, xm)), Some((y, ym))) => compare_prerelease(x, y).then_with(|| match (xm, ym) {
+            (None, None) => Ordering::Equal,
+            (None, Some(_)) => Ordering::Greater,
+            (Some(_), None) => Ordering::Less,
+            (Some(p), Some(q)) => compare_prerelease(p, q),
+        }),
+        _ => compare_prerelease(a, b),
+    }
+}
+
 fn fork_stable(pre: &str) -> bool {
     pre.strip_prefix("tt.").is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
 }
@@ -415,7 +440,7 @@ pub fn newer(a: &str, b: &str) -> bool {
         (Some((x, xp)), Some((y, yp))) => match x.cmp(&y) {
             std::cmp::Ordering::Equal => match (xp, yp) {
                 (None, Some(_)) => true,
-                (Some(p), Some(q)) => compare_prerelease(p, q).is_gt(),
+                (Some(p), Some(q)) => compare_fork_prerelease(p, q).is_gt(), // Kinkan
                 _ => false,
             },
             o => o.is_gt(),
@@ -823,5 +848,24 @@ mod kinkan_tests {
         assert_eq!(kinkan_behind("0.5.0.4", "0.5.0.5-tt.7"), None, "an older Mikan moves to Kinkan");
         assert_eq!(kinkan_behind("0.5.0.5-tt.7", "0.5.0.5-tt.7"), None, "Kinkan already");
         assert_eq!(kinkan_behind("0.5.0.5-tt.8", "0.5.0.5-tt.7"), None, "a newer Kinkan is not Mikan");
+    }
+}
+
+#[cfg(test)]
+mod kinkan_order_tests {
+    use super::newer;
+
+    #[test]
+    fn a_fork_release_comes_after_its_candidates() {
+        for (n, o) in [
+            ("0.5.0.5-tt.4", "0.5.0.5-tt.4-rc.1"),
+            ("0.5.0.5-tt.4-rc.2", "0.5.0.5-tt.4-rc.1"),
+            ("0.5.0.5-tt.5-rc.1", "0.5.0.5-tt.4"),
+            ("0.5.0.5-tt.10", "0.5.0.5-tt.9"),
+            ("0.5.0.5", "0.5.0.5-tt.9"),
+            ("0.5.0.5-tt.1", "0.5.0.5-rc.4"),
+        ] {
+            assert!(newer(n, o) && !newer(o, n), "{n} should be newer than {o}");
+        }
     }
 }

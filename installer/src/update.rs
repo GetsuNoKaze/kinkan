@@ -589,7 +589,7 @@ fn update_to(a: &UpdateArgs, say: &mut dyn FnMut(&str), progress: &mut dyn FnMut
     let mut schema = None;
     if !install.node {
         match docker::database(&["migrate"]) {
-            Ok(out) => schema = schema_change(&String::from_utf8_lossy(&out.stdout)),
+            Ok(out) => schema = kinkan_schema_change(&String::from_utf8_lossy(&out.stdout), &current), // Kinkan
             // On PostgreSQL already the previous version is tried on what the migration
             // left (each of its steps commits whole or not at all); one that refuses a
             // schema moved forward leaves the panel stopped.
@@ -1333,5 +1333,45 @@ mod tests {
         symlink("/etc/hostname", d.join("policy.json")).unwrap();
         assert!(!on(&dir), "a link is no policy");
         fs::remove_dir_all(&d).unwrap();
+    }
+}
+
+/// Kinkan: the schema change the rollback decision reads, the fork's own migrations
+/// included. They have their own version table, reported as `Kinkan schema version: a -> b`,
+/// and an older Kinkan refuses a newer fork schema just as an older mikan refuses a newer
+/// Mikan one: when the fork's schema moved and the server ran Kinkan before, the change is
+/// reported as a move even if Mikan's schema stayed (the numbers only feed that
+/// comparison). Mikan itself does not read the fork's tables, so going back to it is
+/// decided by Mikan's schema alone. A Kinkan line that does not parse counts as moved.
+fn kinkan_schema_change(out: &str, current: &str) -> Option<(u64, u64)> {
+    let (from, to) = schema_change(out)?;
+    let line = out.lines().find_map(|l| l.trim().strip_prefix("Kinkan schema version: "));
+    let moved = match line {
+        None => false,
+        Some(l) => l
+            .split_once(" -> ")
+            .and_then(|(a, b)| Some((a.trim().parse::<u64>().ok()?, b.trim().parse::<u64>().ok()?)))
+            .is_none_or(|(a, b)| a != b),
+    };
+    if moved && from == to && current.contains("-tt.") { Some((from, to + 1)) } else { Some((from, to)) }
+}
+
+#[cfg(test)]
+mod kinkan_tests {
+    use super::kinkan_schema_change;
+
+    #[test]
+    fn a_moved_fork_schema_keeps_a_failed_update_from_going_back_to_kinkan() {
+        let moved = "PostgreSQL schema version: 18 -> 18\nKinkan schema version: 2 -> 3\n";
+        assert_ne!(kinkan_schema_change(moved, "0.5.0.5-tt.7").map(|(a, b)| a == b), Some(true));
+        // Mikan does not read the fork's tables: going back to it is Mikan's schema alone.
+        assert_eq!(kinkan_schema_change(moved, "0.5.0.4"), Some((18, 18)));
+        let still = "PostgreSQL schema version: 18 -> 18\nKinkan schema version: 3 -> 3\n";
+        assert_eq!(kinkan_schema_change(still, "0.5.0.5-tt.7"), Some((18, 18)));
+        let unknown = "PostgreSQL schema version: 18 -> 18\nKinkan schema version: unknown -> unknown\n";
+        assert_ne!(kinkan_schema_change(unknown, "0.5.0.5-tt.7").map(|(a, b)| a == b), Some(true));
+        // An image without the fork's line (Mikan's, or an older Kinkan) reports as before.
+        assert_eq!(kinkan_schema_change("PostgreSQL schema version: 18 -> 19\n", "0.5.0.5-tt.7"), Some((18, 19)));
+        assert_eq!(kinkan_schema_change("PostgreSQL schema is ready\n", "0.5.0.5-tt.7"), None);
     }
 }

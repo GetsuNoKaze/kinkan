@@ -35,12 +35,14 @@ func databaseCmd(ctx context.Context, args []string) error {
 		if len(args) != 1 {
 			return errors.New("usage: mikan database migrate")
 		}
+		kinkanReport := kinkanSchemaReport(ctx, dsn) // Kinkan (kinkan.go)
 		res, err := store.Migrate(ctx, dsn, cfg.DataDir)
 		if err != nil {
 			return err
 		}
 		// The installer reads this line: an unchanged schema lets a failed update go back.
 		fmt.Printf("PostgreSQL schema version: %d -> %d\n", res.Before, res.After)
+		kinkanReport()
 		if res.Import == nil {
 			fmt.Println("PostgreSQL schema is ready; no legacy SQLite database")
 		} else {
