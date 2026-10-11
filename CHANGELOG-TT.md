@@ -2,6 +2,22 @@
 
 Fork release notes. Upstream history remains in CHANGELOG.md.
 
+## 0.5.0.5-tt.10
+### en
+- Quiet node: advice now follows what the check saw. TUIC's close code, Hysteria2's proxy answer and "obfs keeps it silent" are named only when their findings are there; a check that failed for another reason (an expired certificate, say) names that reason. A REALITY target in another network than the node is flagged (both networks from the panel's DB-IP database). An inbound is no longer compared with itself as its own reference, and on 443 the check does not suggest 443 as the reference.
+- Check history: each protocol check is kept 30 days (at most 100 per node) and can be opened again, deleted, or cleared with the node's whole history.
+- The scanner journal can be cleared: the node starts an empty journal, then the panel deletes its copy, and a collection in flight cannot bring the old rows back. The page shows when the journal was last collected, why collecting fails, how many events the node dropped, and a node that keeps no journal. One source can no longer fill the journal: made-up methods count as OTHER, a source gets at most 32 rows a day and a day at most 2,000. The panel's own checks are recognised behind Cloudflare or NAT too (by the address the node sees it come from), and Hysteria2 on a port range is recorded again.
+- TrustTunnel fallback: refuses the cloud metadata services outside link-local (AWS IPv6, Alibaba); passwords are compared as SHA-256 digests, so timing tells neither a password's length nor which users exist.
+- Node site: while a new site is on its way, TrustTunnel and REALITY keep pointing at the one the node still serves instead of answering 407; a site port another program held is taken again once it is free; a page title in another charset or cut inside a character no longer stops the upload.
+- Installer: after a fork database migration, a failed update no longer goes back to an older Kinkan that would refuse the newer schema; a release (-tt.N) now counts as newer than its own candidates (-tt.N-rc.M).
+### ru
+- Тихая нода: советы опираются на то, что увидела проверка. Код закрытия TUIC, прокси-ответ Hysteria2 и «obfs молчит» называются, только если есть их находки; проверка, упавшая по другой причине (например, просроченный сертификат), называет эту причину. Цель REALITY в другой сети, чем нода, помечается (обе сети по базе DB-IP панели). Подключение больше не сравнивается само с собой как с эталоном, а на 443 проверка не предлагает эталон 443.
+- История проверок: каждая проверка протоколов хранится 30 дней (не больше 100 на ноду); её можно открыть снова, удалить или очистить всю историю ноды.
+- Журнал сканеров можно очистить: нода начинает пустой журнал, затем панель удаляет свою копию, и идущий сбор не вернёт старые записи. Страница показывает, когда журнал собирался, почему сбор не удаётся, сколько событий нода потеряла и ноду без журнала. Один источник больше не забивает журнал: выдуманные методы считаются как OTHER, на источник не больше 32 строк в день, на день не больше 2000. Свои проверки панели узнаются и за Cloudflare или NAT (по адресу, с которого её видит нода), а Hysteria2 на диапазоне портов снова пишется в журнал.
+- Fallback TrustTunnel: не пускает к сервисам метаданных облаков вне link-local (IPv6 AWS, Alibaba); пароли сравниваются как SHA-256, и по времени ответа не узнать ни длину пароля, ни какие пользователи есть.
+- Сайт ноды: пока новый сайт в пути, TrustTunnel и REALITY смотрят на тот, который нода ещё отдаёт, а не отвечают 407; порт сайта, занятый другой программой, подхватывается, когда освободится; заголовок страницы в другой кодировке или обрезанный посреди символа больше не мешает загрузке.
+- Установщик: после миграции базы форка неудачное обновление больше не откатывается на старый Kinkan, который отказался бы от новой схемы; релиз (-tt.N) теперь новее своих кандидатов (-tt.N-rc.M).
+
 ## 0.5.0.5-tt.9
 ### en
 - Quiet node: after the protocol check the panel says what the node looks like as a whole (no quieter than its loudest inbound: all protocols share its address) and, for each inbound that is not quiet, why and what helps: turn TUIC or another proxy answer off, give the node a site (TrustTunnel without a fallback, REALITY on the panel's empty 404), turn on Hysteria2's obfs, or check again with a reference on 443. Turning an inbound off asks first and is undone under Protocols.
