@@ -9,12 +9,16 @@ import (
 	"mikan/internal/panel/store/db"
 )
 
+// titleVars are the variables the profile title and the announcement may hold, the same way
+// the bot's texts do: {brand} · {name} · until {date}. Any other {word} stays as text.
+var titleVars = []string{"brand", "name", "date", "days", "used", "left", "total"}
+
 func TestTitleValuesHoldTitleVars(t *testing.T) {
 	vars := titleValues(db.User{}, 0, Config{}, time.Now())
-	if len(vars) != len(TitleVars) {
-		t.Fatalf("%d values, %d variables", len(vars), len(TitleVars))
+	if len(vars) != len(titleVars) {
+		t.Fatalf("%d values, %d variables", len(vars), len(titleVars))
 	}
-	for _, name := range TitleVars {
+	for _, name := range titleVars {
 		if _, ok := vars[name]; !ok {
 			t.Errorf("no value for {%s}", name)
 		}
@@ -76,5 +80,22 @@ func TestFileName(t *testing.T) {
 		if got := fileName(in); got != want {
 			t.Errorf("fileName(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// The page's announcement keeps its lines and the blank line between paragraphs; the apps
+// get the same text as one line.
+func TestFillAnnounceKeepsLines(t *testing.T) {
+	vars := map[string]string{"name": "Анна", "date": "01.11.2026"}
+	text := "Привет, {name}!\r\n\nРаботы ночью.\n\tПодписка до {date}."
+	if got, want := fillAnnounce(text, vars), "Привет, Анна!\n\nРаботы ночью.\nПодписка до 01.11.2026."; got != want {
+		t.Fatalf("page: %q, want %q", got, want)
+	}
+	if got := fillTitle(text, vars); strings.Contains(got, "\n") {
+		t.Fatalf("the apps get line breaks: %q", got)
+	}
+	long := strings.Repeat("строка\n", AnnounceLines+5)
+	if got := strings.Count(fillAnnounce(long, nil), "\n"); got >= AnnounceLines {
+		t.Fatalf("%d line breaks kept", got)
 	}
 }

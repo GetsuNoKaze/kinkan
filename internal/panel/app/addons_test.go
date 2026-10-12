@@ -18,7 +18,7 @@ import (
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
-	"mikan/internal/panel/tgbot"
+	"mikan/internal/panel/tgate"
 )
 
 // The marketplace end to end on the panel's side: the signed catalog, the request to the
@@ -122,7 +122,7 @@ func TestAddonsMarketplace(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	must(os.Remove(filepath.Join(dir, "addons", "request.json")))
+	must(os.RemoveAll(filepath.Join(dir, "addons", "requests")))
 	state, _ := json.Marshal(addons.State{Adapters: map[string]addons.Installed{"fake": {Version: "1.0.0", Digest: digest, Status: "running",
 		Listen: strings.TrimPrefix(adapter.URL, "http://"), Token: "tok"}}})
 	must(os.WriteFile(filepath.Join(dir, "addons", "state.json"), state, 0o600))
@@ -134,6 +134,8 @@ func TestAddonsMarketplace(t *testing.T) {
 		t.Fatalf("refused keys: %d %s", resp.StatusCode, body)
 	}
 	must(settings.Set(t.Context(), settings.New(h.st.Q), settings.KeyPublicHost, "203.0.113.10"))
+	// The webhook address is the panel's: no address, no webhook, and a port is part of it.
+	must(settings.Set(t.Context(), settings.New(h.st.Q), settings.KeyPanelPort, 21355))
 	if resp, body := h.do(http.MethodPatch, "/"+adminPath+"/api/v1/payments/settings", map[string]any{"enabled": true}, csrf); resp.StatusCode != http.StatusOK {
 		t.Fatalf("selling on: %d %s", resp.StatusCode, body)
 	}
@@ -158,7 +160,7 @@ func TestAddonsMarketplace(t *testing.T) {
 	// The Mini App offers it by its own name and opens its invoice.
 	ctx := t.Context()
 	must(domain.Seed(ctx, h.st, h.now))
-	must(settings.Set(ctx, settings.New(h.st.Q), tgbot.KeyToken, tgToken))
+	must(settings.Set(ctx, settings.New(h.st.Q), tgate.KeyToken, tgToken))
 	ts, err := h.st.Q.ListTariffs(ctx)
 	must(err)
 	sale, err := h.st.Q.UpdateTariff(ctx, db.UpdateTariffParams{Name: "Месяц", TrafficLimit: ts[1].TrafficLimit, DurationDays: 30, DeviceLimit: ts[1].DeviceLimit,

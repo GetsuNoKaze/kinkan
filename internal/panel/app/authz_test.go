@@ -91,6 +91,10 @@ func TestFullKeyCannotTakeOverThePanel(t *testing.T) {
 		"warp-register":      {http.MethodPost, "/nodes/1/warp/register", map[string]any{}},
 		"warp-import":        {http.MethodPost, "/nodes/1/warp/import", map[string]any{"config": "x"}},
 		"cascade":            {http.MethodPatch, "/nodes/1/cascade", map[string]any{"outbound": "direct"}},
+		// A code field is a script an addon runs.
+		"update-addon": {http.MethodPatch, "/addons/telegram", map[string]any{"settings": map[string]any{"script": "print(1)"}}},
+		// Code nothing signed vouches for, run on the server.
+		"install-custom-addon": {http.MethodPost, "/marketplace/custom", map[string]any{"id": "x", "source": "external", "kind": "generic", "mode": "client", "permissions": []string{"users:write"}, "confirm": true}},
 		// The subscription page every subscriber opens: its links, text, CSS and images.
 		"update-sub-page":       {http.MethodPut, "/sub-page", map[string]any{"config": map[string]any{}}},
 		"put-sub-page-image":    {http.MethodPut, "/sub-page/images/logo", map[string]any{"data": "iVBORw0KGgo="}},
@@ -116,6 +120,10 @@ func TestFullKeyCannotTakeOverThePanel(t *testing.T) {
 		// Where every client's traffic goes.
 		"sub_routing": {"sub_routing": "blocked"}, "sub_routes": {"sub_routes": map[string]any{"services": map[string]any{"youtube": "direct"}}},
 		"sub_template": {"sub_template": "rules: [MATCH,DIRECT]\n"},
+		// Which apps get a subscription at all.
+		"device_require_hwid": {"device_require_hwid": true}, "device_binding": {"device_binding": true},
+		// Ports the firewall does not open.
+		"any_port": {"any_port": true}, "wide_sni_scan": {"wide_sni_scan": true},
 	} {
 		resp, out := k.asKey(k.full, http.MethodPatch, "/settings", body)
 		if resp.StatusCode != http.StatusForbidden || !strings.Contains(string(out), "session_only") || !strings.Contains(string(out), field) {

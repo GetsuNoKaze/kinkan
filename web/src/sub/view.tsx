@@ -45,7 +45,7 @@ export function PageShell({ config, brand, logo, right, children }: { config: Pa
       </span>
     );
   return (
-    <main className="calm-glass mx-auto flex max-w-[440px] flex-col gap-3 px-4 pt-[calc(24px+env(safe-area-inset-top))] pb-[calc(40px+env(safe-area-inset-bottom))]">
+    <main className="calm-glass mx-auto flex max-w-[440px] flex-col gap-3 px-4 pt-[calc(24px+max(env(safe-area-inset-top),var(--tg-top,0px)))] pb-[calc(40px+max(env(safe-area-inset-bottom),var(--tg-bottom,0px)))]">
       <div className="flex items-center gap-2 px-1 pb-1">
         {mark}
         {b.subtitle ? (
@@ -63,7 +63,7 @@ export function PageShell({ config, brand, logo, right, children }: { config: Pa
   );
 }
 
-export type BlocksProps = {
+type BlocksProps = {
   config: PageConfig;
   info: Info;
   subURL: string;
@@ -192,7 +192,13 @@ function Traffic({ block: b, info }: { block: PageBlock; info: Info }) {
         {info.device_limit ? (
           <div>
             {t("sub.devices")}
-            <b className="num block text-base font-medium text-[var(--ink-900)]">{t("sub.upTo", { n: info.device_limit })}</b>
+            <b className="num block text-base font-medium text-[var(--ink-900)]">{t(info.device_mode === "online" ? "sub.upToOnline" : "sub.upTo", { n: info.device_limit })}</b>
+          </div>
+        ) : null}
+        {info.speed_limit ? (
+          <div>
+            {t("sub.speed")}
+            <b className="num block text-base font-medium text-[var(--ink-900)]">{t("sub.speedUpTo", { n: info.speed_limit })}</b>
           </div>
         ) : null}
       </div>
@@ -381,7 +387,7 @@ function Announce({ block: b, text, url }: { block: PageBlock; text: string; url
   return (
     <section className="glass sub-card p-4" role="note">
       {b.title ? <Heading className="mb-1">{b.title}</Heading> : null}
-      <p className="text-[13px] leading-5 text-[var(--ink-700)]">{text}</p>
+      <p className="whitespace-pre-line text-[13px] leading-5 text-[var(--ink-700)]">{text}</p>
       {href ? (
         <a className="btn btn-glass btn-sm mt-3" href={href} target="_blank" rel="noreferrer noopener" {...outside(href)}>
           {t("sub.announceMore")}

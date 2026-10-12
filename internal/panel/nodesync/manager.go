@@ -32,6 +32,8 @@ type Target struct {
 	TLS  TLSSource
 	// Local is the panel's own node: only it may use the panel as its REALITY target.
 	Local bool
+	// Address is the node's API host:port, for the words of a failure; "" for the local node.
+	Address string
 }
 
 // Connect builds the client for a node row; the app knows the socket and certificates.
@@ -61,6 +63,7 @@ type Manager struct {
 	lastPrune time.Time
 
 	generation atomic.Uint64 // moves whenever a node is added, changed or removed
+	tlsGen     atomic.Uint64 // moves whenever a node took a certificate with another pin
 
 	// The snapshot the syncers share (snapshot.go): changes moves with every change it
 	// may not hold any more, batches counts the traffic batches stored per node.
@@ -83,6 +86,10 @@ type Manager struct {
 
 	// storeInterval is storeEvery; tests that pull batch after batch set it to 0.
 	storeInterval time.Duration
+
+	// The nodes' last hellos (check.go).
+	helloMu sync.Mutex
+	hellos  map[int64]HelloView
 }
 
 type running struct {
@@ -136,9 +143,20 @@ func (m *Manager) NodesChanged() {
 	signal(m.nodesDirty)
 }
 
-// Generation moves with every NodesChanged: what is built from the nodes (the subscription's
-// server list) is built again when it has moved.
-func (m *Manager) Generation() uint64 { return m.generation.Load() }
+// Generation moves with every NodesChanged, and when a node took a certificate with another
+// pin: what is built from the nodes (the subscription's server list) is built again when it
+// has moved.
+func (m *Manager) Generation() uint64 { return m.generation.Load() + m.tlsGen.Load() }
+
+// ServedPin is the pin of the certificate node id serves ("" for a public one), as of the
+// last state it took; ok is false while that is not known (no syncer, or none taken yet).
+func (m *Manager) ServedPin(id int64) (pin string, ok bool) {
+	s, found := m.Syncer(id)
+	if !found {
+		return "", false
+	}
+	return s.ServedPin()
+}
 
 // Syncers returns the running syncers ordered by node id.
 func (m *Manager) Syncers() []*Syncer {
@@ -392,6 +410,7 @@ func clientOf[T any](m *Manager, id int64) (T, error) {
 // Call it after the node's row is deleted: its syncer stops first, so it cannot push the
 // old state back, and reconcile does not start it again.
 func (m *Manager) Retire(ctx context.Context, id int64) error {
+	m.forgetHello(id)
 	m.mu.Lock()
 	r, ok := m.running[id]
 	delete(m.running, id)
@@ -460,7 +479,8 @@ func (m *Manager) prune(ctx context.Context, now time.Time) {
 }
 
 func (m *Manager) resetPeriods(ctx context.Context, now time.Time) error {
-	users, err := m.st.Q.ListUsers(ctx)
+	// Every 30 s: only the users whose period may be over, and only what decides it.
+	users, err := m.st.Q.ListUsersToReset(ctx, now.Unix())
 	if err != nil {
 		return err
 	}

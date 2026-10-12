@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"mikan/internal/panel/secure"
+	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 )
@@ -77,13 +78,14 @@ type Changes interface {
 
 type Users struct {
 	st      *store.Store
+	set     *settings.Settings
 	now     func() time.Time
 	pool    *Pool
 	changes Changes
 }
 
 func NewUsers(st *store.Store, pool *Pool, changes Changes, now func() time.Time) *Users {
-	return &Users{st: st, now: now, pool: pool, changes: changes}
+	return &Users{st: st, set: settings.New(st.Q), now: now, pool: pool, changes: changes}
 }
 
 // Where a user came from, kept for the admin's list (users.source). It is a record, not a
@@ -93,10 +95,11 @@ const (
 	UserFromBot    = "bot"    // bought in the Telegram bot
 	UserFromTrial  = "trial"  // the bot's free trial
 	UserFromImport = "import" // brought over from another panel
+	UserFromFree   = "free"   // the free plan, taken in the bot or the Mini App
 )
 
 // UserOrigins lists them in the order the list shows them.
-var UserOrigins = []string{UserFromAdmin, UserFromBot, UserFromTrial, UserFromImport}
+var UserOrigins = []string{UserFromAdmin, UserFromBot, UserFromTrial, UserFromFree, UserFromImport}
 
 // ValidOrigin tells a source the database accepts.
 func ValidOrigin(s string) bool { return slices.Contains(UserOrigins, s) }
@@ -114,7 +117,14 @@ type CreateInput struct {
 	Source string
 }
 
+// Create makes a user the admin names (the panel, an API key): the name is checked as
+// CleanUserName does.
 func (s *Users) Create(ctx context.Context, in CreateInput) (db.User, error) {
+	name, err := CleanUserName(in.Name)
+	if err != nil {
+		return db.User{}, err
+	}
+	in.Name = name
 	u, err := s.create(ctx, in)
 	if errors.Is(err, ErrNoSlots) {
 		if err := s.pool.Refill(ctx, RefillBatch); err != nil {
@@ -168,7 +178,7 @@ func (s *Users) createTx(ctx context.Context, q *db.Queries, in CreateInput, any
 	}
 	u, err := q.CreateUser(ctx, db.CreateUserParams{
 		Name: strings.TrimSpace(in.Name), Contact: strings.TrimSpace(in.Contact), Note: in.Note, Tags: tags,
-		TariffID: sql.NullInt64{Int64: t.ID, Valid: true}, TrafficLimit: t.TrafficLimit, DeviceLimit: t.DeviceLimit,
+		TariffID: sql.NullInt64{Int64: t.ID, Valid: true}, TrafficLimit: t.TrafficLimit, DeviceLimit: t.DeviceLimit, SpeedLimit: t.SpeedLimit,
 		ResetStrategy: t.ResetStrategy, PeriodDays: 30, PeriodStart: now,
 		ExpiresAt:  tariffExpiry(time.Unix(now, 0), durationTariff{termDays(t, in.TermDays), t.BillingDay}),
 		BillingDay: t.BillingDay, SubToken: secure.Token(24), SlotID: sql.NullInt64{Int64: slot.ID, Valid: true}, CreatedAt: now, UpdatedAt: now,
@@ -177,28 +187,50 @@ func (s *Users) createTx(ctx context.Context, q *db.Queries, in CreateInput, any
 	if err != nil {
 		return u, err
 	}
+	if err := setDeviceMode(ctx, q, &u, t.DeviceMode, now); err != nil {
+		return u, err
+	}
 	return u, ApplyTariffPools(ctx, q, u.ID, t.ID)
 }
 
+// PurchaseInput is what a payment buys.
+type PurchaseInput struct {
+	// UserID is the subscription a renewal extends; 0, or one deleted since the invoice,
+	// makes a new subscription named Name.
+	UserID   int64
+	TariffID int64
+	// Term is the term bought, as it was when bought; invalid: the tariff's own.
+	Term sql.NullInt64
+	Name string
+	// Note and Source go on a new subscription; empty: bought in the bot. A payment of a
+	// kind of its own names itself (the trial, bought for a price).
+	Note   string
+	Source string
+	// ResetTraffic: a renewal also starts a new traffic period (the payment buys a full
+	// quota); off, the counter keeps running.
+	ResetTraffic bool
+}
+
 // Purchase applies a paid tariff on q's transaction, so the payment and its effect commit
-// together. userID 0 (or a user deleted since the invoice) makes a new subscription named
-// name. A renewal takes the tariff's limits, adds its term after the current one (from
-// now when that already ended) and turns the user on; resetTraffic also starts a new
-// traffic period (the payment buys a full quota). term is the term bought, as it was
-// when bought (invalid: the tariff's own). ErrNoSlots: refill and run again.
+// together. in.UserID 0 (or a user deleted since the invoice) makes a new subscription
+// named in.Name. A renewal takes the tariff's limits, adds its term after the current one
+// (from now when that already ended) and turns the user on, one the admin switched off too:
+// the buyer paid for the term, and the admin who wants someone out deletes the subscription
+// or stops selling to them (decided 2026-10-11). ErrNoSlots: refill and run again.
 // The caller calls Changed after the commit.
-func (s *Users) Purchase(ctx context.Context, q *db.Queries, userID, tariffID int64, term sql.NullInt64, name string, resetTraffic bool) (u db.User, created bool, err error) {
-	if userID != 0 {
-		u, err = q.GetUser(ctx, userID)
+func (s *Users) Purchase(ctx context.Context, q *db.Queries, in PurchaseInput) (u db.User, created bool, err error) {
+	if in.UserID != 0 {
+		u, err = q.GetUser(ctx, in.UserID)
 	}
-	if userID == 0 || errors.Is(err, sql.ErrNoRows) {
-		u, err = s.createTx(ctx, q, CreateInput{Name: name, Note: "Telegram", TariffID: tariffID, TermDays: term, Source: UserFromBot}, true)
+	if in.UserID == 0 || errors.Is(err, sql.ErrNoRows) {
+		u, err = s.createTx(ctx, q, CreateInput{Name: in.Name, Note: cmp.Or(in.Note, "Telegram"), TariffID: in.TariffID,
+			TermDays: in.Term, Source: cmp.Or(in.Source, UserFromBot)}, true)
 		return u, err == nil, err
 	}
 	if err != nil {
 		return u, false, err
 	}
-	t, err := q.GetTariff(ctx, tariffID)
+	t, err := q.GetTariff(ctx, in.TariffID)
 	if err != nil {
 		return u, false, err
 	}
@@ -213,17 +245,20 @@ func (s *Users) Purchase(ctx context.Context, q *db.Queries, userID, tariffID in
 	}
 	u, err = q.UpdateUser(ctx, db.UpdateUserParams{
 		Name: u.Name, Contact: u.Contact, Note: u.Note, Tags: u.Tags, Status: "active", TariffID: sql.NullInt64{Int64: t.ID, Valid: true},
-		TrafficLimit: t.TrafficLimit, DeviceLimit: t.DeviceLimit, ResetStrategy: t.ResetStrategy, PeriodDays: u.PeriodDays, PeriodStart: u.PeriodStart,
-		ExpiresAt: tariffExpiry(base, durationTariff{termDays(t, term), billingDay}), Inbounds: u.Inbounds, BillingDay: billingDay,
+		TrafficLimit: t.TrafficLimit, DeviceLimit: t.DeviceLimit, SpeedLimit: t.SpeedLimit, ResetStrategy: t.ResetStrategy, PeriodDays: u.PeriodDays, PeriodStart: u.PeriodStart,
+		ExpiresAt: tariffExpiry(base, durationTariff{termDays(t, in.Term), billingDay}), Inbounds: u.Inbounds, BillingDay: billingDay,
 		UpdatedAt: now.Unix(), ID: u.ID,
 	})
 	if err != nil {
 		return u, false, err
 	}
+	if err := setDeviceMode(ctx, q, &u, t.DeviceMode, now.Unix()); err != nil {
+		return u, false, err
+	}
 	if err := ApplyTariffPools(ctx, q, u.ID, t.ID); err != nil {
 		return u, false, err
 	}
-	if !resetTraffic {
+	if !in.ResetTraffic {
 		return u, false, nil
 	}
 	if err := StartPeriod(ctx, q, u.ID, now.Unix(), now); err != nil {
@@ -299,6 +334,8 @@ type Patch struct {
 	ClearTrafficLimit   bool
 	DeviceLimit         *int64
 	ClearDeviceLimit    bool
+	SpeedLimit          *int64 // Mbit/s each way
+	ClearSpeedLimit     bool
 	ExpiresAt           *time.Time
 	ClearExpiry         bool
 	BillingDay          *int64 // 1–31: terms end on that day of the month
@@ -308,6 +345,9 @@ type Patch struct {
 	// Hidden takes the user off the admin's list (or back on it). It changes nothing else:
 	// the subscription, the billing and the nodes see the same user.
 	Hidden *bool
+	// DeviceMode changes how the device limit counts (DeviceModeBound, DeviceModeOnline);
+	// a tariff in the same patch sets it first, and this one wins.
+	DeviceMode *string
 	// FolderID puts the user into a folder; ClearFolder takes the user out of theirs.
 	FolderID    *int64
 	ClearFolder bool
@@ -346,6 +386,15 @@ func (e Extension) until(now time.Time, exp sql.NullInt64, billingDay sql.NullIn
 // ErrBadBillingDay: a billing day is 1–31.
 var ErrBadBillingDay = errors.New("bad_billing_day")
 
+// MaxSpeedLimit bounds a speed cap: 100 Gbit/s, past any server's port.
+const MaxSpeedLimit = 100_000
+
+// ErrBadSpeedLimit: a speed cap is 1–MaxSpeedLimit Mbit/s.
+var ErrBadSpeedLimit = errors.New("bad_speed_limit")
+
+// ValidSpeedLimit says whether mbps is a speed cap the panel takes.
+func ValidSpeedLimit(mbps int64) bool { return mbps >= 1 && mbps <= MaxSpeedLimit }
+
 func (s *Users) Update(ctx context.Context, id int64, p Patch) (db.User, error) {
 	var out db.User
 	err := s.st.Tx(ctx, func(q *db.Queries) (err error) {
@@ -377,10 +426,11 @@ func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) 
 	now := s.now().Unix()
 	par := db.UpdateUserParams{
 		Name: u.Name, Contact: u.Contact, Note: u.Note, Tags: u.Tags, Status: u.Status, TariffID: u.TariffID,
-		TrafficLimit: u.TrafficLimit, DeviceLimit: u.DeviceLimit, ResetStrategy: u.ResetStrategy,
+		TrafficLimit: u.TrafficLimit, DeviceLimit: u.DeviceLimit, SpeedLimit: u.SpeedLimit, ResetStrategy: u.ResetStrategy,
 		PeriodDays: u.PeriodDays, PeriodStart: u.PeriodStart, ExpiresAt: u.ExpiresAt, Inbounds: u.Inbounds,
 		BillingDay: u.BillingDay, UpdatedAt: now, ID: u.ID,
 	}
+	mode := u.DeviceMode
 	if p.TariffID != nil {
 		t, err := q.GetTariff(ctx, *p.TariffID)
 		if errors.Is(err, sql.ErrNoRows) || (err == nil && t.Archived != 0) {
@@ -391,6 +441,7 @@ func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) 
 		}
 		par.TariffID = sql.NullInt64{Int64: t.ID, Valid: true}
 		par.TrafficLimit, par.DeviceLimit, par.ResetStrategy, par.BillingDay = t.TrafficLimit, t.DeviceLimit, t.ResetStrategy, t.BillingDay
+		par.SpeedLimit, mode = t.SpeedLimit, t.DeviceMode
 		par.ExpiresAt = tariffExpiry(time.Unix(now, 0), durationTariff{t.DurationDays, t.BillingDay})
 		if err := ApplyTariffPools(ctx, q, u.ID, t.ID); err != nil {
 			return db.User{}, err
@@ -403,10 +454,13 @@ func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) 
 		if !ValidBillingDay(*p.BillingDay) {
 			return db.User{}, ErrBadBillingDay
 		}
-		par.BillingDay = sql.NullInt64{Int64: *p.BillingDay, Valid: true}
+		par.BillingDay = NullInt(p.BillingDay)
 	}
 	if p.Name != nil {
-		par.Name = strings.TrimSpace(*p.Name)
+		// A rename changes only the name: the link, the slots and the keys stay.
+		if par.Name, err = CleanUserName(*p.Name); err != nil {
+			return db.User{}, err
+		}
 	}
 	if p.Contact != nil {
 		par.Contact = strings.TrimSpace(*p.Contact)
@@ -429,13 +483,28 @@ func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) 
 	case p.ClearTrafficLimit:
 		par.TrafficLimit = sql.NullInt64{}
 	case p.TrafficLimit != nil:
-		par.TrafficLimit = sql.NullInt64{Int64: *p.TrafficLimit, Valid: true}
+		par.TrafficLimit = NullInt(p.TrafficLimit)
 	}
 	switch {
 	case p.ClearDeviceLimit:
 		par.DeviceLimit = sql.NullInt64{}
 	case p.DeviceLimit != nil:
-		par.DeviceLimit = sql.NullInt64{Int64: *p.DeviceLimit, Valid: true}
+		par.DeviceLimit = NullInt(p.DeviceLimit)
+	}
+	if p.DeviceMode != nil {
+		if !ValidDeviceMode(*p.DeviceMode) {
+			return db.User{}, fieldErr("device_mode", "bad_device_mode")
+		}
+		mode = *p.DeviceMode
+	}
+	switch {
+	case p.ClearSpeedLimit:
+		par.SpeedLimit = sql.NullInt64{}
+	case p.SpeedLimit != nil:
+		if !ValidSpeedLimit(*p.SpeedLimit) {
+			return db.User{}, ErrBadSpeedLimit
+		}
+		par.SpeedLimit = NullInt(p.SpeedLimit)
 	}
 	switch {
 	case p.ClearExpiry:
@@ -459,10 +528,13 @@ func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) 
 	if err != nil {
 		return out, err
 	}
+	if err := setDeviceMode(ctx, q, &out, mode, now); err != nil {
+		return out, err
+	}
 	// Where the user is listed is not one of the fields above: it changes on its own
 	// statements, and the row returned follows.
 	if p.Hidden != nil {
-		out.Hidden = b2i(*p.Hidden)
+		out.Hidden = Flag(*p.Hidden)
 		if err := q.SetUserHidden(ctx, db.SetUserHiddenParams{Hidden: out.Hidden, UpdatedAt: now, ID: id}); err != nil {
 			return out, err
 		}
@@ -470,20 +542,13 @@ func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) 
 	if p.FolderID != nil || p.ClearFolder {
 		out.FolderID = sql.NullInt64{}
 		if p.FolderID != nil && !p.ClearFolder {
-			out.FolderID = sql.NullInt64{Int64: *p.FolderID, Valid: true}
+			out.FolderID = NullInt(p.FolderID)
 		}
 		if err := q.SetUserFolder(ctx, db.SetUserFolderParams{FolderID: out.FolderID, UpdatedAt: now, ID: id}); err != nil {
 			return out, err
 		}
 	}
 	return out, nil
-}
-
-func b2i(b bool) int64 {
-	if b {
-		return 1
-	}
-	return 0
 }
 
 // lockFolder keeps a folder from being deleted until the transaction ends; a folder that
@@ -507,11 +572,6 @@ func (s *Users) Extend(ctx context.Context, id int64, days int64) (db.User, erro
 // the month (see AddMonths). A term that already ended restarts from now.
 func (s *Users) ExtendMonths(ctx context.Context, id int64, n int) (db.User, error) {
 	return s.Update(ctx, id, Patch{Extend: &Extension{Months: n}})
-}
-
-// ExtendPeriod adds one paid period: a month up to the billing day, or 30 days without one.
-func (s *Users) ExtendPeriod(ctx context.Context, id int64) (db.User, error) {
-	return s.Update(ctx, id, Patch{Extend: &Extension{Period: true}})
 }
 
 // ResetTraffic starts a new traffic period now (see StartPeriod).
@@ -554,36 +614,39 @@ func (s *Users) Reissue(ctx context.Context, id int64) (db.User, error) {
 
 func (s *Users) reissue(ctx context.Context, id int64) error {
 	now := s.now().Unix()
-	return s.st.Tx(ctx, func(q *db.Queries) error {
-		u, err := q.GetUser(ctx, id)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotFound
-		}
-		if err != nil {
+	return s.st.Tx(ctx, func(q *db.Queries) error { return s.reissueOn(ctx, q, id, now) })
+}
+
+// reissueOn gives the user a new slot and token on q's transaction; the caller tells the nodes.
+func (s *Users) reissueOn(ctx context.Context, q *db.Queries, id, now int64) error {
+	u, err := q.GetUser(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	slot, err := q.TakeFreeSlot(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNoSlots
+	}
+	if err != nil {
+		return err
+	}
+	if u.SlotID.Valid {
+		if err := q.BurnSlot(ctx, db.BurnSlotParams{BurnedAt: sql.NullInt64{Int64: now, Valid: true}, ID: u.SlotID.Int64}); err != nil {
 			return err
 		}
-		slot, err := q.TakeFreeSlot(ctx)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNoSlots
-		}
-		if err != nil {
-			return err
-		}
-		if u.SlotID.Valid {
-			if err := q.BurnSlot(ctx, db.BurnSlotParams{BurnedAt: sql.NullInt64{Int64: now, Valid: true}, ID: u.SlotID.Int64}); err != nil {
-				return err
-			}
-		}
-		// A new link: every bound device registers again with it.
-		if err := burnDevices(ctx, q, id, now); err != nil {
-			return err
-		}
-		// The old panel's links go too: a leaked one must not serve the new keys.
-		if err := q.DeleteLegacySubTokensOf(ctx, id); err != nil {
-			return err
-		}
-		return q.SetUserCredentials(ctx, db.SetUserCredentialsParams{SlotID: sql.NullInt64{Int64: slot.ID, Valid: true}, SubToken: secure.Token(24), UpdatedAt: now, ID: id})
-	})
+	}
+	// A new link: every bound device registers again with it.
+	if err := burnDevices(ctx, q, id, now); err != nil {
+		return err
+	}
+	// The old panel's links go too: a leaked one must not serve the new keys.
+	if err := q.DeleteLegacySubTokensOf(ctx, id); err != nil {
+		return err
+	}
+	return q.SetUserCredentials(ctx, db.SetUserCredentialsParams{SlotID: sql.NullInt64{Int64: slot.ID, Valid: true}, SubToken: secure.Token(24), UpdatedAt: now, ID: id})
 }
 
 func (s *Users) Delete(ctx context.Context, id int64) error {
@@ -698,12 +761,9 @@ func (s *Users) Bulk(ctx context.Context, ids []int64, action string, opt BulkOp
 		case BulkDelete:
 			err = deleteUsers(ctx, q, found, now.Unix())
 		case BulkHide, BulkUnhide:
-			err = q.SetUsersHidden(ctx, db.SetUsersHiddenParams{Hidden: b2i(action == BulkHide), UpdatedAt: now.Unix(), Ids: found})
+			err = q.SetUsersHidden(ctx, db.SetUsersHiddenParams{Hidden: Flag(action == BulkHide), UpdatedAt: now.Unix(), Ids: found})
 		case BulkMove:
-			folder := sql.NullInt64{}
-			if opt.Folder != nil {
-				folder = sql.NullInt64{Int64: *opt.Folder, Valid: true}
-			}
+			folder := NullInt(opt.Folder)
 			err = q.SetUsersFolder(ctx, db.SetUsersFolderParams{FolderID: folder, UpdatedAt: now.Unix(), Ids: found})
 		}
 		if err != nil {

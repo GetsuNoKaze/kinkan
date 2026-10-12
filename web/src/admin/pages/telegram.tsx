@@ -4,7 +4,8 @@ import { Link, useBlocker, useNavigate, useSearch } from "@tanstack/react-router
 import { ArrowDown, ArrowUp, Bell, Bot, Globe, LayoutList, Link2, Megaphone, Network, Plus, PlugZap, Send, Shield, Trash2, TriangleAlert } from "lucide-react";
 import { useMemo, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../api/client";
-import { qk, useNodes, useSettings } from "../../api/hooks";
+import { onFormError } from "../../lib/fields";
+import { qk, useNodes, useSettings, useTelegram } from "../../api/hooks";
 import { useDraft } from "../../lib/draft";
 import { TELEGRAM_TABS } from "../search";
 import { BackToAddons } from "./addons";
@@ -16,6 +17,7 @@ import { useToast } from "../../components/toast";
 import { Bar, Button, Field, PageHeader, Pill, Segmented, Skeleton } from "../../components/ui";
 import { Switch, SwitchRow } from "../../components/switch";
 import { t, tMaybe, useLocale } from "../../i18n";
+import { MarkdownHint, TgHtml, TgTextPreview, useTgPreview } from "./telegram-text";
 
 type View = Schemas["TelegramView"];
 type Config = Schemas["Config"];
@@ -23,15 +25,6 @@ type MenuButton = Schemas["MenuButton"];
 type TextKey = keyof Schemas["Texts"];
 
 const TAB_ICONS = { connect: PlugZap, menu: LayoutList, notify: Bell, infra: Network, broadcast: Megaphone } as const;
-
-function useTelegram() {
-  return useQuery({
-    queryKey: qk.telegram,
-    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/telegram", { signal })),
-    // A broadcast in progress moves every second; otherwise little changes.
-    refetchInterval: (q) => (q.state.data?.broadcast?.active ? 2_000 : 10_000),
-  });
-}
 
 function usePatchTelegram() {
   const qc = useQueryClient();
@@ -125,6 +118,7 @@ function TelegramBody({ v }: { v: View }) {
         ) : tab === "menu" ? (
           <WithPreview title={t("telegram.preview")} preview={preview}>
             <MenuCard draft={draft} setDraft={setDraft} />
+            <ChannelCard draft={draft} setDraft={setDraft} v={v} />
             <TextsCard draft={draft} setDraft={setDraft} defaults={v.defaults} />
           </WithPreview>
         ) : tab === "notify" ? (
@@ -200,6 +194,59 @@ function BotSummary({ v, onConnect }: { v: View; onConnect: () => void }) {
         <p className="mt-3 text-[13px] text-[var(--berry-600)]" role="alert">
           {tMaybe(`telegram.err.${v.error}`) ?? v.error}
         </p>
+      ) : null}
+      {v.channel_error && v.config.channel.required ? (
+        <p className="mt-3 text-[13px] text-[var(--berry-600)]" role="alert">
+          {channelErrorText(v.channel_error)}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+/** Why the bot cannot check its channel, in the admin's words. */
+function channelErrorText(code: string): string {
+  return tMaybe(`telegram.channel.err.${code}`) ?? t("telegram.channel.errOther", { error: code });
+}
+
+/**
+ * The channel a subscriber must join before the menu, and the one the free plan may ask
+ * for. The bot checks the channel as saved: an edit shows its state once it is.
+ */
+function ChannelCard({ draft, setDraft, v }: { draft: Config; setDraft: (c: Config) => void; v: View }) {
+  const ch = draft.channel;
+  const set = (patch: Partial<Config["channel"]>) => setDraft({ ...draft, channel: { ...ch, ...patch } });
+  const saved = v.config.channel;
+  const state = !saved.chat || !v.running ? null : saved.chat !== ch.chat.trim() ? "checking" : v.channel_error ? "error" : "ok";
+  return (
+    <section {...rise(2)}>
+      <div className="card-head">
+        <div>
+          <h2 className="card-title">{t("telegram.channel.title")}</h2>
+          <div className="card-sub">{t("telegram.channel.sub")}</div>
+        </div>
+      </div>
+      <div className="row-list">
+        <SwitchRow label={t("telegram.channel.required")} sub={t("telegram.channel.requiredSub")} checked={ch.required} onChange={(on) => set({ required: on })} />
+      </div>
+      <div className="grid gap-x-3 pt-4 sm:grid-cols-2">
+        <Field label={t("telegram.channel.chat")} htmlFor="tg-channel" hint={t("telegram.channel.chatHint")}>
+          <input id="tg-channel" className="input mono" value={ch.chat} onChange={(e) => set({ chat: e.target.value })} placeholder="@my_channel" maxLength={64} autoComplete="off" spellCheck={false} />
+        </Field>
+        <Field label={t("telegram.channel.url")} htmlFor="tg-channel-url" hint={t("telegram.channel.urlHint")}>
+          <input id="tg-channel-url" className="input mono" value={ch.url ?? ""} onChange={(e) => set({ url: e.target.value })} placeholder="https://t.me/+…" maxLength={256} autoComplete="off" spellCheck={false} />
+        </Field>
+      </div>
+      {state === "error" ? (
+        <div className="banner err" role="alert">
+          <span>{channelErrorText(v.channel_error ?? "")}</span>
+        </div>
+      ) : state === "ok" ? (
+        <p className="text-xs text-[var(--leaf-700)]" role="status">
+          {t("telegram.channel.ok")}
+        </p>
+      ) : state === "checking" ? (
+        <p className="text-xs text-[var(--ink-500)]">{t("telegram.channel.checking")}</p>
       ) : null}
     </section>
   );
@@ -303,7 +350,7 @@ function BackupCard() {
   // While a backup is being made in the background, its end is looked for every few seconds.
   const q = useQuery({
     queryKey: ["telegram-backup"],
-    queryFn: () => unwrap(api.GET("/api/v1/telegram/backup", {})),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/telegram/backup", { signal })),
     refetchInterval: (query) => (query.state.data?.sending ? 3000 : false),
   });
   const [password, setPassword] = useState("");
@@ -325,8 +372,7 @@ function BackupCard() {
     setShown(true);
   };
   const fail = (e: unknown) => {
-    if (e instanceof ApiError && Object.keys(e.fields).length) setError(Object.values(e.fields)[0] ?? "");
-    else toast.error(errorText(e));
+    onFormError(e, toast, (fields) => setError(Object.values(fields)[0] ?? ""));
   };
   const patch = useMutation({
     mutationFn: (body: { enabled?: boolean; hour?: number; password?: string }) => unwrap(api.PATCH("/api/v1/telegram/backup", { body })),
@@ -521,19 +567,22 @@ function RouteCard({ v }: { v: View }) {
   const [error, setError] = useState("");
   const remote = (nodes.data ?? []).filter((n) => !n.local);
   const nodeName = (id?: number) => remote.find((n) => n.id === id)?.name ?? `#${id}`;
+  // Only a node of the list can be chosen. A saved route may still name a node deleted
+  // since: React would show the first option for it while the form sent the old id.
+  const picked = remote.some((n) => n.id === nodeId && tunnels(n.version)) ? nodeId : 0;
   const now =
     saved.mode === "node"
       ? t("telegram.routeNowNode", { name: nodeName(saved.node_id) })
       : saved.mode === "proxy"
         ? t("telegram.routeNowProxy", { proxy: saved.proxy ?? "" })
         : t("telegram.routeNowDirect");
-  const changed = mode !== saved.mode || (mode === "node" && nodeId !== (saved.node_id ?? 0)) || (mode === "proxy" && proxy.trim() !== "");
-  const ready = mode === "direct" || (mode === "node" && nodeId > 0) || (mode === "proxy" && (proxy.trim() !== "" || !!saved.proxy));
+  const changed = mode !== saved.mode || (mode === "node" && picked !== (saved.node_id ?? 0)) || (mode === "proxy" && proxy.trim() !== "");
+  const ready = mode === "direct" || (mode === "node" && picked > 0) || (mode === "proxy" && (proxy.trim() !== "" || !!saved.proxy));
   const submit = (e: FormEvent) => {
     e.preventDefault();
     setError("");
     const route: Schemas["PatchTelegramInputBody"]["route"] =
-      mode === "node" ? { mode, node_id: nodeId } : mode === "proxy" ? { mode, ...(proxy.trim() ? { proxy: proxy.trim() } : {}) } : { mode };
+      mode === "node" ? { mode, node_id: picked } : mode === "proxy" ? { mode, ...(proxy.trim() ? { proxy: proxy.trim() } : {}) } : { mode };
     patch.mutate(
       { route },
       {
@@ -593,7 +642,7 @@ function RouteCard({ v }: { v: View }) {
             </div>
           ) : (
             <Field label={t("telegram.routeNodeLabel")} htmlFor="tg-route-node" hint={t("telegram.routeNodeHint")} error={error}>
-              <select id="tg-route-node" className="input max-w-[320px]" value={nodeId} onChange={(e) => setNodeId(Number(e.target.value))} aria-invalid={!!error}>
+              <select id="tg-route-node" className="input max-w-[320px]" value={picked} onChange={(e) => setNodeId(Number(e.target.value))} aria-invalid={!!error}>
                 <option value={0} disabled>
                   {t("telegram.routeNodePick")}
                 </option>
@@ -646,6 +695,7 @@ function actionLabel(a: string): string {
 }
 
 function MenuCard({ draft, setDraft }: { draft: Config; setDraft: (c: Config) => void }) {
+  const sample = useSampleVars();
   const set = (i: number, patch: Partial<MenuButton>) => setDraft({ ...draft, buttons: draft.buttons.map((b, j) => (j === i ? { ...b, ...patch } : b)) });
   const move = (i: number, d: -1 | 1) => {
     const list = [...draft.buttons];
@@ -705,7 +755,13 @@ function MenuCard({ draft, setDraft }: { draft: Config; setDraft: (c: Config) =>
               </div>
               {b.action === "url" ? <input className="input mono mt-2" value={b.url ?? ""} onChange={(e) => set(i, { url: e.target.value })} placeholder="https://… / tg://…" aria-label={t("telegram.buttonUrl")} /> : null}
               {b.action === "page" ? (
-                <textarea className="input mt-2" value={b.text ?? ""} maxLength={3000} onChange={(e) => set(i, { text: e.target.value })} placeholder={t("telegram.pagePlaceholder")} aria-label={t("telegram.pageText")} />
+                <>
+                  <textarea className="input mt-2" value={b.text ?? ""} maxLength={3000} onChange={(e) => set(i, { text: e.target.value })} placeholder={t("telegram.pagePlaceholder")} aria-label={t("telegram.pageText")} />
+                  <div className="mt-1">
+                    <MarkdownHint />
+                  </div>
+                  <TgTextPreview text={b.text ?? ""} vars={sample} label={t("telegram.md.preview")} />
+                </>
               ) : null}
             </motion.li>
           ))}
@@ -733,9 +789,13 @@ const TEXTS: { key: TextKey; label: string }[] = [
   { key: "expired", label: "telegram.text.expired" },
   { key: "traffic_90", label: "telegram.text.traffic_90" },
   { key: "traffic_end", label: "telegram.text.traffic_end" },
+  { key: "channel", label: "telegram.text.channel" },
 ];
 
 function TextsCard({ draft, setDraft, defaults }: { draft: Config; setDraft: (c: Config) => void; defaults: Schemas["Texts"] }) {
+  // The text being edited shows under its field as the bot will send it.
+  const [active, setActive] = useState<TextKey | null>(null);
+  const sample = useSampleVars();
   return (
     <section {...rise(2)}>
       <div className="card-head">
@@ -757,10 +817,35 @@ function TextsCard({ draft, setDraft, defaults }: { draft: Config; setDraft: (c:
       </Field>
       {TEXTS.map(({ key, label }) => (
         <Field key={key} label={tMaybe(label) ?? key} htmlFor={`tg-${key}`}>
-          <textarea id={`tg-${key}`} className="input" rows={key === "main" || key === "welcome" ? 5 : 2} maxLength={3000} value={draft.texts[key]} placeholder={defaults[key]} onChange={(e) => setDraft({ ...draft, texts: { ...draft.texts, [key]: e.target.value } })} />
+          <>
+            <textarea
+              id={`tg-${key}`}
+              className="input"
+              rows={key === "main" || key === "welcome" ? 5 : 2}
+              maxLength={3000}
+              value={draft.texts[key]}
+              placeholder={defaults[key]}
+              onFocus={() => setActive(key)}
+              onChange={(e) => setDraft({ ...draft, texts: { ...draft.texts, [key]: e.target.value } })}
+            />
+            {active === key ? <TgTextPreview text={draft.texts[key]} vars={sample} label={t("telegram.md.preview")} /> : null}
+          </>
         </Field>
       ))}
+      <Field label={t("telegram.freeButton")} htmlFor="tg-free-button" hint={t("telegram.freeButtonHint")}>
+        <input
+          id="tg-free-button"
+          className="input"
+          maxLength={40}
+          value={draft.texts.free_button}
+          placeholder={defaults.free_button}
+          onChange={(e) => setDraft({ ...draft, texts: { ...draft.texts, free_button: e.target.value } })}
+        />
+      </Field>
       <p className="text-xs text-[var(--ink-500)]">{t("telegram.variables")}</p>
+      <div className="mt-2">
+        <MarkdownHint />
+      </div>
     </section>
   );
 }
@@ -783,6 +868,7 @@ function OptionsCard({ draft, setDraft, v }: { draft: Config; setDraft: (c: Conf
       </div>
       <ul className="row-list">
         {row(t("telegram.miniApp"), v.mini_app_url ? t("telegram.miniAppSub") : t("telegram.miniAppNoCert"), draft.mini_app, (on) => setDraft({ ...draft, mini_app: on }))}
+        {row(t("telegram.promoButton"), draft.mini_app ? t("telegram.promoButtonSub") : t("telegram.promoButtonNeedsApp"), draft.promo_button, (on) => setDraft({ ...draft, promo_button: on }))}
         {row(t("telegram.cleanChat"), t("telegram.cleanChatSub"), draft.clean_chat, (on) => setDraft({ ...draft, clean_chat: on }))}
         {row(t("telegram.quietNight"), t("telegram.quietNightSub"), draft.quiet_night, (on) => setDraft({ ...draft, quiet_night: on }))}
         {NOTICES.map((k) => row(t(`telegram.notice.${k}`), t("telegram.noticeSub"), draft.notify[k], (on) => setDraft({ ...draft, notify: { ...draft.notify, [k]: on } })))}
@@ -808,6 +894,9 @@ function BroadcastCard({ v }: { v: View }) {
   });
   const busy = !!v.broadcast?.active;
   const ready = v.running && v.accounts > 0 && !busy;
+  // A broadcast fills only {brand}.
+  const sample = useSampleVars();
+  const brandOnly = useMemo(() => ({ brand: sample.brand ?? "VPN" }), [sample.brand]);
   return (
     <section {...rise(4)}>
       <div className="card-head">
@@ -817,6 +906,10 @@ function BroadcastCard({ v }: { v: View }) {
         </div>
       </div>
       <textarea className="input" rows={4} maxLength={3500} value={text} onChange={(e) => setText(e.target.value)} placeholder={t("telegram.broadcastPlaceholder")} aria-label={t("telegram.broadcast")} disabled={!v.running} />
+      <div className="mt-1">
+        <MarkdownHint />
+      </div>
+      <TgTextPreview text={text} vars={brandOnly} label={t("telegram.md.preview")} />
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <Button variant="primary" disabled={!ready || !text.trim()} onClick={() => setConfirm(true)}>
           <Send size={16} aria-hidden /> {t("telegram.broadcastButton")}
@@ -861,13 +954,12 @@ function BroadcastProgress({ b }: { b: Schemas["TelegramBroadcast"] }) {
   );
 }
 
-/** The main menu as a subscriber sees it in Telegram, with sample data. */
-function Preview({ draft, v, bare }: { draft: Config; v: View; bare?: boolean }) {
+/** Sample values of the texts' {variables}, for the previews. */
+function useSampleVars(): Record<string, string> {
   const settings = useSettings();
   const brand = settings.data?.brand || "VPN";
-  const support = !!settings.data?.support_url;
   const locale = useLocale();
-  const sample: Record<string, string> = useMemo(
+  return useMemo(
     () => ({
       brand,
       name: t("telegram.sample.name"),
@@ -885,7 +977,17 @@ function Preview({ draft, v, bare }: { draft: Config; v: View; bare?: boolean })
     // The sample texts are translated: they change with the language.
     [brand, locale],
   );
-  const text = (draft.texts.main || v.defaults.main).replace(/\{(\w+)\}/g, (m, k: string) => sample[k] ?? m);
+}
+
+/** The main menu as a subscriber sees it in Telegram, with sample data. */
+function Preview({ draft, v, bare }: { draft: Config; v: View; bare?: boolean }) {
+  const settings = useSettings();
+  const support = !!settings.data?.support_url;
+  const sample = useSampleVars();
+  const source = draft.texts.main || v.defaults.main;
+  const html = useTgPreview(source, sample);
+  // Until the panel answers, the text as typed with the samples in it.
+  const text = source.replace(/\{(\w+)\}/g, (m, k: string) => sample[k] ?? m);
   const reduce = useReducedMotion();
   const rows: MenuButton[][] = [];
   for (const b of draft.buttons) {
@@ -893,6 +995,10 @@ function Preview({ draft, v, bare }: { draft: Config; v: View; bare?: boolean })
     const last = rows[rows.length - 1];
     if (b.row && last && last.length < 3) last.push(b);
     else rows.push([b]);
+  }
+  // The bot adds «Промокоды» under the buttons itself while the Mini App is on.
+  if (draft.promo_button && draft.mini_app && v.mini_app_url) {
+    rows.push([{ id: "promo", action: "app", label: t("telegram.promoLabel"), on: true, row: false }]);
   }
   return (
     <section {...(bare ? {} : rise(1))} aria-label={t("telegram.preview")}>
@@ -907,7 +1013,7 @@ function Preview({ draft, v, bare }: { draft: Config; v: View; bare?: boolean })
         </div>
       )}
       <div className="tg-chat">
-        <div className="tg-bubble">{text}</div>
+        <div className="tg-bubble">{html.data && !html.isError ? <TgHtml html={html.data.html} /> : text}</div>
         <motion.div className="tg-keyboard" layout={!reduce} transition={slide}>
           <AnimatePresence initial={false} mode="popLayout">
             {rows.map((r) => (

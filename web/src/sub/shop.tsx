@@ -6,10 +6,11 @@ import { useEffect, useState } from "react";
 import { Button } from "../components/ui";
 import { t, type Key } from "../i18n";
 import { money, rubles } from "../lib/format";
+import { okData, postJSON } from "./net";
 
 /** A term of a plan sold for several: its own price; label is "30 days", "3 months". */
-export type Term = { days: number; label: string; description: string; stars?: number; rub?: number };
-export type Offer = { id: number; name: string; description: string; stars?: number; rub?: number; terms?: Term[] };
+type Term = { days: number; label: string; description: string; stars?: number; rub?: number };
+type Offer = { id: number; name: string; description: string; note?: string; stars?: number; rub?: number; terms?: Term[] };
 export type ShopData = {
   allow_new: boolean;
   providers: { stars: boolean };
@@ -17,6 +18,10 @@ export type ShopData = {
   addons?: { provider: `addon:${string}`; name: string }[];
   offers: Offer[];
   packages?: Offer[];
+  /** The priced trial the account may buy now: once, before any plan. */
+  trial?: Offer;
+  /** The free plan the account may take now; channel is the one it asks the account to join. */
+  free?: { name: string; description: string; channel?: string };
 };
 type Provider = "stars" | `addon:${string}`;
 
@@ -30,19 +35,19 @@ const FAIL: Record<string, Key> = {
   too_many_subs: "sub.shopTooManySubs",
   promo_unavailable: "sub.promoUnavailable",
   promo_try_later: "sub.promoTryLater",
+  trial_used: "sub.trialUsed",
+  trial_off: "sub.trialOff",
 };
 
 /** What the account can buy; with token, the traffic packages of that subscription too. */
 export function loadShop(subRoot: string, initData: string, token = ""): Promise<ShopData> {
-  return fetch(subRoot + "/tg/shop", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ init_data: initData, token }), cache: "no-store" }).then(
-    (r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))),
-  );
+  return postJSON<ShopData>(subRoot + "/tg/shop", { init_data: initData, token }).then(okData);
 }
 
 /**
- * Offers and pay buttons: plans (field tariff_id) or traffic packages (package_id). token
- * is the subscription to renew or add traffic to; "" buys a new one. openInvoice/openLink
- * go through the Mini App bridge.
+ * Offers and pay buttons: plans (field tariff_id), traffic packages (package_id) or the
+ * priced trial (trial). token is the subscription to renew or add traffic to; "" buys a
+ * new one. openInvoice/openLink go through the Mini App bridge.
  */
 export function Shop({
   data,
@@ -60,7 +65,7 @@ export function Shop({
 }: {
   data: ShopData;
   offers: Offer[];
-  field?: "tariff_id" | "package_id";
+  field?: "tariff_id" | "package_id" | "trial";
   pick?: string;
   subRoot: string;
   initData: string;
@@ -88,7 +93,7 @@ export function Shop({
   // A single term the providers take now is named too: it may not be the plan's first,
   // which a request without days is for.
   const sold = term ?? offer?.terms?.[0];
-  const order = { [field]: offer?.id, ...(sold ? { term_days: sold.days } : {}) };
+  const order = field === "trial" ? { trial: true } : { [field]: offer?.id, ...(sold ? { term_days: sold.days } : {}) };
   const failText = (code: string) => (field === "package_id" && code === "not_for_sale" ? t("sub.packageNotForSale") : t(FAIL[code] ?? "sub.shopFail"));
 
   const pay = async (provider: Provider) => {
@@ -97,13 +102,15 @@ export function Shop({
     setError("");
     try {
       if (promoCode) {
-        const preview = await fetch(subRoot + "/tg/promo", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ init_data: initData, token, code: promoCode, ...order, provider, validate_only: true }),
-          cache: "no-store",
+        const preview = await postJSON<{ code: string; discount: number; final_amount: number; currency: string }>(subRoot + "/tg/promo", {
+          init_data: initData,
+          token,
+          code: promoCode,
+          ...order,
+          provider,
+          validate_only: true,
         });
-        const result = (await preview.json().catch(() => ({}))) as { code?: string; discount?: number; final_amount?: number; currency?: string };
+        const result = preview.data;
         if (!preview.ok) {
           setError(failText(result.code ?? "promo_unavailable"));
           return;
@@ -112,13 +119,8 @@ export function Shop({
           setPromoPreview({ discount: result.discount, final_amount: result.final_amount, currency: result.currency });
         }
       }
-      const r = await fetch(subRoot + "/tg/pay", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ init_data: initData, ...order, provider, token, promo_code: promoCode }),
-        cache: "no-store",
-      });
-      const body = (await r.json().catch(() => ({}))) as { url?: string; code?: string };
+      const r = await postJSON<{ url: string; code: string }>(subRoot + "/tg/pay", { init_data: initData, ...order, provider, token, promo_code: promoCode });
+      const body = r.data;
       if (!r.ok || !body.url) {
         setError(failText(body.code ?? ""));
         return;
@@ -155,6 +157,7 @@ export function Shop({
               <span className="num text-[13px] text-[var(--ink-700)]">{listPrice(o)}</span>
             </span>
             <span className="text-xs text-[var(--ink-500)]">{o.description}</span>
+            {o.note ? <span className="whitespace-pre-line text-xs text-[var(--ink-700)]">{o.note}</span> : null}
           </button>
         ))}
       </div>
@@ -192,6 +195,75 @@ export function Shop({
             <RefreshCw size={14} aria-hidden /> {t("sub.shopRefresh")}
           </Button>
         </div>
+      ) : null}
+    </section>
+  );
+}
+
+const FREE_FAIL: Record<string, Key> = {
+  free_active: "sub.freeActive",
+  free_off: "sub.freeOff",
+  too_many_subs: "sub.shopTooManySubs",
+};
+
+/**
+ * The free plan: one tap gives the subscription. A plan for the channel's subscribers
+ * shows the channel next to it, and says so when the account is not in it yet.
+ */
+export function FreePlan({
+  offer,
+  subRoot,
+  initData,
+  openLink,
+  onTaken,
+}: {
+  offer: NonNullable<ShopData["free"]>;
+  subRoot: string;
+  initData: string;
+  openLink: (url: string) => void;
+  onTaken: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const take = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const r = await postJSON<{ token: string; code: string }>(subRoot + "/tg/free", { init_data: initData });
+      if (r.ok && r.data.token) {
+        onTaken();
+        return;
+      }
+      const code = r.data.code ?? "";
+      setError(code === "free_channel" ? t("sub.freeChannelNeeded") : t(FREE_FAIL[code] ?? "sub.freeFail"));
+    } catch {
+      setError(t("sub.freeFail"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="glass sub-card p-4" aria-label={t("sub.freeTitle")}>
+      <h2 className="mb-1 text-[15px] font-semibold">{t("sub.freeTitle")}</h2>
+      <p className="mb-3 text-xs text-[var(--ink-500)]">{t("sub.freeAgain")}</p>
+      <div className="mb-3">
+        <div className="font-semibold">{offer.name}</div>
+        <div className="text-xs text-[var(--ink-500)]">{offer.description}</div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="primary" loading={busy} disabled={busy} onClick={() => void take()}>
+          {t("sub.freeTake")}
+        </Button>
+        {offer.channel ? (
+          <Button variant="glass" onClick={() => openLink(offer.channel!)}>
+            {t("sub.freeJoin")}
+          </Button>
+        ) : null}
+      </div>
+      {error ? (
+        <p className="mt-3 text-xs text-[var(--berry-600)]" role="alert">
+          {error}
+        </p>
       ) : null}
     </section>
   );
