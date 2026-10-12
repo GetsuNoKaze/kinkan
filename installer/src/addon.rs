@@ -738,10 +738,8 @@ const KINKAN_CATALOG_KEY: &str = "Z3wSIPBSaJxh5CsGO8eINI0aM0kyrQ46EcJSNeH85W8=";
 
 fn kinkan_catalog_key() -> Result<ed25519_dalek::VerifyingKey> {
     use base64::Engine as _;
-    let raw: [u8; 32] = base64::engine::general_purpose::STANDARD
-        .decode(KINKAN_CATALOG_KEY)?
-        .try_into()
-        .map_err(|_| anyhow::anyhow!("bad catalog key"))?;
+    let raw: [u8; 32] =
+        base64::engine::general_purpose::STANDARD.decode(KINKAN_CATALOG_KEY)?.try_into().map_err(|_| anyhow::anyhow!("bad catalog key"))?;
     Ok(ed25519_dalek::VerifyingKey::from_bytes(&raw)?)
 }
 
@@ -751,6 +749,9 @@ mod kinkan_tests {
     fn the_catalog_key_is_mikans_and_matches_the_panel() {
         assert!(super::kinkan_catalog_key().is_ok());
         let go = include_str!("../../internal/panel/addons/kinkan.go");
-        assert!(go.contains(&format!("const kinkanCatalogKey = \"{}\"", super::KINKAN_CATALOG_KEY)), "the panel checks the catalog with another key");
+        assert!(
+            go.contains(&format!("const kinkanCatalogKey = \"{}\"", super::KINKAN_CATALOG_KEY)),
+            "the panel checks the catalog with another key"
+        );
     }
 }
