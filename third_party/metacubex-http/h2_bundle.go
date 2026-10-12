@@ -5180,7 +5180,7 @@ var http2writeDataPool = sync.Pool{
 func (sc *http2serverConn) writeDataFromHandler(stream *http2stream, data []byte, endStream bool) error {
 	ch := sc.srv.state.getErrChan()
 	writeArg := http2writeDataPool.Get().(*http2writeData)
-	*writeArg = http2writeData{stream.id, data, endStream}
+	*writeArg = *kinkanNewWriteData(stream.id, data, endStream) // Kinkan
 	err := sc.writeFrameFromHandler(http2FrameWriteRequest{
 		write:  writeArg,
 		stream: stream,
@@ -5349,7 +5349,7 @@ func (sc *http2serverConn) startFrameWrite(wr http2FrameWriteRequest) {
 		// Encode the frame in the serve goroutine, to ensure we don't have
 		// any lingering asynchronous references to data passed to Write.
 		// See https://go.dev/issue/58446.
-		sc.framer.startWriteDataPadded(wd.streamID, wd.endStream, wd.p, nil)
+		sc.kinkanStartWriteData(wd) // Kinkan
 		sc.writingFrameAsync = true
 		go sc.writeFrameAsync(wr, wd)
 	} else {
@@ -10871,6 +10871,8 @@ func (p *http2writeGoAway) writeFrame(ctx http2writeContext) error {
 func (*http2writeGoAway) staysWithinBuffer(max int) bool { return false } // flushes
 
 type http2writeData struct {
+	kinkanHTTP2DataPadding // Kinkan
+
 	streamID  uint32
 	p         []byte
 	endStream bool
@@ -10881,11 +10883,11 @@ func (w *http2writeData) String() string {
 }
 
 func (w *http2writeData) writeFrame(ctx http2writeContext) error {
-	return ctx.Framer().WriteData(w.streamID, w.endStream, w.p)
+	return w.kinkanWriteData(ctx.Framer()) // Kinkan
 }
 
 func (w *http2writeData) staysWithinBuffer(max int) bool {
-	return http2frameHeaderLen+len(w.p) <= max
+	return http2frameHeaderLen+w.kinkanDataSize() <= max // Kinkan
 }
 
 // handlerPanicRST is the message sent from handler goroutines when
@@ -11242,7 +11244,7 @@ func (wr http2FrameWriteRequest) isControl() bool {
 // to write this entire frame. This is 0 for non-DATA frames.
 func (wr http2FrameWriteRequest) DataSize() int {
 	if wd, ok := wr.write.(*http2writeData); ok {
-		return len(wd.p)
+		return wd.kinkanDataSize() // Kinkan
 	}
 	return 0
 }
@@ -11258,6 +11260,7 @@ func (wr http2FrameWriteRequest) DataSize() int {
 // 'rest' contains the remaining bytes. The consumed bytes are deducted from the
 // underlying stream's flow control budget.
 func (wr http2FrameWriteRequest) Consume(n int32) (http2FrameWriteRequest, http2FrameWriteRequest, int) {
+	n = wr.kinkanPreparePadding(n) // Kinkan
 	var empty http2FrameWriteRequest
 
 	// Non-DATA frames are always consumed whole.
@@ -11282,6 +11285,8 @@ func (wr http2FrameWriteRequest) Consume(n int32) (http2FrameWriteRequest, http2
 		consumed := http2FrameWriteRequest{
 			stream: wr.stream,
 			write: &http2writeData{
+				kinkanHTTP2DataPadding: wd.kinkanPadding(), // Kinkan
+
 				streamID: wd.streamID,
 				p:        wd.p[:allowed],
 				// Even if the original had endStream set, there
