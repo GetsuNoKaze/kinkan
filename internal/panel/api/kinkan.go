@@ -32,4 +32,5 @@ func (h *handlers) registerKinkan() {
 	h.registerSites()
 	h.registerHistory()
 	h.registerRollback()
+	h.registerLeaks()
 }

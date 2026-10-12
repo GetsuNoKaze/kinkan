@@ -24,7 +24,8 @@
       "probe_run_not_found": "No such check in the history: refresh the page",
       "scanner_reset_failed": "The node did not clear its journal: try again once it is online",
       "rollback_unavailable": "No compatible rollback is available: refresh the page",
-      "update_busy": "An update or rollback is already pending or running"
+      "update_busy": "An update or rollback is already pending or running",
+      "leak_policy_invalid": "Check the detector thresholds and window."
     }
   },
   "site": {
@@ -223,5 +224,21 @@
     "elapsed": "Observation time",
     "target": "Inbound",
     "reference": "Cover site"
+  },
+  "leaks": {
+    "title": "Subscription use",
+    "explanation": "The detector observes activity from multiple networks or countries in a short period. Travel, mobile networks and multiple devices may also trigger it. This is suspicion, not proof of a leak. Unknown networks without DB-IP are not counted.",
+    "warning": "Suspicious subscription use",
+    "none": "No events in the last 30 days.",
+    "evidence": "Networks: {networks}; countries: {countries}; window: {minutes} min.",
+    "settings": "Detector settings",
+    "global": "These settings apply to all users. Changes do not delete history.",
+    "enabled": "Enabled",
+    "networks": "Distinct ASN threshold",
+    "countries": "Country threshold",
+    "window": "Activity window, minutes",
+    "saved": "Saved",
+    "save": "Save",
+    "loading": "Loading…"
   }
 }
