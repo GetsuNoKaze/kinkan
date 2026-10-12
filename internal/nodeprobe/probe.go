@@ -20,6 +20,8 @@ import (
 )
 
 type Config struct {
+	KinkanConfig // Kinkan: wrong-key transport options (kinkan_auth.go)
+
 	Protocol  string `json:"protocol"`
 	Target    string `json:"target"`
 	Reference string `json:"reference,omitempty"`
@@ -32,6 +34,8 @@ type Config struct {
 }
 
 type Report struct {
+	KinkanReport // Kinkan: wrong-key comparison (kinkan_auth.go)
+
 	Protocol   string            `json:"protocol"`
 	Verdict    string            `json:"verdict" enum:"quiet,noticeable,exposed,inconclusive"`
 	Incomplete bool              `json:"incomplete"`
@@ -121,6 +125,7 @@ func Scan(ctx context.Context, cfg Config) (r Report, err error) {
 		return r, errors.New("timeout must be between 100ms and 30s")
 	}
 	defer r.Summarize()
+	defer r.scanWrongKey(ctx, cfg, u) // Kinkan
 	if err := ctx.Err(); err != nil {
 		r.add("scan", "ERROR", err.Error())
 		return r, nil

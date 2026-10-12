@@ -7,6 +7,7 @@ import { useToast } from "../../components/toast";
 import { Button, Pill } from "../../components/ui";
 import { t } from "../../i18n";
 import { nodeLabel } from "../../lib/node-label";
+import { sharedFingerprints, tlsKind } from "./kinkan-tls";
 
 type Node = Schemas["NodeInfo"];
 export function ScannerDrawer({ node, onClose }: { node: Node | null; onClose: () => void }) {
@@ -20,16 +21,18 @@ function Journal({ node }: { node: Node }) {
   const result = useQuery({ queryKey: ["scanners", node.id], queryFn: ({ signal }) => unwrap(api.GET("/api/v1/nodes/{id}/scanners", { params: { path: { id: node.id } }, signal })), refetchInterval: 30_000 });
   if (result.isPending) return <p role="status">{t("common.loading")}</p>;
   if (result.isError) return <p role="alert">{errorText(result.error)}</p>;
-  const grouped = new Map<string, Schemas["ScannerRecord"] & { methods: Set<string>; reasons: Set<string> }>();
+  const grouped = new Map<string, Schemas["ScannerRecord"] & { methods: Set<string>; reasons: Set<string>; prints: Set<string> }>();
   for (const row of result.data.records) {
     if (row.own ? !showOwn : row.client && !showClients) continue;
     const key = `${row.ip}/${row.inbound}/${row.protocol}/${row.client}/${!!row.own}`;
     const old = grouped.get(key);
-    if (old) { old.count += row.count; old.first = Math.min(old.first, row.first); old.last = Math.max(old.last, row.last); old.methods.add(row.method ?? ""); old.reasons.add(row.reason); }
-    else grouped.set(key, { ...row, methods: new Set([row.method ?? ""]), reasons: new Set([row.reason]) });
+    if (old) { old.count += row.count; old.first = Math.min(old.first, row.first); old.last = Math.max(old.last, row.last); old.methods.add(row.method ?? ""); old.reasons.add(row.reason); if (row.tls) old.prints.add(row.tls); }
+    else grouped.set(key, { ...row, methods: new Set([row.method ?? ""]), reasons: new Set([row.reason]), prints: new Set(row.tls ? [row.tls] : []) });
   }
   const rows = [...grouped.values()].sort((a, b) => b.count - a.count);
   const max = Math.max(1, ...result.data.days.map((d) => d.count));
+  const shared = sharedFingerprints(result.data.records);
+  const sharing = new Map(shared.map((v) => [v.tls, v.ips]));
   return <div className="space-y-5 pt-5">
     <p className="text-sm text-[var(--ink-500)]">{t("scanners.intro")}</p>
     <div className="banner info">{t("scanners.coverage")}</div>
@@ -42,13 +45,14 @@ function Journal({ node }: { node: Node }) {
         <text x="10" y="128" fontSize="10" fill="currentColor">{new Date(result.data.days[0]!.day * 1000).toLocaleDateString()}</text><text x="600" y="128" fontSize="10" textAnchor="end" fill="currentColor">{new Date(result.data.days.at(-1)!.day * 1000).toLocaleDateString()}</text>
       </svg>
     </figure>
+    {shared.length > 0 ? <div className="banner info"><p>{t("scanners.tls.shared")}</p><ul className="mt-1">{shared.map((v) => <li key={v.tls}><span className="mono">{v.tls}</span> · {tlsKind(v.tls)} · {t("scanners.tls.sharedRow", { ips: v.ips, n: v.count })}</li>)}</ul></div> : null}
     <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showClients} onChange={(e) => setShowClients(e.target.checked)} />{t("scanners.showClients")}</label>
     <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showOwn} onChange={(e) => setShowOwn(e.target.checked)} />{t("scanners.showOwn")}</label>
     {rows.length === 0 ? <p>{t("scanners.empty")}</p> : <div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead><tr><th>{t("scanners.source")}</th><th>{t("scanners.who")}</th><th>{t("scanners.inbound")}</th><th>{t("scanners.attempts")}</th><th>{t("scanners.when")}</th></tr></thead><tbody>
       {rows.map((r) => <tr key={`${r.ip}/${r.inbound}/${r.protocol}/${r.client}/${!!r.own}`} className="border-t border-[var(--hairline)] align-top">
         <td className="py-3 pr-3"><p className="mono">{r.ip}</p><p>{r.country || "—"} {r.asn ? `AS${r.asn}` : ""} {r.organization}</p><p className="break-all">{r.ptr}</p></td>
-        <td className="py-3 pr-3"><Pill tone={r.own || r.client ? "off" : "warn"}>{r.own ? t("scanners.own") : r.client ? t("scanners.client") : r.scanner === "unknown" ? t("scanners.unknown") : r.scanner}</Pill><p>{r.evidence}</p></td>
-        <td className="py-3 pr-3">{r.inbound} · {r.protocol}<p>{[...r.methods].filter(Boolean).join(", ")}</p><p>{[...r.reasons].join(", ")}</p></td>
+        <td className="py-3 pr-3"><Pill tone={r.own || r.client ? "off" : "warn"}>{r.own ? t("scanners.own") : r.client ? t("scanners.client") : r.scanner === "unknown" ? t("scanners.unknown") : r.scanner}</Pill><p>{r.evidence}</p>{[...r.prints].map((p) => <p key={p}>{tlsKind(p)}{(sharing.get(p) ?? 0) > 1 ? ` · ${t("scanners.tls.sameAs", { n: sharing.get(p)! })}` : ""}</p>)}</td>
+        <td className="py-3 pr-3">{r.inbound} · {r.protocol}<p>{[...r.methods].filter(Boolean).join(", ")}</p><p>{[...r.reasons].join(", ")}</p>{[...r.prints].map((p) => <p key={p} className="mono break-all text-[var(--ink-500)]" title={t("scanners.tls.title")}>{p}</p>)}</td>
         <td className="py-3 pr-3">{r.count}</td><td className="py-3">{new Date(r.first * 1000).toLocaleString()}<br />{new Date(r.last * 1000).toLocaleString()}</td>
       </tr>)}
     </tbody></table></div>}

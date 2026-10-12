@@ -167,6 +167,7 @@ func h3Request(ctx context.Context, cfg Config, u *url.URL, host, method, path s
 		req.Header.Set("Hysteria-Auth", "kinkan-probe-invalid")
 		req.Header.Set("Hysteria-CC-RX", "0")
 	}
+	kinkanAuthRequest(req, cfg) // Kinkan
 	resp, err := cc.RoundTrip(req)
 	if err != nil {
 		return h3Response{}, err

@@ -517,6 +517,24 @@ export interface paths {
         patch: operations["update-inbound"];
         trace?: never;
     };
+    "/api/v1/kinkan/leak-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Настройки детектора подписок */
+        get: operations["get-leak-policy"];
+        /** Изменить настройки детектора подписок */
+        put: operations["set-leak-policy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/metrics": {
         parameters: {
             query?: never;
@@ -1829,6 +1847,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{id}/leak-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Подозрительное использование подписки */
+        get: operations["get-user-leak-events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{id}/pools": {
         parameters: {
             query?: never;
@@ -2084,6 +2119,18 @@ export interface components {
              * @description Передайте как before за следующей страницей; 0 — это всё
              */
             next: number;
+        };
+        AuthObservation: {
+            /** Format: int64 */
+            bytes: number;
+            close: string;
+            detail?: string;
+            /** Format: int64 */
+            elapsed_ms: number;
+            kind: string;
+            sha256?: string;
+            /** Format: int64 */
+            status?: number;
         };
         AutoEvent: {
             /** Format: date-time */
@@ -2739,6 +2786,36 @@ export interface components {
             state: "idle" | "fetching" | "checking" | "importing" | "done" | "failed";
             /** Format: int64 */
             total: number;
+        };
+        LeakEvent: {
+            countries: string[];
+            /** Format: int64 */
+            country_threshold: number;
+            /** Format: int64 */
+            first_seen: number;
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            last_seen: number;
+            /** Format: int64 */
+            network_threshold: number;
+            networks: string[];
+            /** Format: int64 */
+            user_id: number;
+            /** Format: int64 */
+            window_minutes: number;
+        };
+        LeakPolicy: {
+            /** Format: int64 */
+            countries: number;
+            enabled: boolean;
+            /** Format: int64 */
+            networks: number;
+            /** Format: int64 */
+            window_minutes: number;
+        };
+        LeakUserOutputBody: {
+            events: components["schemas"]["LeakEvent"][];
         };
         LegacyLinks: {
             /** @description Старые ссылки сейчас открываются: задан их путь, а для подписанных ещё и секрет старой панели */
@@ -3751,6 +3828,7 @@ export interface components {
             target: string;
             /** @enum {string} */
             verdict: "quiet" | "noticeable" | "exposed" | "inconclusive";
+            wrong_key?: components["schemas"]["WrongKeyComparison"];
         };
         PutSubImageInputBody: {
             /** @description Картинка в base64: PNG, JPEG или WebP; логотип до 512 КБ, фон до 2 МБ. SVG не принимается */
@@ -3952,6 +4030,7 @@ export interface components {
             ptr?: string;
             reason: string;
             scanner: string;
+            tls?: string;
         };
         ScannerStatusView: {
             /**
@@ -4777,6 +4856,13 @@ export interface components {
             source?: "register" | "import" | "";
             /** @description Последняя проверка выхода через WARP с ноды; нет — у ноды ещё нет настроенного WARP */
             status?: components["schemas"]["WarpCheck"];
+        };
+        WrongKeyComparison: {
+            reason: string;
+            reference?: components["schemas"]["AuthObservation"];
+            target: components["schemas"]["AuthObservation"];
+            /** @enum {string} */
+            verdict: "site" | "different" | "exposed" | "inconclusive";
         };
         XHTTPTuning: {
             /**
@@ -5963,6 +6049,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InboundView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-leak-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeakPolicy"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "set-leak-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeakPolicy"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeakPolicy"];
                 };
             };
             /** @description Error */
@@ -9440,6 +9588,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HappLinkOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-user-leak-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeakUserOutputBody"];
                 };
             };
             /** @description Error */

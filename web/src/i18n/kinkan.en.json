@@ -24,7 +24,8 @@
       "probe_run_not_found": "No such check in the history: refresh the page",
       "scanner_reset_failed": "The node did not clear its journal: try again once it is online",
       "rollback_unavailable": "No compatible rollback is available: refresh the page",
-      "update_busy": "An update or rollback is already pending or running"
+      "update_busy": "An update or rollback is already pending or running",
+      "leak_policy_invalid": "Check the detector thresholds and window."
     }
   },
   "site": {
@@ -137,7 +138,19 @@
     "clear": "Clear journal",
     "clearTitle": "Clear the scanner journal?",
     "clearText": "The node starts its journal over and the panel deletes its copy. The records cannot be brought back. The node must be online.",
-    "cleared": "Scanner journal cleared"
+    "cleared": "Scanner journal cleared",
+    "tls": {
+      "other": "unknown program",
+      "noName": "no site name: sweeping addresses",
+      "oldTLS": "old TLS: a scanner or a script",
+      "noALPN": "no ALPN: a script or a scanner",
+      "browserLike": "like a browser (or a program posing as one)",
+      "program": "a program, not a browser",
+      "shared": "One program from many addresses: what a scan through a proxy network looks like.",
+      "sharedRow": "{ips} addresses, {n} attempts",
+      "sameAs": "{n} addresses share this fingerprint",
+      "title": "TLS fingerprint (JA4): how a program opens a TLS connection"
+    }
   },
   "quietNode": {
     "title": "Quiet node",
@@ -207,5 +220,37 @@
     "passwordHint": "A rollback starts only with the password: a stolen session is not enough.",
     "requested": "Rollback requested. Automatic updates are off.",
     "waiting": "Waiting for the host. The panel may briefly disconnect; reload after it restarts."
+  },
+  "kinkanNodeUpdate": {
+    "failed": "The node could not be updated, it runs {from}: {e}",
+    "onMikan": "The node runs Mikan {from}, and its installer knows only Mikan releases, so the panel cannot move it to Kinkan. Run this once on the node's server; after that it follows the panel ({v}):"
+  },
+  "wrongKey": {
+    "site": "Wrong key: behaves like the cover site",
+    "different": "Wrong key: differs from the cover site",
+    "exposed": "Wrong key: exposes the protocol",
+    "inconclusive": "Wrong key: inconclusive",
+    "endpoint": "Endpoint",
+    "response": "Response",
+    "close": "Close",
+    "elapsed": "Observation time",
+    "target": "Inbound",
+    "reference": "Cover site"
+  },
+  "leaks": {
+    "title": "Subscription use",
+    "explanation": "The detector observes activity from multiple networks or countries in a short period. Travel, mobile networks and multiple devices may also trigger it. This is suspicion, not proof of a leak. Unknown networks without DB-IP are not counted.",
+    "warning": "Suspicious subscription use",
+    "none": "No events in the last 30 days.",
+    "evidence": "Networks: {networks}; countries: {countries}; window: {minutes} min.",
+    "settings": "Detector settings",
+    "global": "These settings apply to all users. Changes do not delete history.",
+    "enabled": "Enabled",
+    "networks": "Distinct ASN threshold",
+    "countries": "Country threshold",
+    "window": "Activity window, minutes",
+    "saved": "Saved",
+    "save": "Save",
+    "loading": "Loading…"
   }
 }
