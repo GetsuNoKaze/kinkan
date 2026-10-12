@@ -203,6 +203,8 @@
     "confirmTitle": "Roll back to {v}?",
     "confirmText": "The panel will restart. A backup will be created first, and current PostgreSQL data will be preserved. Automatic updates will be turned off. Remote nodes will not be rolled back. If the previous version fails to start, the host will try to restore the current version.",
     "confirm": "Roll back",
+    "password": "Admin password",
+    "passwordHint": "A rollback starts only with the password: a stolen session is not enough.",
     "requested": "Rollback requested. Automatic updates are off.",
     "waiting": "Waiting for the host. The panel may briefly disconnect; reload after it restarts."
   }

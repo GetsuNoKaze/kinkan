@@ -3839,6 +3839,10 @@ export interface components {
             version: string;
         };
         RollbackInputBody: {
+            /** @description Пароль админа: откат не запускается из одной лишь украденной сессии */
+            password: string;
+            /** @description Код из приложения, если включена 2FA */
+            totp?: string;
             version: string;
         };
         RouteDirectSet: {

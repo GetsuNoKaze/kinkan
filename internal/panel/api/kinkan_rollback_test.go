@@ -32,7 +32,11 @@ func TestRollbackIsSessionOnlyAndDisablesAutomaticUpdates(t *testing.T) {
 	if err = domain.Seed(ctx, st, now); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = st.Q.CreateAdmin(ctx, db.CreateAdminParams{Username: "admin", PasswordHash: "x", CreatedAt: now.Unix()}); err != nil {
+	hash, err := auth.HashPassword("correct horse")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = st.Q.CreateAdmin(ctx, db.CreateAdminParams{Username: "admin", PasswordHash: hash, CreatedAt: now.Unix()}); err != nil {
 		t.Fatal(err)
 	}
 	set := settings.New(st.Q)
@@ -53,7 +57,7 @@ func TestRollbackIsSessionOnlyAndDisablesAutomaticUpdates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, _, err := New(Deps{Store: st, Settings: set, Sessions: sessions, Now: clock, Version: "0.5.0.5-tt.9", Updates: u, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), IPLimit: auth.NewLimiter(100, time.Minute, time.Minute, time.Hour)})
+	handler, _, err := New(Deps{Store: st, Settings: set, Sessions: sessions, Now: clock, Version: "0.5.0.5-tt.9", Updates: u, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), IPLimit: auth.NewLimiter(100, time.Minute, time.Minute, time.Hour), UserLimit: auth.NewLimiter(10, time.Minute, time.Minute, time.Hour), TOTP: auth.NewTOTPGuard()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +78,7 @@ func TestRollbackIsSessionOnlyAndDisablesAutomaticUpdates(t *testing.T) {
 		return rec
 	}
 	path := "/api/v1/updates/rollback/request"
-	body := `{"version":"0.5.0.5-tt.8"}`
+	body := `{"version":"0.5.0.5-tt.8","password":"correct horse"}`
 	if r := call("GET", "/api/v1/updates/rollback", "", false, false, ""); r.Code != 401 {
 		t.Fatalf("public record: %d %s", r.Code, r.Body)
 	}
@@ -91,7 +95,7 @@ func TestRollbackIsSessionOnlyAndDisablesAutomaticUpdates(t *testing.T) {
 	if r := call("POST", path, body, false, false, key); r.Code != 403 || !strings.Contains(r.Body.String(), "session_only") {
 		t.Fatalf("API key: %d %s", r.Code, r.Body)
 	}
-	if r := call("POST", path, `{"version":"0.5.0.5-tt.7"}`, true, true, ""); r.Code != 409 {
+	if r := call("POST", path, `{"version":"0.5.0.5-tt.7","password":"correct horse"}`, true, true, ""); r.Code != 409 {
 		t.Fatalf("arbitrary target: %d %s", r.Code, r.Body)
 	}
 	if on, _ := set.On(ctx, settings.AutoUpdate); !on {
@@ -109,6 +113,19 @@ func TestRollbackIsSessionOnlyAndDisablesAutomaticUpdates(t *testing.T) {
 	}
 	if err = os.Remove(status); err != nil {
 		t.Fatal(err)
+	}
+	// A stolen session alone does not roll the panel back.
+	if r := call("POST", path, `{"version":"0.5.0.5-tt.8"}`, true, true, ""); r.Code != 422 {
+		t.Fatalf("no password: %d %s", r.Code, r.Body)
+	}
+	if r := call("POST", path, `{"version":"0.5.0.5-tt.8","password":"wrong"}`, true, true, ""); r.Code != 422 || !strings.Contains(r.Body.String(), "wrong_password") {
+		t.Fatalf("wrong password: %d %s", r.Code, r.Body)
+	}
+	if on, _ := set.On(ctx, settings.AutoUpdate); !on {
+		t.Fatal("a request with the wrong password changed settings")
+	}
+	if _, err = os.Stat(filepath.Join(dir, "update", "request")); !os.IsNotExist(err) {
+		t.Fatalf("a request with the wrong password was queued: %v", err)
 	}
 	if r := call("POST", path, body, true, true, ""); r.Code != 202 {
 		t.Fatalf("request: %d %s", r.Code, r.Body)
