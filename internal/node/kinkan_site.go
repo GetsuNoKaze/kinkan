@@ -3,7 +3,11 @@ package node
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
+	"encoding/binary"
+	"encoding/pem"
 	"errors"
 	"io"
 	"log/slog"
@@ -83,6 +87,7 @@ type siteServer struct {
 	tried  time.Time         // the last attempt to listen
 	files  map[string]siteFile
 	notFnd siteFile
+	hosts  map[string]bool // the names the site answers for: its certificate's; none, any
 	srv    []*http.Server
 	status nodeapi.SiteStatus
 }
@@ -114,7 +119,7 @@ func (e *Engine) applySite(st nodeapi.DesiredState) (missing bool) {
 	if errors.Is(err, os.ErrNotExist) {
 		return true
 	}
-	next := &siteServer{state: *want, cert: cert, tls: st.TLS, status: nodeapi.SiteStatus{Hash: want.Hash}}
+	next := &siteServer{state: *want, cert: cert, tls: st.TLS, hosts: certHosts(st.TLS), status: nodeapi.SiteStatus{Hash: want.Hash}}
 	if err == nil {
 		err = next.load(archive, e.siteTime(want.Hash))
 	}
@@ -189,16 +194,52 @@ func (s *siteServer) load(archive []byte, mod time.Time) error {
 	}
 	s.files = make(map[string]siteFile, len(st.Files))
 	for p, data := range st.Files {
-		s.files[p] = siteFile{name: path.Base(p), data: data, mod: mod, etag: caddyETag(mod, len(data))}
+		// A file system keeps nanoseconds; an archive keeps seconds. A part of a second of
+		// the file's own makes the ETag look like Caddy's on a disk.
+		sum := sha256.Sum256([]byte(st.Hash + "/" + p))
+		fmod := mod.Truncate(time.Second).Add(time.Duration(binary.BigEndian.Uint32(sum[:4]) % uint32(time.Second)))
+		s.files[p] = siteFile{name: path.Base(p), data: data, mod: fmod, etag: caddyETag(fmod, len(data))}
 	}
 	s.notFnd = s.files["404.html"]
 	return nil
 }
 
-// caddyETag is the ETag Caddy's file_server gives a file: its modification time and size
-// in base 36, quoted.
+// caddyETag is the ETag Caddy's file_server (2.11) gives a file: its modification time in
+// nanoseconds and its size, in base 36, quoted.
 func caddyETag(mod time.Time, size int) string {
-	return `"` + strconv.FormatInt(mod.Unix(), 36) + strconv.FormatInt(int64(size), 36) + `"`
+	return `"` + strconv.FormatInt(mod.UnixNano(), 36) + "-" + strconv.FormatInt(int64(size), 36) + `"`
+}
+
+// certHosts are the DNS names of a certificate, which Caddy would have as its site address.
+func certHosts(certs *nodeapi.TLSFiles) map[string]bool {
+	if certs == nil {
+		return nil
+	}
+	block, _ := pem.Decode([]byte(certs.CertPEM))
+	if block == nil {
+		return nil
+	}
+	c, err := x509.ParseCertificate(block.Bytes)
+	if err != nil || len(c.DNSNames) == 0 {
+		return nil
+	}
+	hosts := make(map[string]bool, len(c.DNSNames))
+	for _, n := range c.DNSNames {
+		hosts[strings.ToLower(n)] = true
+	}
+	return hosts
+}
+
+// ownHost: Caddy serves a site only for the names in its address; a request for another
+// Host, or none (a bare HTTP/2 preface), meets no site at all.
+func (s *siteServer) ownHost(host string) bool {
+	if s.hosts == nil {
+		return true
+	}
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return s.hosts[strings.ToLower(strings.TrimSuffix(host, "."))]
 }
 
 // siteRetryEvery is how often a site that could not listen (a port another program held)
@@ -257,15 +298,29 @@ func (s *siteServer) listen(certs *nodeapi.TLSFiles, log *slog.Logger) {
 	s.status.Error = strings.Join(errs, "; ")
 }
 
-// ServeHTTP answers like Caddy's file_server with a site's own 404 page: GET and HEAD,
-// index.html for a directory (a directory asked for without its slash is redirected to
-// it), conditional and range requests, everything else not allowed.
+// ServeHTTP answers like Caddy 2.11's file_server with the site's own page for errors
+// (handle_errors rewriting to /404.html): GET and HEAD, index.html for a directory (a
+// directory asked for without its slash is redirected to it), conditional and range
+// requests, everything else not allowed. Checked against Caddy on the nodes, 12.10.2026.
 func (s *siteServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h := w.Header()
 	h.Set("Server", "Caddy")
+	if !s.ownHost(r.Host) {
+		// No site for this name: Caddy answers an empty 200.
+		h.Set("Content-Length", "0")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method == http.MethodConnect {
+		// CONNECT has no path; Caddy cleans it to "/" with a redirect.
+		h.Set("Location", "/")
+		h.Set("Content-Length", "0")
+		w.WriteHeader(http.StatusPermanentRedirect)
+		return
+	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		h.Set("Allow", "GET, HEAD")
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		s.errorPage(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 	clean := path.Clean("/" + r.URL.Path)
@@ -283,12 +338,7 @@ func (s *siteServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case ok:
 			http.Redirect(w, r, clean+"/", http.StatusPermanentRedirect)
 		default:
-			h.Set("Content-Type", "text/html; charset=utf-8")
-			h.Set("Content-Length", strconv.Itoa(len(s.notFnd.data)))
-			w.WriteHeader(http.StatusNotFound)
-			if r.Method != http.MethodHead {
-				_, _ = w.Write(s.notFnd.data)
-			}
+			s.errorPage(w, r, http.StatusNotFound)
 		}
 	}
 }
@@ -297,4 +347,24 @@ func (s *siteServer) file(w http.ResponseWriter, r *http.Request, f siteFile) {
 	w.Header().Set("Etag", f.etag)
 	w.Header().Set("Vary", "Accept-Encoding")
 	http.ServeContent(w, r, f.name, f.mod, bytes.NewReader(f.data))
+}
+
+// errorPage is Caddy's handle_errors serving /404.html: the page with its file headers and
+// the error's status. A 405 carries Vary twice, as Caddy's does (the method's error and the
+// file server each add it).
+func (s *siteServer) errorPage(w http.ResponseWriter, r *http.Request, code int) {
+	f, h := s.notFnd, w.Header()
+	h.Set("Accept-Ranges", "bytes")
+	h.Set("Content-Type", "text/html; charset=utf-8")
+	h.Set("Etag", f.etag)
+	h.Set("Last-Modified", f.mod.UTC().Format(http.TimeFormat))
+	h.Set("Vary", "Accept-Encoding")
+	if code == http.StatusMethodNotAllowed {
+		h.Add("Vary", "Accept-Encoding")
+	}
+	h.Set("Content-Length", strconv.Itoa(len(f.data)))
+	w.WriteHeader(code)
+	if r.Method != http.MethodHead {
+		_, _ = w.Write(f.data)
+	}
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"mikan/internal/nodeapi"
+	"mikan/internal/panel/store/db"
 	"mikan/internal/proto"
 	"mikan/internal/site"
 )
@@ -125,46 +126,46 @@ func TestFitToSite(t *testing.T) {
 	}
 
 	health(nil)
-	if got := s.fitToSite(tt, st); got["fallback"] != nil {
+	if got := s.fitToSite(tt, st, db.Node{}); got["fallback"] != nil {
 		t.Error("fallback before the node serves the site")
 	}
 	// A new site on its way: the node still serves the old one, and TrustTunnel keeps
 	// falling back to it instead of answering 407 until the new one arrives.
 	health(&nodeapi.SiteStatus{Hash: "other", HTTP: "127.0.0.1:17080", HTTPS: "127.0.0.1:17443"})
-	if got := s.fitToSite(tt, st); got["fallback"] != "127.0.0.1:17080" {
+	if got := s.fitToSite(tt, st, db.Node{}); got["fallback"] != "127.0.0.1:17080" {
 		t.Errorf("fallback while the node still serves the previous site = %v", got["fallback"])
 	}
 	health(&nodeapi.SiteStatus{Hash: "h1", Error: "listen tcp 127.0.0.1:17080: address already in use"})
-	if got := s.fitToSite(tt, st); got["fallback"] != nil {
+	if got := s.fitToSite(tt, st, db.Node{}); got["fallback"] != nil {
 		t.Error("fallback to a site the node does not serve")
 	}
 
 	health(&nodeapi.SiteStatus{Hash: "h1", HTTP: "127.0.0.1:17080"})
-	if got := s.fitToSite(tt, st); got["fallback"] != "127.0.0.1:17080" {
+	if got := s.fitToSite(tt, st, db.Node{}); got["fallback"] != "127.0.0.1:17080" {
 		t.Errorf("TrustTunnel fallback = %v", got["fallback"])
 	}
 	if tt["fallback"] != nil {
 		t.Error("the saved template was changed")
 	}
-	if got := s.fitToSite(own, st); got["fallback"] != "127.0.0.1:8080" {
+	if got := s.fitToSite(own, st, db.Node{}); got["fallback"] != "127.0.0.1:8080" {
 		t.Errorf("the admin's own fallback was replaced: %v", got["fallback"])
 	}
-	if got := s.fitToSite(selfSteal, st); got["reality-config"].(map[string]any)["dest"] != "127.0.0.1:21973" {
+	if got := s.fitToSite(selfSteal, st, db.Node{}); got["reality-config"].(map[string]any)["dest"] != "127.0.0.1:21973" {
 		t.Error("REALITY moved to a site served without TLS")
 	}
 
 	health(&nodeapi.SiteStatus{Hash: "h1", HTTP: "127.0.0.1:17080", HTTPS: "127.0.0.1:17443"})
-	got := s.fitToSite(selfSteal, st)["reality-config"].(map[string]any)
+	got := s.fitToSite(selfSteal, st, db.Node{})["reality-config"].(map[string]any)
 	if got["dest"] != "127.0.0.1:17443" || got["server-names"] == nil {
 		t.Errorf("self-steal REALITY = %v", got)
 	}
 	if selfSteal["reality-config"].(map[string]any)["dest"] != "127.0.0.1:21973" {
 		t.Error("the saved REALITY section was changed")
 	}
-	if s.fitToSite(foreign, st)["reality-config"].(map[string]any)["dest"] != "www.example.com:443" {
+	if s.fitToSite(foreign, st, db.Node{})["reality-config"].(map[string]any)["dest"] != "www.example.com:443" {
 		t.Error("REALITY aimed at another site was moved")
 	}
-	if got := s.fitToSite(tt, nodeapi.DesiredState{SelfStealPort: 21973}); got["fallback"] != nil {
+	if got := s.fitToSite(tt, nodeapi.DesiredState{SelfStealPort: 21973}, db.Node{}); got["fallback"] != nil {
 		t.Error("fallback for a node without a site")
 	}
 }

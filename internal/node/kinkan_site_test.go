@@ -121,7 +121,7 @@ func TestSiteServing(t *testing.T) {
 		t.Errorf("front page: %d %v", front.StatusCode, front.Header)
 	}
 	etag := front.Header.Get("Etag")
-	if !regexp.MustCompile(`^"[0-9a-z]+"$`).MatchString(etag) || front.Header.Get("Last-Modified") == "" || front.Header.Get("Accept-Ranges") != "bytes" {
+	if !regexp.MustCompile(`^"[0-9a-z]+-[0-9a-z]+"$`).MatchString(etag) || front.Header.Get("Last-Modified") == "" || front.Header.Get("Accept-Ranges") != "bytes" {
 		t.Errorf("file headers: %v", front.Header)
 	}
 	if r := get("GET", "/", map[string]string{"If-None-Match": etag}); r.StatusCode != 304 {

@@ -2,11 +2,16 @@ package nodesync
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"net"
 	"strconv"
+	"strings"
 
 	"mikan/internal/nodeapi"
+	"mikan/internal/panel/store/db"
 	"mikan/internal/proto"
 )
 
@@ -78,8 +83,11 @@ func servedSite(v *HealthView) nodeapi.SiteStatus {
 // pointing at that one, so TrustTunnel never answers 407 in between. TrustTunnel without a
 // fallback of its own falls back to the site. REALITY aimed at the panel's own HTTPS
 // (self-steal on the panel's node) aims at the site instead: the same certificate and
-// name, a website instead of the panel's empty 404. A state without a site takes it away.
-func (s *Syncer) fitToSite(t proto.Template, st nodeapi.DesiredState) proto.Template {
+// name, a website instead of the panel's empty 404. So does REALITY aimed at another web
+// server on the node's own address (a Caddy beside the node), when the node's certificate
+// is publicly trusted for every name REALITY shows: one site, one server on the address.
+// A state without a site takes it away.
+func (s *Syncer) fitToSite(t proto.Template, st nodeapi.DesiredState, n db.Node) proto.Template {
 	served := servedSite(s.health.Load())
 	if st.Site == nil || served.Hash == "" {
 		return t
@@ -93,9 +101,10 @@ func (s *Syncer) fitToSite(t proto.Template, st nodeapi.DesiredState) proto.Temp
 			out["fallback"] = served.HTTP
 		}
 	}
-	if r, ok := t["reality-config"].(map[string]any); ok && served.HTTPS != "" && st.SelfStealPort > 0 {
+	if r, ok := t["reality-config"].(map[string]any); ok && served.HTTPS != "" {
 		self := strconv.Itoa(st.SelfStealPort)
-		if dest, _ := r["dest"].(string); dest == "127.0.0.1:"+self || dest == "localhost:"+self {
+		dest, _ := r["dest"].(string)
+		if st.SelfStealPort > 0 && (dest == "127.0.0.1:"+self || dest == "localhost:"+self) || s.ownWebServer(dest, r["server-names"], n) {
 			rc := make(map[string]any, len(r))
 			for k, v := range r {
 				rc[k] = v
@@ -105,4 +114,59 @@ func (s *Syncer) fitToSite(t proto.Template, st nodeapi.DesiredState) proto.Temp
 		}
 	}
 	return out
+}
+
+// ownWebServer: dest is on the node's own address and the node's certificate is publicly
+// trusted for every name REALITY shows, so the node's site can stand in for that server
+// with nothing for a client or a scanner to tell apart but the server itself.
+func (s *Syncer) ownWebServer(dest string, names any, n db.Node) bool {
+	host, _, err := net.SplitHostPort(dest)
+	if err != nil || host == "" || host != n.PublicHost && !strings.EqualFold(host, n.Domain) {
+		return false
+	}
+	list, _ := names.([]any)
+	if len(list) == 0 || s.tls == nil {
+		return false
+	}
+	files, err := s.tls()
+	if err != nil || files == nil {
+		return false
+	}
+	for _, v := range list {
+		name, _ := v.(string)
+		if name == "" || !publiclyTrusted(files.CertPEM, name) {
+			return false
+		}
+	}
+	return true
+}
+
+// siteRoots are the roots publiclyTrusted checks against; nil is the system's (tests set
+// their own).
+var siteRoots *x509.CertPool
+
+// publiclyTrusted: the chain in chainPEM verifies against the system's roots for name.
+func publiclyTrusted(chainPEM, name string) bool {
+	var leaf *x509.Certificate
+	inter := x509.NewCertPool()
+	for rest := []byte(chainPEM); ; {
+		var block *pem.Block
+		if block, rest = pem.Decode(rest); block == nil {
+			break
+		}
+		c, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return false
+		}
+		if leaf == nil {
+			leaf = c
+		} else {
+			inter.AddCert(c)
+		}
+	}
+	if leaf == nil {
+		return false
+	}
+	_, err := leaf.Verify(x509.VerifyOptions{DNSName: name, Intermediates: inter, Roots: siteRoots})
+	return err == nil
 }
