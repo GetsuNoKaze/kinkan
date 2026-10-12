@@ -456,6 +456,7 @@ function NodeUpdate({ n }: { n: Node }) {
       </p>
     );
   }
+  if (kinkanNodeUpdate(n)) return <KinkanNodeUpdate n={n} />; // Kinkan
   if (u?.state === "failed") {
     return (
       <p className="mt-3 text-[13px] text-[var(--berry-600)]" role="alert">
@@ -680,3 +681,4 @@ function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: () => v
 // Kinkan: the fork's buttons on a node's card. Imports are hoisted; this one stays at the
 // end so that merges from upstream do not meet it among Mikan's.
 import { KinkanNodeButtons } from "./kinkan-node";
+import { KinkanNodeUpdate, kinkanNodeUpdate } from "./kinkan-node-update"; // Kinkan

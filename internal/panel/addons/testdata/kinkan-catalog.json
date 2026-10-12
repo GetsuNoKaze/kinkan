@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "updated": "2026-10-11T21:42:01Z",
+  "adapters": [
+    {
+      "id": "cryptobot",
+      "category": "payments",
+      "name": {
+        "en": "CryptoBot",
+        "ru": "CryptoBot"
+      },
+      "description": {
+        "en": "Cryptocurrency via @CryptoBot in Telegram",
+        "ru": "Криптовалюта через @CryptoBot в Telegram"
+      },
+      "version": "1.0.4",
+      "protocol": 1,
+      "image": "ghcr.io/getmikan/adapter-cryptobot",
+      "digest": "sha256:965dc7e5bb7dc8dd534ac5df017e8c45d0ec54e1b81755f3b0a1f610ce6be926",
+      "min_panel": "0.4.3",
+      "homepage": "https://github.com/getmikan/marketplace/tree/main/payments/cryptobot"
+    },
+    {
+      "id": "platega",
+      "category": "payments",
+      "name": {
+        "en": "Platega",
+        "ru": "Platega"
+      },
+      "description": {
+        "en": "SBP, cards, Sberpay and crypto through Platega",
+        "ru": "СБП, карты, Sberpay, криптовалюта через Platega"
+      },
+      "version": "1.0.5",
+      "protocol": 1,
+      "image": "ghcr.io/getmikan/adapter-platega",
+      "digest": "sha256:8d4138cf11bb50cae869bf50f5e704304ce37077ef31afe74be0613fbeccf865",
+      "min_panel": "0.4.3",
+      "homepage": "https://github.com/getmikan/marketplace/tree/main/payments/platega"
+    },
+    {
+      "id": "rollypay",
+      "category": "payments",
+      "name": {
+        "en": "RollyPay",
+        "ru": "RollyPay"
+      },
+      "description": {
+        "en": "SBP, cards and crypto through RollyPay",
+        "ru": "СБП, карты и криптовалюта через RollyPay"
+      },
+      "version": "1.0.5",
+      "protocol": 1,
+      "image": "ghcr.io/getmikan/adapter-rollypay",
+      "digest": "sha256:222de1e290cd225467371bd39f6a590bbc1eec8ff7a12e9f3f18c8875c9175f9",
+      "min_panel": "0.4.3",
+      "homepage": "https://github.com/getmikan/marketplace/tree/main/payments/rollypay"
+    },
+    {
+      "id": "telegram",
+      "category": "tools",
+      "name": {
+        "en": "Telegram bot",
+        "ru": "Telegram-бот"
+      },
+      "description": {
+        "en": "The official mikan bot: subscription menu, purchases, devices, notices",
+        "ru": "Официальный бот mikan: меню подписки, покупка, устройства, уведомления"
+      },
+      "version": "0.5.1.0-rc.6",
+      "protocol": 2,
+      "kind": "bot",
+      "mode": "client",
+      "permissions": [
+        "bot",
+        "users:read",
+        "users:write",
+        "billing:invoice",
+        "events",
+        "kv"
+      ],
+      "resources": {
+        "mem_mb": 128
+      },
+      "image": "ghcr.io/getmikan/tool-telegram",
+      "digest": "sha256:b0db3343551161fb16ad562900ed66151f63ff3673d39d6fad8b47713b352004",
+      "min_panel": "0.5.1.0-rc.6",
+      "homepage": "https://github.com/Miroshka000/mikan"
+    },
+    {
+      "id": "yookassa",
+      "category": "payments",
+      "name": {
+        "en": "YooKassa",
+        "ru": "ЮKassa"
+      },
+      "description": {
+        "en": "Bank cards and SBP",
+        "ru": "Банковские карты и СБП"
+      },
+      "version": "1.0.4",
+      "protocol": 1,
+      "image": "ghcr.io/getmikan/adapter-yookassa",
+      "digest": "sha256:a97ac6b5c2a987d8421d1e119fd9011f014c85f8c94c64805216f2708a23e987",
+      "min_panel": "0.4.3",
+      "homepage": "https://github.com/getmikan/marketplace/tree/main/payments/yookassa"
+    }
+  ]
+}

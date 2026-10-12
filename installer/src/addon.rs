@@ -132,7 +132,7 @@ pub fn parse_catalog(data: &[u8], sig: &str, key: &VerifyingKey, panel: &str) ->
 pub fn catalog(panel: &str) -> Result<Vec<Entry>> {
     let data = net::get(CATALOG_URL, 1 << 20).context("download the marketplace catalog")?;
     let sig = net::get(&format!("{CATALOG_URL}.sig"), 4096).context("download the catalog's signature")?;
-    let entries = parse_catalog(&data, &String::from_utf8_lossy(&sig), &release::key()?, panel)?;
+    let entries = parse_catalog(&data, &String::from_utf8_lossy(&sig), &kinkan_catalog_key()?, panel)?; // Kinkan
     not_older(Path::new(CATALOG_SEEN), &data)?;
     Ok(entries)
 }
@@ -728,5 +728,30 @@ mod tests {
             assert!(y.contains(want), "no {want} in\n{y}");
         }
         assert!(!y.contains("cap_add"), "an adapter needs no capability");
+    }
+}
+
+/// Kinkan: the marketplace is Mikan's (getmikan/marketplace), and its catalog is signed with
+/// Mikan's release key, not the fork's. The adapters themselves still come only from
+/// ghcr.io/getmikan by digest (valid_image).
+const KINKAN_CATALOG_KEY: &str = "Z3wSIPBSaJxh5CsGO8eINI0aM0kyrQ46EcJSNeH85W8=";
+
+fn kinkan_catalog_key() -> Result<ed25519_dalek::VerifyingKey> {
+    use base64::Engine as _;
+    let raw: [u8; 32] =
+        base64::engine::general_purpose::STANDARD.decode(KINKAN_CATALOG_KEY)?.try_into().map_err(|_| anyhow::anyhow!("bad catalog key"))?;
+    Ok(ed25519_dalek::VerifyingKey::from_bytes(&raw)?)
+}
+
+#[cfg(test)]
+mod kinkan_tests {
+    #[test]
+    fn the_catalog_key_is_mikans_and_matches_the_panel() {
+        assert!(super::kinkan_catalog_key().is_ok());
+        let go = include_str!("../../internal/panel/addons/kinkan.go");
+        assert!(
+            go.contains(&format!("const kinkanCatalogKey = \"{}\"", super::KINKAN_CATALOG_KEY)),
+            "the panel checks the catalog with another key"
+        );
     }
 }
