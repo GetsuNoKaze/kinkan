@@ -57,9 +57,9 @@ func sourceOf(ip netip.Addr) netip.Prefix {
 
 type Metadata struct{ ASN, Organization, Country, PTR, Scanner, Evidence string }
 type key struct {
-	Day                                   int64
-	IP, Inbound, Protocol, Reason, Method string
-	Client                                bool
+	Day                                        int64
+	IP, Inbound, Protocol, Reason, Method, TLS string
+	Client                                     bool
 }
 type Journal struct {
 	mu        sync.Mutex
@@ -117,10 +117,10 @@ func Open(path string) (*Journal, error) {
 	return j, nil
 }
 func keyOf(r nodeapi.ScannerRecord) key {
-	return key{r.Day, r.IP, r.Inbound, r.Protocol, r.Reason, r.Method, r.Client}
+	return key{r.Day, r.IP, r.Inbound, r.Protocol, r.Reason, r.Method, r.TLS, r.Client}
 }
 func (j *Journal) Record(r nodeapi.ScannerRecord, now time.Time) bool {
-	if len(r.Inbound) > 128 || len(r.Protocol) > 32 || len(r.Reason) > 48 || len(r.Method) > 16 {
+	if len(r.Inbound) > 128 || len(r.Protocol) > 32 || len(r.Reason) > 48 || len(r.Method) > 16 || len(r.TLS) > 64 {
 		return false
 	}
 	ip, err := netip.ParseAddr(r.IP)

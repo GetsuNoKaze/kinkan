@@ -3952,6 +3952,7 @@ export interface components {
             ptr?: string;
             reason: string;
             scanner: string;
+            tls?: string;
         };
         ScannerStatusView: {
             /**

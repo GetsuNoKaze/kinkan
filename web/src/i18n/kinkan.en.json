@@ -137,7 +137,19 @@
     "clear": "Clear journal",
     "clearTitle": "Clear the scanner journal?",
     "clearText": "The node starts its journal over and the panel deletes its copy. The records cannot be brought back. The node must be online.",
-    "cleared": "Scanner journal cleared"
+    "cleared": "Scanner journal cleared",
+    "tls": {
+      "other": "unknown program",
+      "noName": "no site name: sweeping addresses",
+      "oldTLS": "old TLS: a scanner or a script",
+      "noALPN": "no ALPN: a script or a scanner",
+      "browserLike": "like a browser (or a program posing as one)",
+      "program": "a program, not a browser",
+      "shared": "One program from many addresses: what a scan through a proxy network looks like.",
+      "sharedRow": "{ips} addresses, {n} attempts",
+      "sameAs": "{n} addresses share this fingerprint",
+      "title": "TLS fingerprint (JA4): how a program opens a TLS connection"
+    }
   },
   "quietNode": {
     "title": "Quiet node",

@@ -26,12 +26,14 @@ func IsScannerUnsupported(err error) bool {
 // ScannerRecord contains rejected-auth metadata only, aggregated by day/source.
 // An unauthenticated request may be a browser; it is not proof of a scanner.
 type ScannerRecord struct {
-	Day          int64  `json:"day"`
-	IP           string `json:"ip"`
-	Inbound      string `json:"inbound"`
-	Protocol     string `json:"protocol"`
-	Reason       string `json:"reason"`
-	Method       string `json:"method,omitempty"`
+	Day      int64  `json:"day"`
+	IP       string `json:"ip"`
+	Inbound  string `json:"inbound"`
+	Protocol string `json:"protocol"`
+	Reason   string `json:"reason"`
+	Method   string `json:"method,omitempty"`
+	// TLS is the JA4 fingerprint of the client's ClientHello, where the listener saw one.
+	TLS          string `json:"tls,omitempty"`
 	Client       bool   `json:"client"`
 	Count        int64  `json:"count"`
 	First        int64  `json:"first"`
