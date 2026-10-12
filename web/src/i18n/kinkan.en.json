@@ -207,5 +207,9 @@
     "passwordHint": "A rollback starts only with the password: a stolen session is not enough.",
     "requested": "Rollback requested. Automatic updates are off.",
     "waiting": "Waiting for the host. The panel may briefly disconnect; reload after it restarts."
+  },
+  "kinkanNodeUpdate": {
+    "failed": "The node could not be updated, it runs {from}: {e}",
+    "onMikan": "The node runs Mikan {from}, and its installer knows only Mikan releases, so the panel cannot move it to Kinkan. Run this once on the node's server; after that it follows the panel ({v}):"
   }
 }
