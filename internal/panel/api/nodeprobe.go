@@ -106,6 +106,7 @@ func (h *handlers) probeNode(ctx context.Context, in *nodeProbeInput) (*nodeProb
 			cfg.Protocol = "invalid"
 		} else {
 			cfg.Protocol = template.Type()
+			kinkanProbeTransport(&cfg, template) // Kinkan
 			view.Network = template.Network()
 		}
 		// Ranges remain explicitly incomplete; never silently scan a different port.

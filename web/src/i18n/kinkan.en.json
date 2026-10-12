@@ -207,5 +207,17 @@
     "passwordHint": "A rollback starts only with the password: a stolen session is not enough.",
     "requested": "Rollback requested. Automatic updates are off.",
     "waiting": "Waiting for the host. The panel may briefly disconnect; reload after it restarts."
+  },
+  "wrongKey": {
+    "site": "Wrong key: behaves like the cover site",
+    "different": "Wrong key: differs from the cover site",
+    "exposed": "Wrong key: exposes the protocol",
+    "inconclusive": "Wrong key: inconclusive",
+    "endpoint": "Endpoint",
+    "response": "Response",
+    "close": "Close",
+    "elapsed": "Observation time",
+    "target": "Inbound",
+    "reference": "Cover site"
   }
 }

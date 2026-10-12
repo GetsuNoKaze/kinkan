@@ -18,6 +18,7 @@ import (
 func Run(ctx context.Context, args []string, out, stderr io.Writer) error {
 	f := flag.NewFlagSet("kinkan probe", flag.ContinueOnError)
 	f.SetOutput(stderr)
+	kinkan := kinkanProbeFlags(f) // Kinkan
 	protocol := f.String("protocol", "trusttunnel", "inbound type: vless, vmess, trojan, anytls, trusttunnel, hysteria2, tuic, shadowquic, shadowsocks, snell, sudoku, mieru")
 	ref := f.String("reference", "", "HTTPS cover on the same node (QUIC probes compare HTTP/3)")
 	address := f.String("address", "", "pin target and cover connections to this IP; retain SNI and Host")
@@ -58,7 +59,7 @@ func Run(ctx context.Context, args []string, out, stderr io.Writer) error {
 			return errors.New("usage: kinkan probe [--protocol TYPE] [--reference HTTPS_URL] [--address IP] [--json] HTTPS_URL; or --inbounds FILE")
 		}
 		// Existing invocations retain their report shape, output and exit semantics.
-		if *protocol == "trusttunnel" && !*obfs {
+		if *protocol == "trusttunnel" && !*obfs && kinkan.legacy() { // Kinkan
 			legacy := []string{"--timeout", timeout.String()}
 			if *ref != "" {
 				legacy = append(legacy, "--reference", *ref)
@@ -77,6 +78,7 @@ func Run(ctx context.Context, args []string, out, stderr io.Writer) error {
 	reports := make([]Report, 0, len(configs))
 	failed, incomplete := 0, 0
 	for _, cfg := range configs {
+		kinkan.apply(&cfg) // Kinkan
 		cfg.Timeout = *timeout
 		r, err := Scan(ctx, cfg)
 		if err != nil {

@@ -455,6 +455,42 @@
         ],
         "type": "object"
       },
+      "AuthObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "close": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "elapsed_ms": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "status": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "bytes",
+          "elapsed_ms",
+          "close"
+        ],
+        "type": "object"
+      },
       "AutoEvent": {
         "additionalProperties": false,
         "properties": {
@@ -5130,6 +5166,9 @@
               "inconclusive"
             ],
             "type": "string"
+          },
+          "wrong_key": {
+            "$ref": "#/components/schemas/WrongKeyComparison"
           }
         },
         "required": [
@@ -7990,6 +8029,35 @@
           "plus",
           "routes",
           "inbounds"
+        ],
+        "type": "object"
+      },
+      "WrongKeyComparison": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "reference": {
+            "$ref": "#/components/schemas/AuthObservation"
+          },
+          "target": {
+            "$ref": "#/components/schemas/AuthObservation"
+          },
+          "verdict": {
+            "enum": [
+              "site",
+              "different",
+              "exposed",
+              "inconclusive"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "verdict",
+          "reason",
+          "target"
         ],
         "type": "object"
       },
