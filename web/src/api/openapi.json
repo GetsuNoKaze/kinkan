@@ -5421,6 +5421,17 @@
       "RollbackInputBody": {
         "additionalProperties": false,
         "properties": {
+          "password": {
+            "description": "Пароль админа: откат не запускается из одной лишь украденной сессии",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "totp": {
+            "description": "Код из приложения, если включена 2FA",
+            "maxLength": 16,
+            "type": "string"
+          },
           "version": {
             "maxLength": 80,
             "minLength": 1,
@@ -5428,7 +5439,8 @@
           }
         },
         "required": [
-          "version"
+          "version",
+          "password"
         ],
         "type": "object"
       },

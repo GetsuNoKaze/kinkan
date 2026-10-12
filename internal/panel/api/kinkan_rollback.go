@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 	"mikan/internal/panel/settings"
@@ -13,7 +14,9 @@ import (
 type rollbackOutput struct{ Body updates.Rollback }
 type rollbackInput struct {
 	Body struct {
-		Version string `json:"version" minLength:"1" maxLength:"80"`
+		Version  string `json:"version" minLength:"1" maxLength:"80"`
+		Password string `json:"password" minLength:"1" maxLength:"256" doc:"Пароль админа: откат не запускается из одной лишь украденной сессии"`
+		TOTP     string `json:"totp,omitempty" maxLength:"16" doc:"Код из приложения, если включена 2FA"`
 	}
 }
 
@@ -40,6 +43,13 @@ func (h *handlers) requestRollback(ctx context.Context, in *rollbackInput) (*rol
 	v := u.Rollback()
 	if !v.Available || v.Version != in.Body.Version {
 		return nil, huma.Error409Conflict("rollback_unavailable")
+	}
+	admin, err := h.d.Store.Q.GetAdmin(ctx, sessionOf(ctx).AdminID)
+	if err != nil {
+		return nil, err
+	}
+	if err = h.reauth(ctx, admin, in.Body.Password, strings.TrimSpace(in.Body.TOTP)); err != nil {
+		return nil, err
 	}
 	// Persist before queuing: the restarted old panel must not re-enable automatic
 	// updates from settings and immediately undo the rollback.
