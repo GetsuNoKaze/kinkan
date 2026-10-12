@@ -85,7 +85,7 @@ func TestNoiseCloseRemainsInconclusive(t *testing.T) {
 	if err != nil || r.Verdict != "inconclusive" || !r.Incomplete {
 		t.Fatalf("timing became a clean verdict: %+v %v", r, err)
 	}
-	if len(r.Findings) != 3 {
+	if len(r.Findings) != 4 || r.WrongKey == nil || r.WrongKey.Verdict != "inconclusive" {
 		t.Fatalf("missing random-byte observations: %+v", r)
 	}
 }
@@ -111,7 +111,11 @@ func TestHTTPSCoverAndLegacyCLI(t *testing.T) {
 	defer s.Close()
 	roots := x509.NewCertPool()
 	roots.AddCert(s.Certificate())
-	r, err := Scan(context.Background(), Config{Protocol: "vless", Target: s.URL, Reference: s.URL, Timeout: time.Second, TLS: &tls.Config{RootCAs: roots}})
+	ref := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("cover")) }))
+	ref.EnableHTTP2 = true
+	ref.StartTLS()
+	defer ref.Close()
+	r, err := Scan(context.Background(), Config{Protocol: "vless", Target: s.URL, Reference: ref.URL, Timeout: time.Second, TLS: &tls.Config{RootCAs: roots}})
 	if err != nil {
 		t.Fatal(err)
 	}

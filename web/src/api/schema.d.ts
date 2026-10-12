@@ -2085,6 +2085,18 @@ export interface components {
              */
             next: number;
         };
+        AuthObservation: {
+            /** Format: int64 */
+            bytes: number;
+            close: string;
+            detail?: string;
+            /** Format: int64 */
+            elapsed_ms: number;
+            kind: string;
+            sha256?: string;
+            /** Format: int64 */
+            status?: number;
+        };
         AutoEvent: {
             /** Format: date-time */
             at: string;
@@ -3751,6 +3763,7 @@ export interface components {
             target: string;
             /** @enum {string} */
             verdict: "quiet" | "noticeable" | "exposed" | "inconclusive";
+            wrong_key?: components["schemas"]["WrongKeyComparison"];
         };
         PutSubImageInputBody: {
             /** @description Картинка в base64: PNG, JPEG или WebP; логотип до 512 КБ, фон до 2 МБ. SVG не принимается */
@@ -4777,6 +4790,13 @@ export interface components {
             source?: "register" | "import" | "";
             /** @description Последняя проверка выхода через WARP с ноды; нет — у ноды ещё нет настроенного WARP */
             status?: components["schemas"]["WarpCheck"];
+        };
+        WrongKeyComparison: {
+            reason: string;
+            reference?: components["schemas"]["AuthObservation"];
+            target: components["schemas"]["AuthObservation"];
+            /** @enum {string} */
+            verdict: "site" | "different" | "exposed" | "inconclusive";
         };
         XHTTPTuning: {
             /**

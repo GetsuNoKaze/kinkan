@@ -211,5 +211,17 @@
   "kinkanNodeUpdate": {
     "failed": "The node could not be updated, it runs {from}: {e}",
     "onMikan": "The node runs Mikan {from}, and its installer knows only Mikan releases, so the panel cannot move it to Kinkan. Run this once on the node's server; after that it follows the panel ({v}):"
+  },
+  "wrongKey": {
+    "site": "Wrong key: behaves like the cover site",
+    "different": "Wrong key: differs from the cover site",
+    "exposed": "Wrong key: exposes the protocol",
+    "inconclusive": "Wrong key: inconclusive",
+    "endpoint": "Endpoint",
+    "response": "Response",
+    "close": "Close",
+    "elapsed": "Observation time",
+    "target": "Inbound",
+    "reference": "Cover site"
   }
 }
