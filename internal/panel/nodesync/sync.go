@@ -230,7 +230,7 @@ func (s *Syncer) desired(ctx context.Context) (nodeapi.DesiredState, error) {
 			bad = append(bad, in.Name+": "+err.Error())
 			continue
 		}
-		t = s.fitToSite(t, st) // Kinkan: TrustTunnel's fallback and REALITY on the node's site
+		t = s.fitToSite(t, st, n) // Kinkan: TrustTunnel's fallback and REALITY on the node's site
 		ni := nodeapi.Inbound{Name: in.Name, Listen: in.Listen, Port: in.Port, Config: t.JSON()}
 		if in.PoolID.Valid {
 			ni.Pool = strconv.FormatInt(in.PoolID.Int64, 10)
