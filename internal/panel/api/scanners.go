@@ -105,9 +105,10 @@ func (h *handlers) scannersOf(ctx context.Context, in *scannerInput) (*scannerOu
 		}
 	}
 	current := days[len(days)-1].Count
+	spike := scannerSpike(current, prior, status.Since, today)
 	// The panel's own checks (Nodes → the check) come from its address and are not
 	// scanners: they stay out of Count and so out of the spike.
-	return &scannerOutput{Body: ScannerView{Status: scannerStatusView(status), Records: records, Days: days, Spike: current >= 100 && current > 3*max(1, prior/7), Coverage: "TrustTunnel unauthenticated HTTP; REALITY rejected handshakes; TUIC timeout/wrong auth; Hysteria2 rejected /auth; AnyTLS wrong auth. Ordinary Hysteria2 HTTP, pre-QUIC/obfs failures and other protocols are not recorded yet."}}, nil
+	return &scannerOutput{Body: ScannerView{Status: scannerStatusView(status), Records: records, Days: days, Spike: spike, Coverage: "TrustTunnel unauthenticated HTTP; REALITY rejected handshakes; TUIC timeout/wrong auth; Hysteria2 rejected /auth; AnyTLS wrong auth. Ordinary Hysteria2 HTTP, pre-QUIC/obfs failures and other protocols are not recorded yet."}}, nil
 }
 
 // panelAddrs are the panel's public addresses: what its domain and public host lead to.
@@ -157,4 +158,16 @@ func scannerStatusView(st store.ScannerStatus) ScannerStatusView {
 		v.ErrorAt = &t
 	}
 	return v
+}
+
+// scannerSpike: today's count is at least 100 and over three times the daily average of
+// the previous days the journal was collected (up to 7). Fewer than 3 whole days of
+// collection are no baseline: on a node just moved to Kinkan every past day reads zero,
+// and its usual background would look like a sudden spike.
+func scannerSpike(current, prior, since, today int64) bool {
+	if since == 0 || since > today-3*86400 {
+		return false
+	}
+	known := min(int64(7), (today-since)/86400)
+	return current >= 100 && current > 3*max(1, prior/known)
 }

@@ -4,7 +4,11 @@ package authevent
 
 import "sync/atomic"
 
-type Event struct{ Protocol, Local, Remote, Reason, Method string }
+type Event struct {
+	Protocol, Local, Remote, Reason, Method string
+	// TLS is the JA4 fingerprint of the client's ClientHello, when the listener saw one.
+	TLS string
+}
 type handler struct{ fn func(Event) }
 
 var sink atomic.Pointer[handler]

@@ -5917,6 +5917,9 @@
           },
           "scanner": {
             "type": "string"
+          },
+          "tls": {
+            "type": "string"
           }
         },
         "required": [

@@ -36,10 +36,10 @@ func (s *Store) SaveScanners(ctx context.Context, nodeID int64, snap nodeapi.Sca
 		if r.Day < cutoff || r.Day > now.Add(24*time.Hour).Unix() {
 			continue
 		}
-		if _, err := netip.ParseAddr(r.IP); err != nil || r.Count <= 0 || r.Count > 1<<50 || len(r.Inbound) > 128 || len(r.Protocol) > 32 || len(r.Reason) > 48 || len(r.Method) > 16 || len(r.PTR) > 253 || len(r.Organization) > 512 || len(r.Country) > 16 || len(r.Scanner) > 32 || len(r.ASN) > 16 || len(r.Evidence) > 64 {
+		if _, err := netip.ParseAddr(r.IP); err != nil || r.Count <= 0 || r.Count > 1<<50 || len(r.Inbound) > 128 || len(r.Protocol) > 32 || len(r.Reason) > 48 || len(r.Method) > 16 || len(r.PTR) > 253 || len(r.Organization) > 512 || len(r.Country) > 16 || len(r.Scanner) > 32 || len(r.ASN) > 16 || len(r.Evidence) > 64 || len(r.TLS) > 64 {
 			return errors.New("invalid scanner record")
 		}
-		key := fmt.Sprintf("%d\x00%s\x00%s\x00%s\x00%s\x00%s\x00%t", r.Day, r.IP, r.Inbound, r.Protocol, r.Reason, r.Method, r.Client)
+		key := scannerRecordKey(r)
 		batch = append(batch, item{Key: fmt.Sprintf("%x", sha256.Sum256([]byte(key))), Day: r.Day, Count: r.Count, Payload: r})
 	}
 	raw, err := json.Marshal(batch)
@@ -88,7 +88,7 @@ func (s *Store) ScannerRows(ctx context.Context, nodeID int64, now time.Time) ([
 			return nil, err
 		}
 		r.Count = count
-		key := fmt.Sprintf("%d\x00%s\x00%s\x00%s\x00%s\x00%s\x00%t", r.Day, r.IP, r.Inbound, r.Protocol, r.Reason, r.Method, r.Client)
+		key := scannerRecordKey(r)
 		if i, ok := byKey[key]; ok {
 			out[i].Count += r.Count
 			out[i].First = min(out[i].First, r.First)
@@ -111,6 +111,9 @@ type ScannerStatus struct {
 	Dropped     int64  `json:"dropped,omitempty"`
 	Observer    string `json:"observer,omitempty"`
 	Unsupported bool   `json:"unsupported,omitempty"`
+	// Since is when the journal began to be collected (first pull, or the first after a
+	// clear): days before it are unknown, not quiet.
+	Since int64 `json:"since,omitempty"`
 }
 
 func scannerStatusKey(nodeID int64) string { return "kinkan_scanners/" + strconv.FormatInt(nodeID, 10) }
@@ -135,4 +138,14 @@ func (s *Store) SetScannerStatus(ctx context.Context, nodeID int64, st ScannerSt
 		return err
 	}
 	return s.Q.SetNodeState(ctx, db.SetNodeStateParams{Key: scannerStatusKey(nodeID), Value: string(raw)})
+}
+
+// scannerRecordKey tells records apart. A record with a TLS fingerprint is one of its own;
+// one without keeps the key it had before fingerprints, so stored rows stay the same.
+func scannerRecordKey(r nodeapi.ScannerRecord) string {
+	key := fmt.Sprintf("%d\x00%s\x00%s\x00%s\x00%s\x00%s\x00%t", r.Day, r.IP, r.Inbound, r.Protocol, r.Reason, r.Method, r.Client)
+	if r.TLS != "" {
+		key += "\x00" + r.TLS
+	}
+	return key
 }
