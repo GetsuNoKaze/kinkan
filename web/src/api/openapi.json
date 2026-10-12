@@ -2368,6 +2368,111 @@
         ],
         "type": "object"
       },
+      "LeakEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "countries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "country_threshold": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "first_seen": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "last_seen": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "network_threshold": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "networks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "user_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "window_minutes": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "user_id",
+          "first_seen",
+          "last_seen",
+          "window_minutes",
+          "network_threshold",
+          "country_threshold",
+          "networks",
+          "countries"
+        ],
+        "type": "object"
+      },
+      "LeakPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "countries": {
+            "format": "int64",
+            "maximum": 100,
+            "minimum": 2,
+            "type": "integer"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "networks": {
+            "format": "int64",
+            "maximum": 100,
+            "minimum": 2,
+            "type": "integer"
+          },
+          "window_minutes": {
+            "format": "int64",
+            "maximum": 60,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "networks",
+          "countries",
+          "window_minutes"
+        ],
+        "type": "object"
+      },
+      "LeakUserOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/LeakEvent"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "type": "object"
+      },
       "LegacyLinks": {
         "additionalProperties": false,
         "properties": {
@@ -9543,6 +9648,78 @@
         ]
       }
     },
+    "/api/v1/kinkan/leak-policy": {
+      "get": {
+        "operationId": "get-leak-policy",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeakPolicy"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Настройки детектора подписок",
+        "tags": [
+          "user"
+        ],
+        "x-session-only": true
+      },
+      "put": {
+        "operationId": "set-leak-policy",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeakPolicy"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeakPolicy"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Изменить настройки детектора подписок",
+        "tags": [
+          "user"
+        ],
+        "x-session-only": true
+      }
+    },
     "/api/v1/metrics": {
       "get": {
         "description": "Пользователи по состояниям, онлайн, трафик, ноды и подключения. Для Prometheus и Grafana: ключ на чтение в заголовке Authorization: Bearer.",
@@ -14248,6 +14425,50 @@
         "tags": [
           "users"
         ]
+      }
+    },
+    "/api/v1/users/{id}/leak-events": {
+      "get": {
+        "operationId": "get-user-leak-events",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeakUserOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Подозрительное использование подписки",
+        "tags": [
+          "user"
+        ],
+        "x-session-only": true
       }
     },
     "/api/v1/users/{id}/pools": {
