@@ -6,6 +6,9 @@ import (
 )
 
 func TestKinkanQuietDefaults(t *testing.T) {
+	saved := append([]Info(nil), All...)
+	t.Cleanup(func() { All = saved })
+	KinkanQuiet()
 	for _, p := range All {
 		if p.ID == "tuic_v5" && p.Default {
 			t.Fatal("TUIC v5 is on by default; one probe tells such a node apart")

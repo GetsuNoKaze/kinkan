@@ -1,9 +1,10 @@
 package presets
 
-// Kinkan: a quiet node by default. A fresh install and a new node get only the
-// connections that do not give the node away to a single probe, and the cards say which
-// presets do.
-func init() {
+// KinkanQuiet makes a quiet node the default: a fresh install and a new node get only
+// the connections that do not give the node away to a single probe, and the cards say
+// which presets do. The panel command calls it at start (cmd/mikan/kinkan.go); Mikan's
+// own tests keep Mikan's defaults.
+func KinkanQuiet() {
 	for i := range All {
 		switch All[i].ID {
 		case "tuic_v5":
