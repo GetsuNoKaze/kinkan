@@ -2,6 +2,16 @@
 
 Fork release notes. Upstream history remains in CHANGELOG.md.
 
+## 0.5.0.5-tt.13
+### en
+- TrustTunnel: the admin chooses how many connections clients may keep to an inbound (1 to 8, default 1), on the inbound's page; subscriptions carry it as `max-connections`. Clients with the fix in getmikan/Citrus#54 open at most that many TLS connections; older clients limit only their pool and can still open several connections at a cold start.
+- REALITY: a server name that belongs to the panel or to another node is refused when the inbound is saved. The target on this node answers with its own certificate, so clients sending that name never connect; this is how VLESS stopped working on two nodes on 12.10.
+- Mikan's NOTICE and TRADEMARK are followed: the panel credits Mikan (Copyright (C) 2026 Miroshka and Mikan), says that Kinkan is a modified version, and no longer shows the name mikan. NOTICE.md and TRADEMARK.md are Mikan's, NOTICE-KINKAN.md is the fork's.
+### ru
+- TrustTunnel: админ выбирает, сколько соединений клиенты могут держать к подключению (от 1 до 8, по умолчанию 1), на странице подключения; подписка передаёт это как `max-connections`. Клиенты с правкой из getmikan/Citrus#54 открывают не больше стольких TLS-соединений; старые клиенты ограничивают только свой пул и при холодном старте всё ещё могут открыть несколько соединений.
+- REALITY: имя сервера, которое принадлежит панели или другой ноде, не даёт сохранить подключение. Цель на этой ноде отвечает своим сертификатом, и клиенты с таким именем не подключаются; так 12.10 перестал работать VLESS на двух нодах.
+- Соблюдаются NOTICE и TRADEMARK Mikan: панель указывает авторство Mikan (Copyright (C) 2026 Miroshka and Mikan), говорит, что Kinkan — изменённая версия, и больше не показывает имя mikan. NOTICE.md и TRADEMARK.md — файлы Mikan, NOTICE-KINKAN.md — форка.
+
 ## 0.5.0.5-tt.12
 ### en
 - Node site, answering like Caddy 2.11: another Host (or none, as a bare HTTP/2 preface has) gets an empty 200, CONNECT to the site a 308 to /, errors the site's own 404.html with the file's headers, and the ETag is Caddy 2.11's. The site's names are the node's certificate's.
