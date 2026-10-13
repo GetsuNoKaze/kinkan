@@ -87,7 +87,7 @@ kinkan probe --protocol vless --reference https://cover.example.com:8444 https:/
 
 Users and plans, client-specific subscriptions, Telegram bot and Mini App, supported payment providers, multiple nodes, WARP and cascades, HTTPS, 2FA, audit, backups and an integration API remain available. Protocol support includes VLESS/REALITY, Trojan, Hysteria2, TUIC, AnyTLS, TrustTunnel and others; client compatibility and per-user accounting vary by protocol. See [Mikan's compatibility table](https://github.com/Miroshka000/mikan#protocols).
 
-Run `kinkan` for the server menu, `kinkan status` for service health, `kinkan update` for fork releases, `kinkan backup` for backups, and `kinkan url` for the admin link. The `mikan` command also keeps working. Kinkan has its own signing key and release channel; upstream changes are synchronized through checked pull requests.
+Run `kinkan` for the server menu, `kinkan status` for service health, `kinkan update` for fork releases, `kinkan backup` for backups, and `kinkan url` for the admin link. Kinkan has its own signing key and release channel; upstream changes are synchronized through checked pull requests.
 
 ## Documentation and credits
 
@@ -95,4 +95,4 @@ Run `kinkan` for the server menu, `kinkan status` for service health, `kinkan up
 - [TrustTunnel probes](../PROBE-TT.md), [changelog](../CHANGELOG-TT.md), [roadmap](../ROADMAP.md), [report an issue](https://github.com/GetsuNoKaze/kinkan/issues).
 - Developers: run `scripts/tt/check.sh`; the full Go suite requires disposable PostgreSQL. Core changes belong in `patches/mihomo/` and are rebuilt with `scripts/tt/mihomo.sh`.
 
-Kinkan (金柑, kumquat) builds on Mikan by Miroshka000 and mihomo by MetaCubeX. It is not affiliated with either project. Code is licensed under [GNU GPL v3](../LICENSE). Demo screenshots come from Mikan; banners, diagrams and the screenshot video tour were made for Kinkan. Other translated READMEs still document upstream Mikan, including its installer commands.
+Kinkan (金柑, kumquat) builds on Mikan by Miroshka000 and mihomo by MetaCubeX. It is not affiliated with either project: Kinkan is a modified version of mikan, not mikan and not an official mikan release, and the mikan project does not check or support it. mikan: Copyright (C) 2026 Miroshka and Mikan, <https://github.com/Miroshka000/mikan>. Code is licensed under [GNU GPL v3](../LICENSE) with mikan's additional terms ([NOTICE.md](../NOTICE.md), [NOTICE-KINKAN.md](../NOTICE-KINKAN.md)); the mikan name and logo are mikan's ([TRADEMARK.md](../TRADEMARK.md)). Demo screenshots come from Mikan; banners, diagrams and the screenshot video tour were made for Kinkan. Other translated READMEs still document upstream Mikan, including its installer commands.
