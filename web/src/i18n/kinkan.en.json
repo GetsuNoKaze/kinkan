@@ -27,7 +27,8 @@
       "update_busy": "An update or rollback is already pending or running",
       "leak_policy_invalid": "Check the detector thresholds and window.",
       "config_tt_connections": "mikan.client.max-connections: a whole number from 1 to 8, TrustTunnel only",
-      "not_trusttunnel": "This inbound is not TrustTunnel"
+      "not_trusttunnel": "This inbound is not TrustTunnel",
+      "reality_sni_foreign": "The SNI belongs to the panel or another node: the REALITY target on this node answers with its own certificate and clients will not connect. Use the target's own name"
     }
   },
   "site": {
