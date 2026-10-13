@@ -25,7 +25,9 @@
       "scanner_reset_failed": "The node did not clear its journal: try again once it is online",
       "rollback_unavailable": "No compatible rollback is available: refresh the page",
       "update_busy": "An update or rollback is already pending or running",
-      "leak_policy_invalid": "Check the detector thresholds and window."
+      "leak_policy_invalid": "Check the detector thresholds and window.",
+      "config_tt_connections": "mikan.client.max-connections: a whole number from 1 to 8, TrustTunnel only",
+      "not_trusttunnel": "This inbound is not TrustTunnel"
     }
   },
   "site": {
@@ -252,5 +254,12 @@
     "saved": "Saved",
     "save": "Save",
     "loading": "Loading…"
+  },
+  "ttConnections": {
+    "label": "Client connections",
+    "hint": "The most TLS connections an app may keep to this inbound. {def} is the safest on unstable networks; more means a stalled connection takes less traffic down with it, but more handshakes. Clients get the value when they refresh the subscription.",
+    "default": "{n} (default)",
+    "apply": "Apply",
+    "saved": "Saved: clients get it when they refresh the subscription"
   }
 }

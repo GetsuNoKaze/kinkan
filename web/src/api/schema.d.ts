@@ -517,6 +517,24 @@ export interface paths {
         patch: operations["update-inbound"];
         trace?: never;
     };
+    "/api/v1/inbounds/{id}/tt-connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Соединения клиента TrustTunnel */
+        get: operations["get-tt-connections"];
+        /** Изменить соединения клиента TrustTunnel */
+        put: operations["set-tt-connections"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kinkan/leak-policy": {
         parameters: {
             query?: never;
@@ -4073,6 +4091,13 @@ export interface components {
             last_seen_at: string;
             user_agent: string;
         };
+        SetTTConnectionsInputBody: {
+            /**
+             * Format: int64
+             * @description Максимум TLS-соединений у клиента, 1–8
+             */
+            value: number;
+        };
         SettingsView: {
             admin_url: string;
             /** @description Брендинг в приложениях, читающих операторские заголовки (ClashFest, SlothClash): название, логотип, цвет, ссылки */
@@ -4608,6 +4633,17 @@ export interface components {
             t: string;
             /** Format: int64 */
             up: number;
+        };
+        TtConnectionsBody: {
+            /** Format: int64 */
+            default: number;
+            /** Format: int64 */
+            max: number;
+            /**
+             * Format: int64
+             * @description Сколько TLS-соединений клиент может держать к подключению
+             */
+            value: number;
         };
         TtProbeInputBody: {
             /** Format: int64 */
@@ -6049,6 +6085,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InboundView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-tt-connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TtConnectionsBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "set-tt-connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetTTConnectionsInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TtConnectionsBody"];
                 };
             };
             /** @description Error */
