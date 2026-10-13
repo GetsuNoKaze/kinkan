@@ -26,6 +26,9 @@
       "rollback_unavailable": "No compatible rollback is available: refresh the page",
       "update_busy": "An update or rollback is already pending or running",
       "leak_policy_invalid": "Check the detector thresholds and window.",
+      "config_managed": "kinkan fills in «{value}» itself, remove it",
+      "node_cannot_update": "This node is too old to be updated from the panel: run kinkan update on its server once",
+      "addons_unavailable": "Payment methods are installed only by the kinkan installer on the server.",
       "config_tt_connections": "mikan.client.max-connections: a whole number from 1 to 8, TrustTunnel only",
       "not_trusttunnel": "This inbound is not TrustTunnel",
       "reality_sni_foreign": "The SNI belongs to the panel or another node: the REALITY target on this node answers with its own certificate and clients will not connect. Use the target's own name"
@@ -255,6 +258,36 @@
     "saved": "Saved",
     "save": "Save",
     "loading": "Loading…"
+  },
+  "inbounds": {
+    "customMeta": "mihomo protocol settings: kinkan adds clients, port and certificate itself",
+    "customSkeleton": "# mihomo protocol settings. kinkan fills in name, port, listen,\n# users and the certificate. Types: vless, vmess, trojan, hysteria2, tuic, anytls.\ntype: trojan\nws-path: /ws\nmikan:\n  tls: node   # the node certificate, like Hysteria2 and TUIC\n"
+  },
+  "settings": {
+    "themeMikan": "Mandarin",
+    "updatesWaiting": "The server is updating kinkan…",
+    "updatesStale": "The server has not taken the request in two minutes. Update on the server with kinkan update: the old installer cannot update from the button.",
+    "updatesConfirmTitle": "Update kinkan to {v}?",
+    "newLinkText": "The old link stops working in a few seconds and we switch to the new one right away. Save it: without it you can only sign in through the server (kinkan url).",
+    "import": {
+      "sub": "Marzban, PasarGuard or Remnawave: clients come over with their limit, usage, term and device limit. Names kinkan already has are left out.",
+      "onHold": "{n} on hold: their term in kinkan starts at the import, as kinkan has no wait for the first connection"
+    },
+    "page": {
+      "cssNote": "The page's classes may change between kinkan versions. Colours are safer to change through variables: --mikan-500, --bg, --surface."
+    }
+  },
+  "nodes": {
+    "localOffline": "The VPN on the panel's server does not answer. The kinkan status command on the server shows why.",
+    "rekeyText": "The old key stops working at once, and the server is disconnected until the kinkan join command runs on it with the new key.",
+    "deleteText": "The node stops serving clients and its protocols leave the subscriptions. To clean up the server itself, run kinkan uninstall on it."
+  },
+  "cert": {
+    "cliExample": "kinkan cert set --cert /etc/letsencrypt/live/DOMAIN/fullchain.pem \\\n  --key /etc/letsencrypt/live/DOMAIN/privkey.pem"
+  },
+  "addons": {
+    "unsupported": "The panel cannot see the server's data directory: payment methods are installed only by the kinkan installer.",
+    "unreachable": "The payment method does not answer, its settings are unavailable. On the server: kinkan addon list"
   },
   "ttConnections": {
     "label": "Client connections",

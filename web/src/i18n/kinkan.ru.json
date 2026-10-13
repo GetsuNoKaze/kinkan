@@ -26,6 +26,9 @@
       "rollback_unavailable": "Совместимый откат недоступен: обнови страницу",
       "update_busy": "Обновление или откат уже ожидает запуска или выполняется",
       "leak_policy_invalid": "Проверьте пороги и окно детектора.",
+      "config_managed": "Поле «{value}» kinkan заполняет сам, уберите его",
+      "node_cannot_update": "Эта нода слишком старая, чтобы обновить её из панели: выполните kinkan update на её сервере один раз",
+      "addons_unavailable": "Способы оплаты ставит только установщик kinkan на сервере.",
       "config_tt_connections": "mikan.client.max-connections: целое число от 1 до 8, только у TrustTunnel",
       "not_trusttunnel": "Это подключение не TrustTunnel",
       "reality_sni_foreign": "SNI принадлежит панели или другой ноде: цель REALITY на этой ноде ответит своим сертификатом, и клиенты не подключатся. Укажите имя самой цели"
@@ -255,6 +258,36 @@
     "saved": "Сохранено",
     "save": "Сохранить",
     "loading": "Загрузка…"
+  },
+  "inbounds": {
+    "customMeta": "Настройки протокола mihomo: клиентов, порт и сертификат kinkan добавит сам",
+    "customSkeleton": "# Настройки протокола mihomo. Поля name, port, listen, users и сертификат\n# kinkan добавит сам. Типы: vless, vmess, trojan, hysteria2, tuic, anytls.\ntype: trojan\nws-path: /ws\nmikan:\n  tls: node   # сертификат ноды, как у Hysteria2 и TUIC\n"
+  },
+  "settings": {
+    "themeMikan": "Мандарин",
+    "updatesWaiting": "Сервер обновляет kinkan…",
+    "updatesStale": "Сервер не принял заявку за две минуты. Обновите на сервере командой kinkan update: старый установщик не умеет обновлять по кнопке.",
+    "updatesConfirmTitle": "Обновить kinkan до {v}?",
+    "newLinkText": "Старая перестанет открываться через несколько секунд, мы сразу перейдём на новую. Сохраните её: без неё войти можно только через сервер (команда kinkan url).",
+    "import": {
+      "sub": "Marzban, PasarGuard или Remnawave: клиенты переезжают с лимитом, расходом, сроком и лимитом устройств. Имена, которые уже есть в kinkan, пропускаются.",
+      "onHold": "На паузе: {n}. Их срок в kinkan пойдёт с момента импорта: ожидания первого подключения в kinkan нет"
+    },
+    "page": {
+      "cssNote": "Классы страницы могут меняться между версиями kinkan. Цвета надёжнее менять переменными: --mikan-500, --bg, --surface."
+    }
+  },
+  "nodes": {
+    "localOffline": "VPN на сервере панели не отвечает. Команда kinkan status на сервере покажет причину.",
+    "rekeyText": "Старый ключ сразу перестанет работать, и сервер отключится, пока на нём не выполнят команду kinkan join с новым ключом.",
+    "deleteText": "Нода перестанет обслуживать клиентов, её протоколы пропадут из подписок. Чтобы очистить сам сервер, выполните на нём kinkan uninstall."
+  },
+  "cert": {
+    "cliExample": "kinkan cert set --cert /etc/letsencrypt/live/ДОМЕН/fullchain.pem \\\n  --key /etc/letsencrypt/live/ДОМЕН/privkey.pem"
+  },
+  "addons": {
+    "unsupported": "Панель не видит каталог данных сервера: способы оплаты ставит только установщик kinkan.",
+    "unreachable": "Способ оплаты не отвечает, настройки недоступны. На сервере: kinkan addon list"
   },
   "ttConnections": {
     "label": "Соединений у клиента",
