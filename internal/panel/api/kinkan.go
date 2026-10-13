@@ -33,4 +33,5 @@ func (h *handlers) registerKinkan() {
 	h.registerHistory()
 	h.registerRollback()
 	h.registerLeaks()
+	h.registerTTConnections()
 }

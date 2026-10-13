@@ -297,6 +297,9 @@ func Validate(t Template, o Options) error {
 	if o := ext.Client; o.Port < 0 || o.Port > 65535 {
 		return fail("config_key", extKey+".client.port")
 	}
+	if err := kinkanValidateClient(t); err != nil { // Kinkan
+		return err
+	}
 	return validateExtra(t, o)
 }
 

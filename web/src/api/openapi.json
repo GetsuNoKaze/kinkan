@@ -6052,6 +6052,22 @@
         ],
         "type": "object"
       },
+      "SetTTConnectionsInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "value": {
+            "description": "Максимум TLS-соединений у клиента, 1–8",
+            "format": "int64",
+            "maximum": 8,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "type": "object"
+      },
       "SettingsView": {
         "additionalProperties": false,
         "properties": {
@@ -7461,6 +7477,30 @@
           "t",
           "up",
           "down"
+        ],
+        "type": "object"
+      },
+      "TtConnectionsBody": {
+        "additionalProperties": false,
+        "properties": {
+          "default": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "max": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "value": {
+            "description": "Сколько TLS-соединений клиент может держать к подключению",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "value",
+          "default",
+          "max"
         ],
         "type": "object"
       },
@@ -9714,6 +9754,100 @@
           }
         },
         "summary": "Изменить подключение",
+        "tags": [
+          "inbounds"
+        ]
+      }
+    },
+    "/api/v1/inbounds/{id}/tt-connections": {
+      "get": {
+        "operationId": "get-tt-connections",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TtConnectionsBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Соединения клиента TrustTunnel",
+        "tags": [
+          "inbounds"
+        ]
+      },
+      "put": {
+        "operationId": "set-tt-connections",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetTTConnectionsInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TtConnectionsBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Изменить соединения клиента TrustTunnel",
         "tags": [
           "inbounds"
         ]
