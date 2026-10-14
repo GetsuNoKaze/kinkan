@@ -31,7 +31,11 @@
       "addons_unavailable": "Addons are installed only by the kinkan installer on the server.",
       "config_tt_connections": "mikan.client.max-connections: a whole number from 1 to 8, TrustTunnel only",
       "not_trusttunnel": "This inbound is not TrustTunnel",
-      "reality_sni_foreign": "The SNI belongs to the panel or another node: the REALITY target on this node answers with its own certificate and clients will not connect. Use the target's own name"
+      "reality_sni_foreign": "The SNI belongs to the panel or another node: the REALITY target on this node answers with its own certificate and clients will not connect. Use the target's own name",
+      "host_outdated": "kinkan on the server is too old for addons: update the server with kinkan update."
+    },
+    "acme": {
+      "port80_busy": "Port 80 is held by another program, and the certificate authority checks the server through it. If it is nginx or Caddy, the command below lets the check through to kinkan; otherwise free the port"
     }
   },
   "site": {
@@ -287,7 +291,8 @@
   },
   "addons": {
     "unsupported": "The panel cannot see the server's data directory: payment methods are installed only by the kinkan installer.",
-    "unreachable": "The payment method does not answer, its settings are unavailable. On the server: kinkan addon list"
+    "unreachable": "The payment method does not answer, its settings are unavailable. On the server: kinkan addon list",
+    "ownUnavailable": "Developer mode is available once kinkan on the server supports such addons"
   },
   "ttConnections": {
     "label": "Client connections",
@@ -295,5 +300,18 @@
     "default": "{n} (default)",
     "apply": "Apply",
     "saved": "Saved: clients get it when they refresh the subscription"
+  },
+  "addonApp": {
+    "unreachableText": "Check its container on the server: kinkan addon list"
+  },
+  "market": {
+    "unsupported": "The panel does not see the server's data directory, so addons cannot be installed from here. This happens when the panel was not set up by the kinkan installer.",
+    "hostOutdated": "kinkan on the server cannot run these addons yet. Run the command below on the server, then reload the page."
+  },
+  "nodeCheck": {
+    "fix": {
+      "rekey": "Reissue the key and run kinkan join with the new key on the node's server.",
+      "restart_panel": "See what is wrong with kinkan on the panel's server and restart it:"
+    }
   }
 }
