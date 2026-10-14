@@ -11,17 +11,18 @@ import (
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/tgate"
-	"mikan/internal/panel/tgbot"
 )
 
 // The panel has no screens of its own in the subscribers' bot: they are the official bot
 // addon's. A panel whose bot is on and that no addon answers for installs that addon from
 // the signed catalog by itself, with the permissions the catalog gives it, and hands it the
 // bot once it runs. The admin may hand the bot to another addon (PUT
-// /api/v1/telegram/bot-addon); then this leaves it alone.
+// /api/v1/telegram/bot-addon); then this leaves it alone. Once the admin removes the bot
+// addon it stays removed (panelapi.AutoBotKey) until they turn the bot on again or install
+// a bot from the catalog.
 
 // OfficialBot is the id of the official bot addon in the catalog.
-const OfficialBot = "telegram"
+const OfficialBot = addons.OfficialBotID
 
 // officialBotPermissions bound what the official bot is granted when it installs itself.
 var officialBotPermissions = []string{"bot", "users:read", "users:write", "billing:invoice", "events", "kv"}
@@ -48,11 +49,14 @@ func (b *botAddon) check(ctx context.Context) {
 	if err != nil || !on || p.AddonsAPI.Slot(ctx) != "" {
 		return
 	}
+	if auto, ok, err := settings.Get[bool](ctx, p.Settings, panelapi.AutoBotKey); err != nil || ok && !auto {
+		return // the admin removed the bot addon: theirs to bring back
+	}
 	st, err := p.Addons.State()
 	if err != nil || st.HostVersion == "" {
 		return // a host before protocol 2 runs no bot addon: `mikan update` first
 	}
-	if a, ok := st.Adapters[OfficialBot]; ok && a.Protocol == addons.Protocol2 {
+	if a, ok := st.Adapters[OfficialBot]; ok && a.KindOf() != addons.KindPayment {
 		if a.Status != "running" || !b.granted(ctx) {
 			return
 		}
@@ -76,7 +80,7 @@ func (b *botAddon) check(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	i := slices.IndexFunc(c.Adapters, func(e addons.Entry) bool { return e.ID == OfficialBot && e.Protocol == addons.Protocol2 })
+	i := slices.IndexFunc(c.Adapters, func(e addons.Entry) bool { return e.ID == OfficialBot && e.Kind != addons.KindPayment })
 	if i < 0 {
 		return // not in the catalog yet
 	}
@@ -102,21 +106,9 @@ func (b *botAddon) check(ctx context.Context) {
 
 // granted: the official addon may hold the bot.
 func (b *botAddon) granted(ctx context.Context) bool {
-	g, err := b.p.st.Q.GetAddonGrant(ctx, OfficialBot)
-	if err != nil {
-		return false
+	perms, _, err := addons.LoadGrant(ctx, b.p.st.Q, OfficialBot)
+	if err != nil && !errors.Is(err, addons.ErrNoGrant) {
+		b.p.log.Warn("bot addon: grant", "err", err)
 	}
-	perms, _ := addons.DecodePermissions(g.Permissions)
-	return slices.Contains(perms, "bot")
-}
-
-// channelMember is the channel check the bot addon may ask: about the bot's own channel
-// only, so it cannot probe other chats or reset what the gateway knows about members.
-func channelMember(b *tgbot.Local, g *tgate.Gateway) tgbot.Member {
-	return func(ctx context.Context, chat string, tgID int64, fresh bool) (bool, error) {
-		if ch := b.Config(ctx).Channel.Chat; ch == "" || chat != ch {
-			return false, errors.New("not the bot's channel")
-		}
-		return g.Member(ctx, chat, tgID, fresh)
-	}
+	return err == nil && addons.HasPerm(perms, "bot")
 }

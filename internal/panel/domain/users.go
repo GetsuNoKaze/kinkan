@@ -9,9 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
+	"mikan/internal/panel/events"
 	"mikan/internal/panel/secure"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
@@ -82,7 +84,12 @@ type Users struct {
 	now     func() time.Time
 	pool    *Pool
 	changes Changes
+	hub     *events.Hub // woken after a user is made; nil: no one waits
 }
+
+// SetEvents connects the hub that wakes the addons reading the feed (events.UserCreated is
+// written in the transaction that makes the user).
+func (s *Users) SetEvents(h *events.Hub) { s.hub = h }
 
 func NewUsers(st *store.Store, pool *Pool, changes Changes, now func() time.Time) *Users {
 	return &Users{st: st, set: settings.New(st.Q), now: now, pool: pool, changes: changes}
@@ -115,6 +122,9 @@ type CreateInput struct {
 	// Source is where the user comes from; empty: UserFromAdmin. Every path that makes
 	// users names its own.
 	Source string
+	// TgID is the Telegram account that buys or takes the user, 0 for the admin's: it goes
+	// to the addons with events.UserCreated, nothing else reads it.
+	TgID int64
 }
 
 // Create makes a user the admin names (the panel, an API key): the name is checked as
@@ -136,6 +146,7 @@ func (s *Users) Create(ctx context.Context, in CreateInput) (db.User, error) {
 	if err != nil {
 		return db.User{}, err
 	}
+	s.hub.Kick()
 	s.changes.PoliciesChanged()
 	return u, nil
 }
@@ -190,7 +201,16 @@ func (s *Users) createTx(ctx context.Context, q *db.Queries, in CreateInput, any
 	if err := setDeviceMode(ctx, q, &u, t.DeviceMode, now); err != nil {
 		return u, err
 	}
-	return u, ApplyTariffPools(ctx, q, u.ID, t.ID)
+	if err := ApplyTariffPools(ctx, q, u.ID, t.ID); err != nil {
+		return u, err
+	}
+	// Told in the same transaction, never of a user that rolled back. An import is a bulk move
+	// of people who already have their subscriptions: no one to welcome, and thousands of events.
+	if source == UserFromImport {
+		return u, nil
+	}
+	return u, events.Emit(ctx, q, s.now(), events.UserCreated, u.ID, in.TgID, events.User{Source: source, TariffID: t.ID},
+		events.UserCreated+":"+strconv.FormatInt(u.ID, 10))
 }
 
 // PurchaseInput is what a payment buys.
@@ -206,6 +226,8 @@ type PurchaseInput struct {
 	// kind of its own names itself (the trial, bought for a price).
 	Note   string
 	Source string
+	// TgID is the Telegram account that pays (for events.UserCreated).
+	TgID int64
 	// ResetTraffic: a renewal also starts a new traffic period (the payment buys a full
 	// quota); off, the counter keeps running.
 	ResetTraffic bool
@@ -224,7 +246,7 @@ func (s *Users) Purchase(ctx context.Context, q *db.Queries, in PurchaseInput) (
 	}
 	if in.UserID == 0 || errors.Is(err, sql.ErrNoRows) {
 		u, err = s.createTx(ctx, q, CreateInput{Name: in.Name, Note: cmp.Or(in.Note, "Telegram"), TariffID: in.TariffID,
-			TermDays: in.Term, Source: cmp.Or(in.Source, UserFromBot)}, true)
+			TermDays: in.Term, Source: cmp.Or(in.Source, UserFromBot), TgID: in.TgID}, true)
 		return u, err == nil, err
 	}
 	if err != nil {
@@ -513,6 +535,9 @@ func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) 
 		par.ExpiresAt = sql.NullInt64{Int64: p.ExpiresAt.Unix(), Valid: true}
 	}
 	if p.Extend != nil {
+		if p.Extend.Days < 0 || p.Extend.Days > MaxExtendDays {
+			return db.User{}, fieldErr("days", "bad_days")
+		}
 		par.ExpiresAt = sql.NullInt64{Int64: p.Extend.until(s.now(), par.ExpiresAt, par.BillingDay).Unix(), Valid: true}
 		par.Status = "active"
 	}
@@ -568,6 +593,19 @@ func (s *Users) Extend(ctx context.Context, id int64, days int64) (db.User, erro
 	return s.Update(ctx, id, Patch{Extend: &Extension{Days: days}})
 }
 
+// MaxExtendDays bounds one extension by days: ten years. Every way to extend (Update's
+// Patch, the bulk action, an addon's grant) is held to it here, not by its caller.
+const MaxExtendDays = 3650
+
+// ExtendOn is Extend on q's transaction, for a caller that writes more in it (an addon's
+// grant with its key, its audit line and its event); the caller tells the nodes (Changed).
+func (s *Users) ExtendOn(ctx context.Context, q *db.Queries, id, days int64) (db.User, error) {
+	if days < 1 {
+		return db.User{}, fieldErr("days", "bad_days")
+	}
+	return s.updateOn(ctx, q, id, Patch{Extend: &Extension{Days: days}})
+}
+
 // ExtendMonths adds n months: to the n-th billing day, or without one to the same day of
 // the month (see AddMonths). A term that already ended restarts from now.
 func (s *Users) ExtendMonths(ctx context.Context, id int64, n int) (db.User, error) {
@@ -608,6 +646,7 @@ func (s *Users) Reissue(ctx context.Context, id int64) (db.User, error) {
 	if err != nil {
 		return db.User{}, err
 	}
+	s.hub.Kick() // the devices it unbound
 	s.changes.PoliciesChanged()
 	return s.Get(ctx, id)
 }
@@ -717,6 +756,9 @@ func (s *Users) Bulk(ctx context.Context, ids []int64, action string, opt BulkOp
 		return 0, fmt.Errorf("bulk action %q", action)
 	}
 	days := opt.Days
+	if action == BulkExtend && days > MaxExtendDays {
+		return 0, fieldErr("days", "bad_days")
+	}
 	want := slices.Clone(ids)
 	slices.Sort(want)
 	want = slices.Compact(want)

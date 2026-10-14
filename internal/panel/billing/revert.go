@@ -9,6 +9,7 @@ import (
 
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/events"
+	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 )
 
@@ -40,16 +41,9 @@ type revertInfo struct {
 	Set     *userState `json:"set,omitempty"`
 }
 
-func nullPtr(n sql.NullInt64) *int64 {
-	if !n.Valid {
-		return nil
-	}
-	return &n.Int64
-}
-
 func stateOf(u db.User) *userState {
-	return &userState{Status: u.Status, TariffID: nullPtr(u.TariffID), TrafficLimit: nullPtr(u.TrafficLimit), DeviceLimit: nullPtr(u.DeviceLimit),
-		SpeedLimit: nullPtr(u.SpeedLimit), DeviceMode: u.DeviceMode, ResetStrategy: u.ResetStrategy, BillingDay: nullPtr(u.BillingDay), ExpiresAt: nullPtr(u.ExpiresAt)}
+	return &userState{Status: u.Status, TariffID: store.Int64Ptr(u.TariffID), TrafficLimit: store.Int64Ptr(u.TrafficLimit), DeviceLimit: store.Int64Ptr(u.DeviceLimit),
+		SpeedLimit: store.Int64Ptr(u.SpeedLimit), DeviceMode: u.DeviceMode, ResetStrategy: u.ResetStrategy, BillingDay: store.Int64Ptr(u.BillingDay), ExpiresAt: store.Int64Ptr(u.ExpiresAt)}
 }
 
 // sameOffer: the user still has the tariff and limits the payment set. The term and the
@@ -287,17 +281,24 @@ func (s *Service) refunded(ctx context.Context, id int64) (Reverted, error) {
 			if rv, u, err = s.takeBack(ctx, q, p); err != nil {
 				return err
 			}
-			return emitPayment(ctx, q, s.d.Now(), events.PaymentRefunded, p, u.ID, false)
+			return emitPayment(ctx, q, s.d.Now(), events.PaymentRefunded, p, u.ID, false, rv.Action == "disabled")
 		case PaymentPending, PaymentExpired, PaymentPaid, PaymentFailed:
 			// Refunded before it was applied: it never will be.
 			n, err := q.MarkLatePromoRefunded(ctx, db.MarkLatePromoRefundedParams{RefundedAt: at, ID: id})
 			open = n == 1
-			return err
+			if err != nil || !open {
+				return err
+			}
+			// Still a refund the addons count: told once, in the transaction of the change.
+			return emitPayment(ctx, q, s.d.Now(), events.PaymentRefunded, p, 0, false, false)
 		}
 		return nil
 	})
 	if err != nil {
 		return Reverted{}, err
+	}
+	if open {
+		s.d.Events.Kick()
 	}
 	if open && s.d.Promo != nil {
 		if err := s.d.Promo.ReleasePayment(ctx, id); err != nil {

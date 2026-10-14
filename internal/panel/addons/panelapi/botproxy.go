@@ -29,16 +29,20 @@ import (
 // the calls an addon may make go to Telegram through the gateway's outbox (its limits) and
 // come back with Telegram's own answer, and the rest is refused as Telegram would.
 
-// SlotKey is the setting naming the addon that holds the bot; "" or absent: the panel's own
-// screens.
+// SlotKey is the setting naming the addon that holds the bot; "" or absent: none, and the
+// updates wait in the buffer for one (app/botaddon.go installs the official bot).
 const SlotKey = "addons.bot"
 
+// AutoBotKey is false once the admin removed the addon that answered in the bot: the panel
+// stops installing the official one by itself until the admin turns the bot on again or
+// installs a bot from the catalog. Absent means true.
+const AutoBotKey = "addons.bot_auto"
+
 const (
-	maxBuffered   = 2000           // updates kept for an addon that does not read them
-	keepUpdates   = 24 * time.Hour // as long as Telegram keeps them itself
-	maxUpdateWait = 50             // seconds of a long poll
-	maxCall       = 1 << 20        // a call that carries no file
-	maxUpload     = tgate.MaxDocument + 1<<20
+	maxBuffered = 2000           // updates kept for an addon that does not read them
+	keepUpdates = 24 * time.Hour // as long as Telegram keeps them itself
+	maxCall     = 1 << 20        // a call that carries no file
+	maxUpload   = tgate.MaxDocument + 1<<20
 )
 
 // Telegram is the gateway as the proxy needs it.
@@ -64,33 +68,33 @@ var queued = map[string]bool{
 }
 
 // Slot is the addon holding the bot: the one the admin chose, while it still has a grant
-// with bot. Without it the panel's own screens answer.
+// with bot. Without it the bot has no holder.
 func (s *Server) Slot(ctx context.Context) string {
 	id := s.slotSetting(ctx)
 	if id == "" {
 		return ""
 	}
-	g, err := s.d.Grants.GetAddonGrant(ctx, id)
-	if err != nil {
-		return ""
+	perms, _, err := addons.LoadGrant(ctx, s.d.Store.Q, id)
+	if err != nil && !errors.Is(err, addons.ErrNoGrant) {
+		s.d.Log.Warn("addons api: grant", "addon", id, "err", err)
 	}
-	if perms, err := addons.DecodePermissions(g.Permissions); err != nil || !(Caller{Permissions: perms}).Can("bot") {
+	if err != nil || !addons.HasPerm(perms, "bot") {
 		return ""
 	}
 	return id
 }
 
-// slotSetting is the addon the admin chose, grant or not.
-func (s *Server) slotSetting(ctx context.Context) string {
-	if s.d.Settings == nil {
-		return ""
-	}
-	id, _, err := settings.Get[string](ctx, s.d.Settings, SlotKey)
+// BotHolder is the addon the admin chose to hold the bot, grant or not; "" when none or the
+// setting cannot be read.
+func BotHolder(ctx context.Context, set *settings.Settings) string {
+	id, _, err := settings.Get[string](ctx, set, SlotKey)
 	if err != nil {
 		return ""
 	}
 	return id
 }
+
+func (s *Server) slotSetting(ctx context.Context) string { return BotHolder(ctx, s.d.Settings) }
 
 // holds is Slot for a caller whose grant authenticate has just read: it needs the setting
 // alone, not the grant a second time.
@@ -98,31 +102,18 @@ func (s *Server) holds(ctx context.Context, c Caller) bool {
 	return c.Can("bot") && s.slotSetting(ctx) == c.ID
 }
 
-// BotSlot is the gateway's handler: the addon's buffer while an addon holds the bot, the
-// fallback's screens otherwise; with no fallback the buffer always, so that the updates
-// wait for the bot addon being installed.
+// BotSlot is the gateway's handler: it keeps the updates in the buffer for the addon that
+// holds the bot, or for the one to come, as the bot addon is installed after the bot is on.
 type BotSlot struct {
-	s        *Server
-	fallback tgate.Handler
+	s *Server
 
 	mu       sync.Mutex
 	toldFull time.Time
 }
 
-func (s *Server) BotSlot(fallback tgate.Handler) *BotSlot { return &BotSlot{s: s, fallback: fallback} }
+func (s *Server) BotSlot() *BotSlot { return &BotSlot{s: s} }
 
-func (b *BotSlot) Started(ctx context.Context, c *tgate.Client) {
-	// An addon sets up its own commands and menu button through the proxy.
-	if b.s.Slot(ctx) == "" && b.fallback != nil {
-		b.fallback.Started(ctx, c)
-	}
-}
-
-func (b *BotSlot) Update(ctx context.Context, c *tgate.Client, out *tgate.Outbox, up tgate.Update) error {
-	// Without screens of its own the panel keeps the updates for the addon to come.
-	if b.fallback != nil && b.s.Slot(ctx) == "" {
-		return b.fallback.Update(ctx, c, out, up)
-	}
+func (b *BotSlot) Update(ctx context.Context, up tgate.Update) error {
 	n, err := b.s.d.Store.Q.CountAddonUpdates(ctx)
 	if err != nil {
 		return err
@@ -278,16 +269,9 @@ func (s *Server) answer(w http.ResponseWriter, code int, answer []byte, err erro
 // getUpdates is Telegram's: what follows offset (acknowledging what is below it), up to
 // limit, waiting up to timeout seconds for something new.
 func (s *Server) getUpdates(w http.ResponseWriter, r *http.Request, p map[string]string) {
-	num := func(k string, def, lo, hi int64) int64 {
-		n, err := strconv.ParseInt(p[k], 10, 64)
-		if err != nil {
-			return def
-		}
-		return min(max(n, lo), hi)
-	}
-	offset := num("offset", 0, 0, math.MaxInt64)
-	limit := num("limit", 100, 1, 100)
-	timeout := num("timeout", 0, 0, maxUpdateWait)
+	offset := clampParam(p["offset"], 0, 0, math.MaxInt64)
+	limit := clampParam(p["limit"], 100, 1, 100)
+	timeout := clampParam(p["timeout"], 0, 0, maxPollWait)
 	if offset > 0 {
 		if err := s.d.Store.Q.AckAddonUpdates(r.Context(), offset); err != nil {
 			tgFail(w, http.StatusInternalServerError, "Internal Server Error")
@@ -295,7 +279,7 @@ func (s *Server) getUpdates(w http.ResponseWriter, r *http.Request, p map[string
 		}
 	}
 	rows, err := longPoll(r.Context(), s.updates, time.Duration(timeout)*time.Second, func() ([]db.ListAddonUpdatesRow, error) {
-		return s.d.Store.Q.ListAddonUpdates(r.Context(), db.ListAddonUpdatesParams{FromID: offset, Lim: int32(limit)})
+		return s.d.Store.Q.ListAddonUpdates(r.Context(), db.ListAddonUpdatesParams{FromID: offset, Lim: pageSize(limit, 100)})
 	})
 	switch {
 	case r.Context().Err() != nil:

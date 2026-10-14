@@ -3,12 +3,12 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Link, useBlocker, useNavigate, useSearch } from "@tanstack/react-router";
 import { ArrowDown, ArrowUp, Bell, Bot, Globe, LayoutList, Link2, Megaphone, Network, Plus, PlugZap, Send, Shield, Trash2, TriangleAlert } from "lucide-react";
 import { useMemo, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
-import { api, ApiError, errorText, unwrap, type Schemas } from "../../api/client";
+import { api, ApiError, apiCodeText, errorText, unwrap, type Schemas } from "../../api/client";
 import { onFormError } from "../../lib/fields";
 import { qk, useNodes, useSettings, useTelegram } from "../../api/hooks";
 import { useDraft } from "../../lib/draft";
 import { TELEGRAM_TABS } from "../search";
-import { BackToAddons } from "./addons";
+import { BackToAddons } from "./addon-row";
 import { ago, num } from "../../lib/format";
 import { Confirm } from "../../components/overlay";
 import { QueryBoundary } from "../../components/query";
@@ -16,7 +16,8 @@ import { SaveBar, SectionNav, WithPreview } from "../../components/layout";
 import { useToast } from "../../components/toast";
 import { Bar, Button, Field, PageHeader, Pill, Segmented, Skeleton } from "../../components/ui";
 import { Switch, SwitchRow } from "../../components/switch";
-import { t, tMaybe, useLocale } from "../../i18n";
+import { t, tMaybe, useLocale, type Key } from "../../i18n";
+import { botStatus, type BotPhase } from "./market-common";
 import { MarkdownHint, TgHtml, TgTextPreview, useTgPreview } from "./telegram-text";
 
 type View = Schemas["TelegramView"];
@@ -30,7 +31,11 @@ function usePatchTelegram() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: Schemas["PatchTelegramInputBody"]) => unwrap(api.PATCH("/api/v1/telegram", { body })),
-    onSuccess: (v) => qc.setQueryData(qk.telegram, v),
+    onSuccess: (v) => {
+      qc.setQueryData(qk.telegram, v);
+      // Turning the bot on again brings the official bot addon back.
+      void qc.invalidateQueries({ queryKey: qk.botSlot });
+    },
   });
 }
 
@@ -152,7 +157,7 @@ function TelegramBody({ v }: { v: View }) {
 function BotSummary({ v, onConnect }: { v: View; onConnect: () => void }) {
   const patch = usePatchTelegram();
   const toast = useToast();
-  const st = statusOf(v);
+  const st = botStatus(v, STATUS_WORDS);
   return (
     <section className="card glass reveal" aria-label={t("telegram.summary")}>
       <div className="flex flex-wrap items-center gap-3">
@@ -349,7 +354,7 @@ function BackupCard() {
   const toast = useToast();
   // While a backup is being made in the background, its end is looked for every few seconds.
   const q = useQuery({
-    queryKey: ["telegram-backup"],
+    queryKey: qk.telegramBackup,
     queryFn: ({ signal }) => unwrap(api.GET("/api/v1/telegram/backup", { signal })),
     refetchInterval: (query) => (query.state.data?.sending ? 3000 : false),
   });
@@ -357,7 +362,7 @@ function BackupCard() {
   const [shown, setShown] = useState(false);
   const [error, setError] = useState("");
   const done = (r: Schemas["BackupView"], text: string) => {
-    qc.setQueryData(["telegram-backup"], r);
+    qc.setQueryData(qk.telegramBackup, r);
     setPassword("");
     setShown(false);
     setError("");
@@ -384,7 +389,7 @@ function BackupCard() {
     onSuccess: (r) => done(r, t("telegram.infra.backupStarted")),
     onError: (e) => {
       fail(e);
-      void qc.invalidateQueries({ queryKey: ["telegram-backup"] });
+      void qc.invalidateQueries({ queryKey: qk.telegramBackup });
     },
   });
   const b = q.data;
@@ -433,7 +438,7 @@ function BackupCard() {
       <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
         <div className="text-xs text-[var(--ink-500)]">
           {b.last_ok ? t("telegram.infra.backupLast", { when: ago(b.last_ok), size }) : t("telegram.infra.backupNever")}
-          {b.last_error ? <div className="text-[var(--berry-600)]">{t("telegram.infra.backupFailed", { error: tMaybe(`errors.api.${b.last_error}`) ?? b.last_error })}</div> : null}
+          {b.last_error ? <div className="text-[var(--berry-600)]">{t("telegram.infra.backupFailed", { error: apiCodeText(b.last_error) })}</div> : null}
         </div>
         <Button size="sm" loading={send.isPending || b.sending} disabled={!b.admin_chat_set || !b.password_set || b.sending} onClick={() => send.mutate()}>
           {b.sending ? t("telegram.infra.backupSending") : t("telegram.infra.backupSendNow")}
@@ -445,13 +450,7 @@ function BackupCard() {
   );
 }
 
-function statusOf(v: View): { tone: "ok" | "warn" | "bad" | "off"; text: string } {
-  if (!v.enabled) return { tone: "off", text: t("telegram.off") };
-  if (v.running && !v.error) return { tone: "ok", text: t("telegram.running") };
-  if (v.running) return { tone: "warn", text: t("telegram.reconnecting") };
-  if (!v.error) return { tone: "off", text: t("telegram.starting") };
-  return { tone: "bad", text: t("telegram.stopped") };
-}
+const STATUS_WORDS: Record<BotPhase, Key> = { off: "telegram.off", ok: "telegram.running", reconnecting: "telegram.reconnecting", starting: "telegram.starting", down: "telegram.stopped" };
 
 // Cards rise in turn, as on the other tabs.
 const rise = (i: number) => ({ className: "card glass reveal", style: { "--i": i } as React.CSSProperties });

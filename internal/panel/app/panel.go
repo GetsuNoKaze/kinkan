@@ -60,9 +60,9 @@ type Panel struct {
 	// NodeUpdates updates the remote nodes to the panel's version; nil without nodes.
 	NodeUpdates *nodeupdate.Service
 	// Gateway is the panel's side of Telegram: the token, polling, Stars, the alerts' way
-	// out; Telegram is the bot's screens on top of it.
+	// out; Telegram is the admin's setup of the bot, its notices and broadcasts on top of it.
 	Gateway   *tgate.Gateway
-	Telegram  *tgbot.Bot
+	Telegram  *tgbot.Panel
 	Billing   *billing.Service
 	Updates   *updates.Checker
 	Alerts    *infraalerts.Monitor
@@ -119,6 +119,9 @@ type Options struct {
 	WarpAPI string
 	// AddonsCatalog is the marketplace's signed catalog; "" is the real one.
 	AddonsCatalog string
+	// Dev is the panel running for development: addon sources may be read over plain http
+	// from 127.0.0.1.
+	Dev bool
 	// DNS checks new domains against public DNS; nil leaves them unchecked.
 	DNS *dnscheck.Checker
 	// HSTS says whether browsers are told to keep to HTTPS: for a panel that serves TLS
@@ -148,6 +151,9 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		log:       o.Log,
 	}
 	pool := domain.NewPool(st, o.Now)
+	// The feed of events for addons: what changes users, devices, nodes and payments is
+	// written in its own transaction, and the hub wakes the addons reading it.
+	hub := events.NewHub()
 	var changes domain.Changes = noChanges{}
 	deps := api.Deps{
 		Version: o.Version, Store: st, Settings: set, Sessions: p.sessions,
@@ -157,6 +163,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	p.newKinkan(o, &deps) // Kinkan: the fork's services (kinkan.go)
 	if o.Connect != nil {
 		p.Nodes = nodesync.NewManager(st, set, pool, o.Connect, o.Log, o.Now)
+		p.Nodes.SetEvents(hub)
 		changes = p.Nodes
 		deps.Online = p.Nodes.Online
 		deps.Nodes = p.Nodes
@@ -173,6 +180,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	deps.SubPort, deps.SubPortError = o.SubPort, o.SubPortError
 	deps.Changes = changes
 	deps.Users = domain.NewUsers(st, pool, changes, o.Now)
+	deps.Users.SetEvents(hub)
 	// The nodes try a new listener before it is saved, when the panel runs them.
 	var dryRun domain.DryRun
 	if p.Nodes != nil {
@@ -191,6 +199,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	}
 	deps.Inbounds.SetResolver(deps.Resolve)
 	deps.Devices = domain.NewDevices(st, pool, changes, o.Now)
+	deps.Devices.SetEvents(hub)
 	p.st, p.devices = st, deps.Devices
 	deps.Packages = domain.NewPackages(st, o.Now)
 	if o.Certs != nil {
@@ -224,7 +233,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		return ep.URL() + "/" + paths.Sub
 	}
 	p.Addons = addons.New(o.DataDir, o.AddonsCatalog, o.Version, o.Log, o.Now)
-	hub := events.NewHub()
+	p.Addons.SetDev(o.Dev)
 	deps.Addons = p.Addons
 	addonPages := addonpages.New(addonpages.Deps{Addons: p.Addons, Store: st.Q, Log: o.Log, Now: o.Now})
 	deps.Pages = addonPages
@@ -250,8 +259,8 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		MiniApp: func() bool { return o.Certs != nil && o.Certs.Trusted() }}
 	// The panel's API for addons, with the Bot API proxy over the gateway for the addon that
 	// holds the bot.
-	p.AddonsAPI = panelapi.New(panelapi.Deps{Addons: p.Addons, Grants: st.Q, Store: st, Hub: hub, Log: o.Log, Now: o.Now,
-		Telegram: p.Gateway, Settings: set, SubBase: subBase, Bot: tgbot.RPCHandler(backend, channelMember(backend, p.Gateway))})
+	p.AddonsAPI = panelapi.New(panelapi.Deps{Addons: p.Addons, Store: st, Hub: hub, Log: o.Log, Now: o.Now,
+		Telegram: p.Gateway, Settings: set, SubBase: subBase, Bot: tgbot.RPCHandler(backend), Users: deps.Users})
 	// What the bot says comes from the bot addon (the official one is installed by itself,
 	// botaddon.go): the panel tells it through events, and keeps the broadcasts and the
 	// previews of the admin's texts.
@@ -262,10 +271,9 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		}
 		return err
 	}
-	p.Telegram = tgbot.New(tgbot.Deps{Backend: backend, Gateway: p.Gateway, Log: o.Log, Now: o.Now,
-		Off: func(context.Context) bool { return true }, Emit: emit})
+	p.Telegram = tgbot.NewPanel(tgbot.PanelDeps{Backend: backend, Outbox: p.Gateway.Outbox, Emit: emit, Log: o.Log, Now: o.Now})
 	// The updates wait in the buffer for the addon that holds the bot.
-	p.Gateway.SetHandler(p.AddonsAPI.BotSlot(nil))
+	p.Gateway.SetHandler(p.AddonsAPI.BotSlot())
 	deps.Telegram, deps.Gateway = p.Telegram, p.Gateway
 	p.Billing.SetTelegram(p.Gateway)
 	p.Billing.SetNotifier(tgbot.Notifications{Emit: emit, Log: o.Log})
@@ -498,10 +506,6 @@ func (p *Panel) Apply(ctx context.Context) (settings.Paths, error) {
 // edit them), drives the node syncer and cleans up expired state. It returns once ctx is
 // done and every one of its workers has stopped: the caller closes the database after it.
 func (p *Panel) Run(ctx context.Context) {
-	// Before the reconcile loop: payments of the built-in providers take their adapters' names.
-	if err := p.Billing.MoveBuiltin(ctx); err != nil {
-		p.log.Error("billing: move the built-in providers", "err", err)
-	}
 	// The host reads the switch and the channel from a file; the settings are what the
 	// admin chose. The channel is the panel's own check's too.
 	auto, err := p.Settings.On(ctx, settings.AutoUpdate)
@@ -524,7 +528,7 @@ func (p *Panel) Run(ctx context.Context) {
 	if p.NodeUpdates != nil {
 		workers = append(workers, p.NodeUpdates.Run)
 	}
-	workers = append(workers, p.Gateway.Run, p.Telegram.Run, p.Billing.Run, p.AddonsAPI.Run, (&botAddon{p: p}).Run, p.Updates.Run, p.Alerts.Run, p.Backups.Run, p.Importer.Run,
+	workers = append(workers, p.Gateway.Run, p.Telegram.Run, p.Billing.Run, p.AddonsAPI.Run, p.AddonsAPI.RunPush, (&botAddon{p: p}).Run, p.Updates.Run, p.Alerts.Run, p.Backups.Run, p.Importer.Run,
 		func(ctx context.Context) {
 			every(ctx, 5*time.Second, func() {
 				if _, err := p.Apply(ctx); err != nil {

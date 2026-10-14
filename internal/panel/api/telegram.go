@@ -15,6 +15,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"mikan/internal/panel/addons/panelapi"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/infraalerts"
 	"mikan/internal/panel/settings"
@@ -189,21 +190,13 @@ func (h *handlers) telegramView(ctx context.Context) (TelegramView, error) {
 		v.Running, v.Error = st.Running, st.Error
 		v.ChannelError = h.d.Gateway.ChannelError(ctx)
 	}
-	if h.d.Telegram != nil {
-		v.Config = h.d.Telegram.Config(ctx)
-		// The address carries the sub path, which is the panel's secret.
-		if !hidesSecrets(ctx) {
-			v.MiniAppURL = h.d.Telegram.MiniAppURL(ctx)
-		}
-		if p := h.d.Telegram.Progress(); p.Total > 0 {
-			v.Broadcast = &TelegramBroadcast{Total: p.Total, Sent: p.Sent, Failed: p.Failed, Started: p.Started.Unix(), Active: p.Active()}
-		}
-	} else {
-		lang, err := h.d.Settings.Lang(ctx)
-		if err != nil {
-			return v, err
-		}
-		v.Config = tgbot.Default(lang)
+	v.Config = h.d.Telegram.Config(ctx)
+	// The address carries the sub path, which is the panel's secret.
+	if !hidesSecrets(ctx) {
+		v.MiniAppURL = h.d.Telegram.MiniAppURL(ctx)
+	}
+	if p := h.d.Telegram.Progress(); p.Total > 0 {
+		v.Broadcast = &TelegramBroadcast{Total: p.Total, Sent: p.Sent, Failed: p.Failed, Started: p.Started.Unix(), Active: p.Active()}
 	}
 	v.Defaults = tgbot.DefaultTexts(v.Config.Lang)
 	v.Infrastructure, _, err = settings.GetOver(ctx, h.d.Settings, infraalerts.KeyConfig, infraalerts.Default())
@@ -366,7 +359,7 @@ func (h *handlers) updateTelegram(ctx context.Context, in *patchTelegramInput) (
 			}
 		}
 		if b.Config != nil {
-			if err := settings.Set(ctx, set, tgbot.KeyConfig, *b.Config); err != nil {
+			if err := settings.Set(ctx, set, tgate.KeyConfig, *b.Config); err != nil {
 				return err
 			}
 		}
@@ -376,6 +369,15 @@ func (h *handlers) updateTelegram(ctx context.Context, in *patchTelegramInput) (
 			}
 		}
 		if b.Enabled != nil {
+			// Turning the bot on again brings the official bot addon back if none answers, also
+			// after the admin removed it.
+			if was, _, err := settings.Get[bool](ctx, set, tgate.KeyEnabled); err != nil {
+				return err
+			} else if *b.Enabled && !was {
+				if err := settings.Set(ctx, set, panelapi.AutoBotKey, true); err != nil {
+					return err
+				}
+			}
 			return settings.Set(ctx, set, tgate.KeyEnabled, *b.Enabled)
 		}
 		return nil
@@ -461,9 +463,6 @@ func (h *handlers) nextRoute(ctx context.Context, r tgate.Route, mode string, no
 }
 
 func (h *handlers) broadcast(ctx context.Context, in *broadcastInput) (*broadcastOutput, error) {
-	if h.d.Telegram == nil {
-		return nil, huma.Error503ServiceUnavailable("bot_unavailable")
-	}
 	n, err := h.d.Telegram.Broadcast(ctx, in.Body.Text)
 	switch {
 	case errors.Is(err, tgate.ErrOff):

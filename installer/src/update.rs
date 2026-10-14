@@ -339,7 +339,7 @@ pub fn update(a: &UpdateArgs, say: &mut dyn FnMut(&str), progress: &mut dyn FnMu
         match take_request(&dir, install.node)? {
             Asked::Nothing => return Ok(()),
             // The panel wakes this unit for its payment adapters too.
-            Asked::Addons if !install.node => return panel_addons(say),
+            Asked::Addons if !install.node => return addon::apply_here(say),
             Asked::Addons => {
                 say("update/request is not a request, removed: adapters are the panel's");
                 return Ok(());
@@ -361,12 +361,14 @@ pub fn update(a: &UpdateArgs, say: &mut dyn FnMut(&str), progress: &mut dyn FnMu
     // An adapter request that came while an update was asked for waits for it.
     if a.requested
         && addon::pending()
-        && let Err(e) = addon::apply(&install.version(), say)
+        && let Err(e) = addon::apply_here(say)
     {
         say(&format!("Addons: {e:#}"));
     }
-    // The command that runs now says which addons it can run, whatever was asked of it.
-    if !install.node {
+    // The command that runs now says which addons it can run, whatever was asked of it. One
+    // that handed the update to the upgraded command leaves that to it: written after it, the
+    // older version would take back what the newer one said.
+    if !install.node && !at.handed_off {
         addon::touch(say);
     }
     // The admin pressed Update and waits for an answer, and an update that began must end
@@ -381,12 +383,6 @@ pub fn update(a: &UpdateArgs, say: &mut dyn FnMut(&str), progress: &mut dyn FnMu
         }
     }
     r
-}
-
-fn panel_addons(say: &mut dyn FnMut(&str)) -> Result<()> {
-    let install = Install::load()?;
-    install.panel_only()?;
-    addon::apply(&install.version(), say)
 }
 
 /// Where an update is going: the image to run and the version it says it is, with the

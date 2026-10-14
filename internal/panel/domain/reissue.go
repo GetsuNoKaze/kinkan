@@ -141,6 +141,7 @@ func (s *Users) ReissueByOwner(ctx context.Context, id int64, via string) (db.Us
 	if err != nil {
 		return db.User{}, err
 	}
+	s.hub.Kick() // the devices it unbound
 	s.changes.PoliciesChanged()
 	return s.Get(ctx, id)
 }
@@ -169,6 +170,6 @@ func (s *Users) reissueByOwner(ctx context.Context, rules ReissueRules, id int64
 			return err
 		}
 		return audit.Write(ctx, q, now, audit.Entry{Action: "user.reissue", TargetType: "user", TargetID: strconv.FormatInt(id, 10),
-			Details: map[string]any{"actor": "subscriber", "via": via}})
+			Details: map[string]any{"actor": audit.ActorSubscriber, "via": via}})
 	})
 }

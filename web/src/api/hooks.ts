@@ -26,7 +26,11 @@ export const qk = {
   paymentSettings: ["payment-settings"] as const,
   addons: ["addons"] as const,
   marketplace: ["marketplace"] as const,
+  addonSources: ["addon-sources"] as const,
   botSlot: ["bot-slot"] as const,
+  addonStorage: ["addon-storage"] as const,
+  addonPage: (id: string) => ["addon-page", id] as const,
+  telegramBackup: ["telegram-backup"] as const,
   warp: (node: number) => ["warp", node] as const,
   cascade: (node: number) => ["cascade", node] as const,
   pools: ["pools"] as const,
@@ -174,6 +178,42 @@ export function useNodes(watch?: boolean) {
 /** Payment settings: also whether selling is on, which shows Payments in the menu. */
 export function usePaymentSettings() {
   return useQuery({ queryKey: qk.paymentSettings, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/payments/settings", { signal })) });
+}
+
+/** The payment methods (protocol 1 adapters): followed every few seconds while the server works on a request. */
+export function useAddons() {
+  return useQuery({
+    queryKey: qk.addons,
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/addons", { signal })),
+    refetchInterval: (q) => (q.state.data?.queue?.length ? 3_000 : false),
+  });
+}
+
+/** The marketplace of protocol 2: followed every few seconds while the server works on a request. */
+export function useMarketplace() {
+  return useQuery({
+    queryKey: qk.marketplace,
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/marketplace", { signal })),
+    refetchInterval: (q) => (q.state.data?.queue?.length ? 3_000 : false),
+  });
+}
+
+/** The sources of third-party addons. The server reads them from their own servers, so it is asked only while the drawer is open. */
+export function useAddonSources(enabled: boolean) {
+  return useQuery({
+    queryKey: qk.addonSources,
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/addon-sources", { signal })),
+    enabled,
+    staleTime: 0,
+  });
+}
+
+/** Which addon answers in the subscribers' bot; empty while none does. */
+export function useBotSlot() {
+  return useQuery({
+    queryKey: qk.botSlot,
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/telegram/bot-addon", { signal })),
+  });
 }
 
 export function useTorrent() {

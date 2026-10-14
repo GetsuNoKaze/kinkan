@@ -12,6 +12,7 @@ import (
 	"mikan/internal/panel/billing"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
+	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 )
 
@@ -32,9 +33,6 @@ type PaymentSettingsView struct {
 		Addons []string `json:"addons" doc:"Адаптеры маркетплейса, которые принимают оплату прямо сейчас"`
 	} `json:"available" doc:"Что принимает оплату прямо сейчас: включено, настроено, для Stars — бот запущен"`
 	OnSale int `json:"on_sale" doc:"Сколько тарифов бот может продать прямо сейчас: «В продаже» и с ценой для способа, который принимает оплату"`
-	// Moving: the built-in YooKassa and CryptoBot moved to the marketplace in 0.4.4; their
-	// adapters are installed after the update.
-	Moving []string `json:"moving" doc:"Встроенные ЮKassa и CryptoBot переехали в маркетплейс: адаптеры, которые сервер ещё ставит"`
 }
 
 type paymentSettingsOutput struct{ Body PaymentSettingsView }
@@ -103,11 +101,14 @@ type paymentOutput struct{ Body PaymentView }
 
 func (h *handlers) registerPayments() {
 	tags := []string{"payments"}
-	huma.Register(h.api, huma.Operation{OperationID: "get-payment-settings", Method: http.MethodGet, Path: "/api/v1/payments/settings", Summary: "Настройки оплаты", Tags: tags, Metadata: sessionOnly, Extensions: sessionOnlyExt}, h.getPaymentSettings)
-	huma.Register(h.api, huma.Operation{OperationID: "update-payment-settings", Method: http.MethodPatch, Path: "/api/v1/payments/settings", Summary: "Изменить настройки оплаты", Tags: tags, Metadata: sessionOnly, Extensions: sessionOnlyExt}, h.updatePaymentSettings)
+	op := sessionOps("payments")
+	huma.Register(h.api, op("get-payment-settings", http.MethodGet, "/api/v1/payments/settings", "Настройки оплаты", 0), h.getPaymentSettings)
+	huma.Register(h.api, op("update-payment-settings", http.MethodPatch, "/api/v1/payments/settings", "Изменить настройки оплаты", 0), h.updatePaymentSettings)
 	huma.Register(h.api, huma.Operation{OperationID: "list-payments", Method: http.MethodGet, Path: "/api/v1/payments", Summary: "История платежей", Tags: tags}, h.listPayments)
-	huma.Register(h.api, huma.Operation{OperationID: "refund-payment", Method: http.MethodPost, Path: "/api/v1/payments/{id}/refund", Summary: "Вернуть Stars покупателю", Tags: tags, Metadata: sessionOnly, Extensions: sessionOnlyExt}, h.refundPayment)
-	huma.Register(h.api, huma.Operation{OperationID: "mark-payment-refunded", Method: http.MethodPost, Path: "/api/v1/payments/{id}/refunded-by-hand", Summary: "Отметить, что деньги возвращены вручную", Description: "Оплата через способ оплаты из маркетплейса, оплаченная, но не применённая (например, пробный период, который уже нельзя выдать): админ вернул деньги в кабинете платёжной системы, платёж становится возвращённым, покупателю приходит сообщение. Stars возвращаются через refund.", Tags: tags, Metadata: sessionOnly, Extensions: sessionOnlyExt}, h.refundedByHand)
+	huma.Register(h.api, op("refund-payment", http.MethodPost, "/api/v1/payments/{id}/refund", "Вернуть Stars покупателю", 0), h.refundPayment)
+	byHand := op("mark-payment-refunded", http.MethodPost, "/api/v1/payments/{id}/refunded-by-hand", "Отметить, что деньги возвращены вручную", 0)
+	byHand.Description = "Оплата через способ оплаты из маркетплейса, оплаченная, но не применённая (например, пробный период, который уже нельзя выдать): админ вернул деньги в кабинете платёжной системы, платёж становится возвращённым, покупателю приходит сообщение. Stars возвращаются через refund."
+	huma.Register(h.api, byHand, h.refundedByHand)
 }
 
 func (h *handlers) paymentSettings(ctx context.Context) (PaymentSettingsView, error) {
@@ -139,12 +140,6 @@ func (h *handlers) paymentSettings(ctx context.Context) (PaymentSettingsView, er
 		return v, err
 	}
 	v.OnSale = len(offers)
-	if v.Moving, err = h.d.Billing.Moving(ctx); err != nil {
-		return v, err
-	}
-	if v.Moving == nil {
-		v.Moving = []string{}
-	}
 	return v, nil
 }
 
@@ -282,19 +277,11 @@ func freeConditionView(c string) string {
 	return "none"
 }
 
-func unixPtr(n sql.NullInt64) *time.Time {
-	if !n.Valid {
-		return nil
-	}
-	t := time.Unix(n.Int64, 0).UTC()
-	return &t
-}
-
 // paymentView is a payment without the names; the list's query brings those along.
 func paymentView(p db.Payment) PaymentView {
-	v := PaymentView{ID: p.ID, Provider: p.Provider, Kind: p.Kind, Status: p.Status, TgID: p.TgID, TariffName: p.TariffName, TermDays: ptrInt(p.TermDays.Int64, p.TermDays.Valid), Amount: p.Amount,
+	v := PaymentView{ID: p.ID, Provider: p.Provider, Kind: p.Kind, Status: p.Status, TgID: p.TgID, TariffName: p.TariffName, TermDays: store.Int64Ptr(p.TermDays), Amount: p.Amount,
 		Currency: p.Currency, ExternalID: p.ExternalID.String, Error: p.Error, CreatedAt: time.Unix(p.CreatedAt, 0).UTC(),
-		PaidAt: unixPtr(p.PaidAt), AppliedAt: unixPtr(p.AppliedAt), RefundedAt: unixPtr(p.RefundedAt)}
+		PaidAt: store.TimePtr(p.PaidAt), AppliedAt: store.TimePtr(p.AppliedAt), RefundedAt: store.TimePtr(p.RefundedAt)}
 	if p.UserID.Valid {
 		id := p.UserID.Int64
 		v.UserID = &id

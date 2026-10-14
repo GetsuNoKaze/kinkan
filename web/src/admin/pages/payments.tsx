@@ -2,21 +2,21 @@ import { keepPreviousData, useInfiniteQuery, useMutation, useQueryClient } from 
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { HandCoins, History as HistoryIcon, ListChecks, Ticket, TriangleAlert, Undo2, Wallet } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
-import { api, errorText, unwrap, type Schemas } from "../../api/client";
-import { qk, usePaymentSettings, useTariffs, useTelegram } from "../../api/hooks";
+import { api, apiCodeText, errorText, unwrap, type Schemas } from "../../api/client";
+import { qk, useAddons, usePaymentSettings, useTariffs, useTelegram } from "../../api/hooks";
 import { Confirm } from "../../components/overlay";
 import { useToast } from "../../components/toast";
 import { QueryBoundary } from "../../components/query";
 import { Switch, SwitchRow } from "../../components/switch";
 import { FormActions } from "../../components/layout";
 import { Tabs } from "../../components/tabs";
-import { Button, EmptyState, Field, PageHeader, Pill, Skeleton, Spinner } from "../../components/ui";
-import { t, tMaybe } from "../../i18n";
+import { Button, EmptyState, Field, PageHeader, Pill, Skeleton } from "../../components/ui";
+import { t } from "../../i18n";
 import { useDraft } from "../../lib/draft";
 import { dateShort, days, money, num, time } from "../../lib/format";
 import { isKopecks, isStars, rubKopecks } from "../../lib/validate";
 import { PAYMENT_TABS, type PaymentsSearch } from "../search";
-import { addonName, useAddons } from "./payment-addons";
+import { addonName } from "./payment-addons";
 import { PromoSection } from "./promocodes";
 
 type Settings = Schemas["PaymentSettingsView"];
@@ -38,11 +38,6 @@ const BUILT_IN: Provider[] = ["stars"];
 const TAB_ICONS = { history: HistoryIcon, methods: Wallet, rules: ListChecks, promocodes: Ticket } as const;
 type PaymentTab = NonNullable<PaymentsSearch["tab"]>;
 
-/** Why a payment failed or waits, in words when the code is known; a provider's own code as is. */
-function paymentError(code: string): string {
-  return tMaybe(`errors.api.${code}`) ?? code;
-}
-
 /** A payment's provider as the admin knows it; adapters by their own name. */
 function providerName(p: Provider, addons: Addons | undefined): string {
   return p.startsWith("addon:") ? addonName(p.slice("addon:".length), addons) : t(`payments.providers.${p}` as "payments.providers.stars");
@@ -59,7 +54,6 @@ export function PaymentsPage() {
   return (
     <>
       <PageHeader title={t("payments.title")} sub={t("payments.subtitle")} actions={<SellingSwitch s={s} />} />
-      {s?.moving.length ? <MovingBanner ids={s.moving} /> : null}
       {s && !s.enabled ? (
         <div className="banner warn" role="status">
           <TriangleAlert size={16} className="shrink-0" aria-hidden />
@@ -124,18 +118,6 @@ function SellingSwitch({ s }: { s?: Settings }) {
     <div className="flex h-10 items-center gap-3 rounded-[var(--r-md)] border border-[var(--hairline)] bg-[var(--surface)] px-3">
       <span className="text-[13px] font-medium">{t("settings.sales")}</span>
       <Switch checked={s.enabled} label={t("settings.sales")} disabled={save.isPending} onChange={(on) => save.mutate(on)} />
-    </div>
-  );
-}
-
-/** The built-in YooKassa and CryptoBot moved to the marketplace: their adapters install after the update. */
-function MovingBanner({ ids }: { ids: string[] }) {
-  const addons = useAddons().data;
-  const names = ids.map((id) => addonName(id, addons)).join(", ");
-  return (
-    <div className="banner info" role="status">
-      <Spinner />
-      <span className="min-w-0 flex-1">{t("payments.moving", { names })}</span>
     </div>
   );
 }
@@ -282,7 +264,7 @@ function PaymentRow({ p, provider, onRefund, onByHand }: { p: Payment; provider:
         </div>
         {p.error ? (
           <div className="mt-1 text-xs text-[var(--berry-600)]">
-            {t(p.status === "failed" ? "payments.invoiceFailed" : p.error === "trial_refund_manual" ? "payments.notAppliedByHand" : "payments.notApplied", { error: paymentError(p.error) })}
+            {t(p.status === "failed" ? "payments.invoiceFailed" : p.error === "trial_refund_manual" ? "payments.notAppliedByHand" : "payments.notApplied", { error: apiCodeText(p.error) })}
           </div>
         ) : null}
       </div>

@@ -54,12 +54,13 @@ const USUAL: Partial<Record<BlockType, Key>> = {
   guide: "sub.howTo",
   instructions: "sub.docs",
   link: "sub.link",
+  reissue: "sub.reissueTitle",
   locations: "sub.locations",
   telegram: "sub.openTelegram",
   support: "sub.support",
 };
 
-export function useSubPage() {
+function useSubPage() {
   return useQuery({ queryKey: qk.subPage, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/sub-page", { signal })) });
 }
 
@@ -798,7 +799,7 @@ function Preview({ v, draft, platform: editing, bare }: { v: View; draft: Form; 
   const brand = v.brand.trim() || "VPN";
   const info = useMemo<Info>(() => {
     const now = Date.now();
-    const fill = (text: string) => text.replace(/\{(\w+)\}/g, (m, k: string) => ({ brand, name: t("settings.page.sample.name"), days: "23" })[k] ?? m);
+    const fill = (text: string) => text.replace(/\{(\w+)\}/g, (m, k: string) => ({ brand, name: t("settings.page.sample.name"), days: "23", devices: "1/3" })[k] ?? m);
     const names = (nodes.data ?? []).map((n) => n.name).filter(Boolean);
     return {
       name: t("settings.page.sample.name"),

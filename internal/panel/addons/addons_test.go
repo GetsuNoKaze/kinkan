@@ -71,6 +71,8 @@ func TestParseCatalogProtocol2(t *testing.T) {
 		{ID: "script", Protocol: 2, Kind: KindBot, Mode: ModeClient, Image: img, Digest: digest},
 		{ID: "page", Protocol: 2, Kind: KindUI, Image: img, Digest: digest},
 		{ID: "yookassa", Protocol: 1, Image: img, Digest: digest},
+		// The permissions that reach every subscriber are ones an entry may ask for.
+		{ID: "reach", Protocol: 2, Kind: KindUI, Permissions: []string{"users:all", "users:grant"}, Image: img, Digest: digest},
 		{ID: "no-kind", Protocol: 2, Image: img, Digest: digest},
 		{ID: "pay-v2", Protocol: 2, Kind: KindPayment, Image: img, Digest: digest},
 		{ID: "odd-mode", Protocol: 2, Kind: KindBot, Mode: "socket", Image: img, Digest: digest},
@@ -91,7 +93,7 @@ func TestParseCatalogProtocol2(t *testing.T) {
 	for _, e := range got.Adapters {
 		ids = append(ids, e.ID)
 	}
-	if strings.Join(ids, ",") != "telegram,script,page,yookassa" {
+	if strings.Join(ids, ",") != "telegram,script,page,yookassa,reach" {
 		t.Fatalf("kept %v", ids)
 	}
 	if e := got.Adapters[2]; e.Mode != ModeHTTP {
@@ -239,8 +241,7 @@ func TestManagerAndClient(t *testing.T) {
 }
 
 // Requests for different addons wait in line, numbered one past the highest queued, and the
-// host takes them by number; a second one for an addon still in line is refused. The one
-// request.json of a panel before the queue is still shown first.
+// host takes them by number; a second one for an addon still in line is refused.
 func TestQueue(t *testing.T) {
 	dir := t.TempDir()
 	m := New(dir, "", "dev", slog.New(slog.DiscardHandler), time.Now)
@@ -283,16 +284,12 @@ func TestQueue(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(q, "0000000008-telegram.json")); err != nil {
 		t.Fatalf("not one past the highest: %v %v", err, names())
 	}
-	must(os.WriteFile(filepath.Join(dir, "addons", "request.json"), []byte(`{"action":"install","id":"old","at":"x"}`), 0o644))
 	var ids []string
 	for _, r := range m.Pending() {
 		ids = append(ids, r.ID)
 	}
-	if strings.Join(ids, ",") != "old,my-bot,telegram" {
+	if strings.Join(ids, ",") != "my-bot,telegram" {
 		t.Fatalf("pending: %v (a file named for another addon is not its request)", ids)
-	}
-	if err := m.Ask(Request{Action: "remove", ID: "old"}); !errors.Is(err, ErrBusy) {
-		t.Fatalf("the old panel's request is in line too: %v", err)
 	}
 }
 
@@ -303,7 +300,6 @@ func TestRequestValid(t *testing.T) {
 	good := []Request{
 		{Action: "install", ID: "telegram"},
 		{Action: "remove", ID: "telegram"},
-		{Action: "install", ID: "telegram", Source: SourceOfficial},
 		custom,
 		external,
 		{Action: "install", ID: "mine", Source: SourceExternal, Kind: KindBot, Mode: ModeClient},
@@ -319,6 +315,7 @@ func TestRequestValid(t *testing.T) {
 	}
 	bad := map[string]Request{
 		"an official one with an image":  {Action: "install", ID: "telegram", Image: "x"},
+		"an official source named":       {Action: "install", ID: "telegram", Source: SourceOfficial},
 		"a remove of a custom one":       with(custom, func(r *Request) { r.Action = "remove" }),
 		"a tag":                          with(custom, func(r *Request) { r.Image = "someone/bot:latest" }),
 		"YAML in the image":              with(custom, func(r *Request) { r.Image = "x\"\n    privileged: true" }),
@@ -340,6 +337,26 @@ func TestRequestValid(t *testing.T) {
 	for what, r := range bad {
 		if r.Valid() {
 			t.Errorf("%s passed: %+v", what, r)
+		}
+	}
+}
+
+// A host before the open permissions would drop an addon that asks for them.
+func TestHostTakes(t *testing.T) {
+	for _, c := range []struct {
+		host  string
+		perms []string
+		want  bool
+	}{
+		{"0.5.1.0-rc.10", []string{"bot", "kv"}, true},
+		{"0.5.1.0-rc.10", []string{"users:all"}, false},
+		{"0.5.1.0-rc.10", []string{"events", "users:grant"}, false},
+		{"0.5.1.0-rc.11", []string{"users:all", "users:grant"}, true},
+		{"0.5.1.0", []string{"users:grant"}, true},
+		{"dev", []string{"users:grant"}, true},
+	} {
+		if got := HostTakes(c.host, c.perms); got != c.want {
+			t.Errorf("HostTakes(%q, %v) = %v, want %v", c.host, c.perms, got, c.want)
 		}
 	}
 }

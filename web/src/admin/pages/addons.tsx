@@ -1,6 +1,7 @@
-import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { ArrowLeft, LayoutGrid, PackagePlus, Puzzle } from "lucide-react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import { LayoutGrid, Link2, Puzzle, Wrench } from "lucide-react";
 import { useState } from "react";
+import { useAddons, useMarketplace } from "../../api/hooks";
 import { Tabs } from "../../components/tabs";
 import { Button, PageHeader, Spinner } from "../../components/ui";
 import { t } from "../../i18n";
@@ -8,9 +9,9 @@ import { ADDON_TABS, type AddonsSearch } from "../search";
 import { CatalogTab } from "./addons-catalog";
 import { InstalledTab, type AddonActions } from "./addons-installed";
 import { ApproveDialog, MarketDetails, OwnDrawer } from "./market-dialogs";
-import { marketName, useMarketplace, type Market, type MarketEntry, type MarketInstalled } from "./market-common";
-import { PaymentDrawer, addonName, useAddons } from "./payment-addons";
-import { TorrentCard, TorrentHitsCard } from "./settings/torrent";
+import { marketName, marketReady, serverQueue, type Market, type MarketEntry, type MarketInstalled } from "./market-common";
+import { PaymentDrawer, addonName } from "./payment-addons";
+import { SourcesDrawer } from "./sources-drawer";
 
 type Addons = ReturnType<typeof useAddons>["data"];
 type Tab = (typeof ADDON_TABS)[number];
@@ -18,7 +19,8 @@ type Tab = (typeof ADDON_TABS)[number];
 /**
  * The addons: what is installed (the bot, the payment methods, pages and other addons of the
  * marketplace, the tools built into the panel), each in one row with its state and its
- * actions; and the catalog to install from. The dialogs of both tabs live here.
+ * actions; and the catalog to install from, the signed one and the sources the admin added.
+ * The dialogs of both tabs live here.
  */
 export function AddonsPage() {
   const search = useSearch({ from: "/_app/addons" });
@@ -28,10 +30,11 @@ export function AddonsPage() {
   const pay = useAddons();
   const m = market.data;
   const p = pay.data;
-  const ready = !!m && m.supported && m.host_ready;
+  const ready = marketReady(m);
   const [approve, setApprove] = useState<MarketEntry | null>(null);
   const [details, setDetails] = useState<MarketInstalled | null>(null);
   const [payment, setPayment] = useState<string | null>(null);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
   // The addon a new build is for stays through the drawer's closing animation.
   const [ownOpen, setOwnOpen] = useState(false);
   const [ownFor, setOwnFor] = useState<MarketInstalled | null>(null);
@@ -52,9 +55,14 @@ export function AddonsPage() {
         title={t("nav.addons")}
         sub={t("addons.subtitle")}
         actions={
-          <Button onClick={() => act.own(null)} disabled={!ready} title={!ready && m ? t("addons.ownUnavailable") : undefined}>
-            <PackagePlus size={16} aria-hidden /> {t("market.own")}
-          </Button>
+          <>
+            <Button onClick={() => setSourcesOpen(true)}>
+              <Link2 size={16} aria-hidden /> {t("sources.open")}
+            </Button>
+            <Button onClick={() => act.own(null)} disabled={!ready} title={!ready && m ? t("addons.ownUnavailable") : undefined}>
+              <Wrench size={16} aria-hidden /> {t("market.own")}
+            </Button>
+          </>
         }
       />
       <ServerBanners m={m} p={p} />
@@ -76,6 +84,7 @@ export function AddonsPage() {
       </Tabs>
       <ApproveDialog entry={approve} granted={approve ? (m?.installed.find((a) => a.id === approve.id)?.granted ?? []) : []} onClose={() => setApprove(null)} />
       <MarketDetails a={details} name={details ? marketName(details.id, m) : ""} onClose={() => setDetails(null)} />
+      <SourcesDrawer open={sourcesOpen} onOpenChange={setSourcesOpen} />
       <OwnDrawer open={ownOpen && ready} onOpenChange={setOwnOpen} update={ownFor} />
       <PaymentDrawer a={(payment && p?.installed.find((a) => a.id === payment)) || null} onClose={() => setPayment(null)} />
     </>
@@ -92,8 +101,9 @@ function anyName(id: string, m: Market | undefined, p: Addons): string {
  * Both lists read one queue of the server, so each request shows once.
  */
 function ServerBanners({ m, p }: { m: Market | undefined; p: Addons }) {
-  const pending = m?.pending ?? p?.pending;
-  const queued = Math.max((p?.queue?.length ?? 0) - 1, 0);
+  const queue = serverQueue(m, p);
+  const pending = queue[0];
+  const queued = Math.max(queue.length - 1, 0);
   const lastOf = m?.last ?? p?.last;
   const last = lastOf && !pending && lastOf.state === "failed" ? lastOf : null;
   return (
@@ -123,27 +133,5 @@ function ServerBanners({ m, p }: { m: Market | undefined; p: Addons }) {
         </div>
       ) : null}
     </>
-  );
-}
-
-/** The torrent blocker, an addon of its own: its switch and its catches. */
-export function TorrentPage() {
-  return (
-    <>
-      <PageHeader title={t("settings.torrent.title")} sub={t("addons.torrentSub")} actions={<BackToAddons />} />
-      <div className="flex max-w-4xl flex-col gap-4">
-        <TorrentCard />
-        <TorrentHitsCard />
-      </div>
-    </>
-  );
-}
-
-export function BackToAddons() {
-  return (
-    <Link to="/addons" className="btn btn-glass">
-      <ArrowLeft size={16} aria-hidden />
-      {t("addons.back")}
-    </Link>
   );
 }

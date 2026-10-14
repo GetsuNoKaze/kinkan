@@ -122,10 +122,9 @@ func TestAddonEndToEnd(t *testing.T) {
 	subBase := func(context.Context) string { return "https://vpn.example.com:21355/sub" }
 	backend := &tgbot.Local{Store: st, Settings: set, Gateway: gate, SubBase: subBase, Now: now, MiniApp: func() bool { return false }}
 	hub := events.NewHub()
-	api := panelapi.New(panelapi.Deps{Addons: addons.New(dir, "", "dev", log, now), Grants: st.Q, Store: st, Hub: hub, Log: log, Now: now,
-		Telegram: gate, Settings: set, SubBase: subBase, Bot: tgbot.RPCHandler(backend, gate.Member)})
-	gate.SetHandler(api.BotSlot(nil))
-	go gate.Run(ctx)
+	api := panelapi.New(panelapi.Deps{Addons: addons.New(dir, "", "dev", log, now), Store: st, Hub: hub, Log: log, Now: now,
+		Telegram: gate, Settings: set, SubBase: subBase, Bot: tgbot.RPCHandler(backend)})
+	gate.SetHandler(api.BotSlot())
 	apiSrv := httptest.NewServer(api)
 	defer apiSrv.Close()
 
@@ -133,6 +132,10 @@ func TestAddonEndToEnd(t *testing.T) {
 	a.updatesWait = time.Second
 	done := make(chan struct{})
 	go func() { a.Run(ctx); close(done) }()
+	// The gateway comes up after the addon, as after a restart of the panel: the addon sets up
+	// the chats once the proxy reaches Telegram.
+	time.Sleep(300 * time.Millisecond)
+	go gate.Run(ctx)
 
 	until := func(what string, ok func([]string) bool) []string {
 		t.Helper()
@@ -157,19 +160,38 @@ func TestAddonEndToEnd(t *testing.T) {
 	})
 	_ = said
 
-	// A payment message comes as an event; the bot tells the buyer.
+	// A payment message comes as an event; the bot tells the buyer, once: the deprecated bot.*
+	// twin of the same payment, which the panel still writes, is not read.
 	u, err := domain.NewUsers(st, domain.NewPool(st, now), noChanges{}, now).Create(ctx, domain.CreateInput{Name: "Anna", TariffID: firstTariff(t, st.Q)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	n := tgbot.Notifications{Emit: func(ctx context.Context, typ string, userID, tgID int64, data any, dedupe string) error {
-		err := st.Tx(ctx, func(q *db.Queries) error { return events.Emit(ctx, q, now(), typ, userID, tgID, data, dedupe) })
+	if err := st.Q.LinkTg(ctx, db.LinkTgParams{UserID: u.ID, TgID: 555, CreatedAt: now().Unix()}); err != nil {
+		t.Fatal(err)
+	}
+	emit := func(typ string, data any) {
+		t.Helper()
+		if err := st.Tx(ctx, func(q *db.Queries) error { return events.Emit(ctx, q, now(), typ, u.ID, 555, data, typ+":1") }); err != nil {
+			t.Fatal(err)
+		}
 		hub.Kick()
-		return err
-	}}
-	before := len(tg.said())
-	n.Paid(ctx, db.Payment{ID: 1, TgID: 555, Kind: "new", Provider: "stars", Amount: 100, Currency: "XTR", Status: "applied"}, u, true)
-	until("the payment message", func(s []string) bool { return len(s) > before })
+	}
+	pay := db.Payment{ID: 1, TgID: 555, Kind: "new", Provider: "stars", Amount: 100, Currency: "XTR", TariffName: "Month", Status: "applied"}
+	told := func(s []string) (n int) {
+		for _, m := range s {
+			if strings.HasPrefix(m, "sendMessage: ") && strings.Contains(m, "готова") {
+				n++
+			}
+		}
+		return n
+	}
+	emit(events.BotPaid, tgbot.PaymentMessage{Payment: pay, User: u, Created: true})
+	emit(events.PaymentPaid, events.Payment{PaymentID: 1, Kind: "new", Provider: "stars", Amount: 100, Currency: "XTR", TariffName: "Month", Created: true})
+	until("the payment message", func(s []string) bool { return told(s) > 0 })
+	time.Sleep(500 * time.Millisecond)
+	if n := told(tg.said()); n != 1 {
+		t.Fatalf("the payment was told %d times: %q", n, tg.said())
+	}
 
 	cancel()
 	select {

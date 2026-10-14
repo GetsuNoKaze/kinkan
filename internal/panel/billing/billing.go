@@ -96,8 +96,10 @@ type Telegram interface {
 	Subscribed(ctx context.Context, tgID int64) (bool, error)
 }
 
-// Notifier tells buyers what came of their payments: the panel writes them as events
-// (tgbot.Notifications) and the bot addon, which holds the bot's screens, words and sends them.
+// Notifier tells buyers what came of their payments. The panel writes the deprecated bot.*
+// events through it (tgbot.Notifications), for the bot builds released before the payment
+// events; the payment.* and trial.not_given events the bot addon reads are written by billing
+// itself, in the transaction of the change.
 type Notifier interface {
 	// Paid tells the buyer the subscription is ready.
 	Paid(ctx context.Context, p db.Payment, u db.User, created bool)
@@ -118,13 +120,13 @@ type Deps struct {
 	// TrustProxy reads the client's IP from X-Forwarded-For: adapters check where a
 	// webhook came from (YooKassa's addresses).
 	TrustProxy bool
-	MaxLinks   int64 // subscriptions one Telegram account may hold
+	MaxLinks   int64 // subscriptions one Telegram account may hold (tgate.MaxLinks)
 	// Addons are the marketplace's payment adapters; nil: none.
 	Addons *addons.Manager
 	// SubBase is https://host:port/<sub path>, where the webhooks are; "" without an address.
 	SubBase func(ctx context.Context) string
 	Promo   *promo.Service
-	// Events wakes the addons reading the feed after a payment is applied or refunded; nil: no
+	// Events wakes the addons reading the feed after a payment, a trial or a refund; nil: no
 	// one waits (the events are written all the same).
 	Events *events.Hub
 }
@@ -140,9 +142,6 @@ type Service struct {
 }
 
 func New(d Deps) *Service {
-	if d.MaxLinks == 0 {
-		d.MaxLinks = 5
-	}
 	return &Service{d: d}
 }
 
@@ -913,7 +912,7 @@ func (s *Service) Apply(ctx context.Context, id int64) error {
 			}
 		}
 		if u, created, err = s.d.Users.Purchase(ctx, q, domain.PurchaseInput{UserID: userID, TariffID: pay.TariffID.Int64,
-			Term: pay.TermDays, Name: buyerName(ctx, q, pay.TgID), ResetTraffic: reset}); err != nil {
+			Term: pay.TermDays, Name: buyerName(ctx, q, pay.TgID), TgID: pay.TgID, ResetTraffic: reset}); err != nil {
 			return err
 		}
 		if created {
@@ -940,7 +939,13 @@ func (s *Service) Apply(ctx context.Context, id int64) error {
 		if err := run(q); err != nil || done {
 			return err
 		}
-		return emitPayment(ctx, q, s.d.Now(), events.PaymentPaid, pay, u.ID, created)
+		if err := emitPayment(ctx, q, s.d.Now(), events.PaymentPaid, pay, u.ID, created, false); err != nil {
+			return err
+		}
+		if pay.Kind == KindTrial {
+			return emitTrialStarted(ctx, q, s.d.Now(), u.ID, pay.TgID, pay.TariffID.Int64, pay.ID)
+		}
+		return nil
 	}
 	err = s.d.Store.Tx(ctx, told)
 	if errors.Is(err, domain.ErrNoSlots) {
@@ -1052,8 +1057,7 @@ func (s *Service) StarsRefunded(ctx context.Context, tgID int64, chargeID string
 }
 
 // Run reconciles in the background: applies paid payments that failed to apply, asks the
-// adapters about open invoices (a webhook may never come), expires invoices nobody paid
-// and gets the host to install the adapters that took over the built-in providers.
+// adapters about open invoices (a webhook may never come) and expires invoices nobody paid.
 func (s *Service) Run(ctx context.Context) {
 	t := time.NewTicker(reconcileEvery)
 	defer t.Stop()
@@ -1071,7 +1075,6 @@ func (s *Service) Run(ctx context.Context) {
 func (s *Service) Reconcile(ctx context.Context) {
 	now := s.d.Now()
 	q := s.d.Store.Q
-	s.installMoved(ctx)
 	// Paid but not applied payments are tried for as long as they stay so: the buyer
 	// paid, and the admin sees why on the Payments page. Pending ones are asked about while
 	// they are open (pendingTTL).
