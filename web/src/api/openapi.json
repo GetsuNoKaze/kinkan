@@ -700,6 +700,42 @@
         ],
         "type": "object"
       },
+      "AuthObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "close": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "elapsed_ms": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "status": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "bytes",
+          "elapsed_ms",
+          "close"
+        ],
+        "type": "object"
+      },
       "AutoEvent": {
         "additionalProperties": false,
         "properties": {
@@ -1438,6 +1474,19 @@
         ],
         "type": "object"
       },
+      "ClearedOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "type": "object"
+      },
       "ClientEndpoint": {
         "additionalProperties": false,
         "properties": {
@@ -2131,6 +2180,29 @@
         ],
         "type": "object"
       },
+      "Finding": {
+        "additionalProperties": false,
+        "properties": {
+          "compare": {
+            "$ref": "#/components/schemas/H2Comparison"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "level",
+          "detail"
+        ],
+        "type": "object"
+      },
       "FolderView": {
         "additionalProperties": false,
         "properties": {
@@ -2349,6 +2421,91 @@
         ],
         "type": "object"
       },
+      "H2Comparison": {
+        "additionalProperties": false,
+        "properties": {
+          "reference": {
+            "$ref": "#/components/schemas/H2Fingerprint"
+          },
+          "target": {
+            "$ref": "#/components/schemas/H2Fingerprint"
+          }
+        },
+        "required": [
+          "target",
+          "reference"
+        ],
+        "type": "object"
+      },
+      "H2Fingerprint": {
+        "additionalProperties": false,
+        "properties": {
+          "header_order": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "initial_window_updates": {
+            "items": {
+              "$ref": "#/components/schemas/H2Window"
+            },
+            "type": "array"
+          },
+          "settings": {
+            "items": {
+              "$ref": "#/components/schemas/H2Setting"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "settings",
+          "initial_window_updates",
+          "header_order"
+        ],
+        "type": "object"
+      },
+      "H2Setting": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "value": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "value"
+        ],
+        "type": "object"
+      },
+      "H2Window": {
+        "additionalProperties": false,
+        "properties": {
+          "increment": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stream": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "stream",
+          "increment"
+        ],
+        "type": "object"
+      },
       "HappLinkOutputBody": {
         "additionalProperties": false,
         "properties": {
@@ -2471,6 +2628,35 @@
         "required": [
           "kind",
           "url"
+        ],
+        "type": "object"
+      },
+      "InboundProbeView": {
+        "additionalProperties": false,
+        "properties": {
+          "inbound_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "network": {
+            "type": "string"
+          },
+          "port": {
+            "type": "string"
+          },
+          "report": {
+            "$ref": "#/components/schemas/ProtocolProbeReport"
+          }
+        },
+        "required": [
+          "inbound_id",
+          "name",
+          "port",
+          "network",
+          "report"
         ],
         "type": "object"
       },
@@ -2790,6 +2976,111 @@
           "state",
           "total",
           "done"
+        ],
+        "type": "object"
+      },
+      "LeakEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "countries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "country_threshold": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "first_seen": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "last_seen": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "network_threshold": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "networks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "user_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "window_minutes": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "user_id",
+          "first_seen",
+          "last_seen",
+          "window_minutes",
+          "network_threshold",
+          "country_threshold",
+          "networks",
+          "countries"
+        ],
+        "type": "object"
+      },
+      "LeakPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "countries": {
+            "format": "int64",
+            "maximum": 100,
+            "minimum": 2,
+            "type": "integer"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "networks": {
+            "format": "int64",
+            "maximum": 100,
+            "minimum": 2,
+            "type": "integer"
+          },
+          "window_minutes": {
+            "format": "int64",
+            "maximum": 60,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "networks",
+          "countries",
+          "window_minutes"
+        ],
+        "type": "object"
+      },
+      "LeakUserOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/LeakEvent"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "events"
         ],
         "type": "object"
       },
@@ -3657,6 +3948,74 @@
         ],
         "type": "object"
       },
+      "NodeProbeInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "inbound_id": {
+            "description": "0 scans all enabled inbounds",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "reference_host": {
+            "description": "TLS name of the cover site on the same node; defaults to the inbound SNI",
+            "maxLength": 253,
+            "type": "string"
+          },
+          "reference_port": {
+            "format": "int64",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "NodeProbeView": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "inbounds": {
+            "items": {
+              "$ref": "#/components/schemas/InboundProbeView"
+            },
+            "type": "array"
+          },
+          "local_node": {
+            "type": "boolean"
+          },
+          "node_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "quiet": {
+            "$ref": "#/components/schemas/QuietView",
+            "description": "Вердикт ноды целиком и что сделать (kinkan_quiet.go)"
+          },
+          "started_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "vantage": {
+            "enum": [
+              "panel"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "started_at",
+          "node_id",
+          "vantage",
+          "address",
+          "local_node",
+          "inbounds",
+          "quiet"
+        ],
+        "type": "object"
+      },
       "NodeShare": {
         "additionalProperties": false,
         "properties": {
@@ -3721,6 +4080,49 @@
           "items",
           "total"
         ],
+        "type": "object"
+      },
+      "NodeSiteInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "site_id": {
+            "description": "Сайт ноды; 0 — без сайта",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "site_id"
+        ],
+        "type": "object"
+      },
+      "NodeSiteOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "node_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "site_id": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "node_id",
+          "site_id"
+        ],
+        "type": "object"
+      },
+      "NodeSiteServedOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "served": {
+            "$ref": "#/components/schemas/SiteStatus",
+            "description": "Сайт, который отдаёт нода: хеш, адреса на 127.0.0.1 и ошибка (например, порт занят); нет поля — ничего"
+          }
+        },
         "type": "object"
       },
       "NodeStatus": {
@@ -5646,6 +6048,46 @@
         ],
         "type": "object"
       },
+      "ProbeRunView": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "inbound_id": {
+            "description": "0: все подключения ноды",
+            "format": "int64",
+            "type": "integer"
+          },
+          "inbounds": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "started_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "verdict": {
+            "description": "Вердикт ноды целиком",
+            "enum": [
+              "quiet",
+              "noticeable",
+              "exposed",
+              "inconclusive"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "started_at",
+          "inbound_id",
+          "verdict",
+          "inbounds"
+        ],
+        "type": "object"
+      },
       "ProbeView": {
         "additionalProperties": false,
         "properties": {
@@ -6065,6 +6507,49 @@
         ],
         "type": "object"
       },
+      "ProtocolProbeReport": {
+        "additionalProperties": false,
+        "properties": {
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            },
+            "type": "array"
+          },
+          "incomplete": {
+            "type": "boolean"
+          },
+          "protocol": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "quiet",
+              "noticeable",
+              "exposed",
+              "inconclusive"
+            ],
+            "type": "string"
+          },
+          "wrong_key": {
+            "$ref": "#/components/schemas/WrongKeyComparison"
+          }
+        },
+        "required": [
+          "protocol",
+          "verdict",
+          "incomplete",
+          "target",
+          "findings"
+        ],
+        "type": "object"
+      },
       "PutSubImageInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -6098,6 +6583,98 @@
         },
         "required": [
           "config"
+        ],
+        "type": "object"
+      },
+      "QuietAdvice": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "description": "Что предложить: выключить подключение, дать ноде сайт, повторить с эталоном или ничего",
+            "enum": [
+              "disable",
+              "site",
+              "reference",
+              "none"
+            ],
+            "type": "string"
+          },
+          "code": {
+            "description": "Что не так; текст — quietNode.advice.\u003ccode\u003e",
+            "enum": [
+              "tuic_auth",
+              "quic_obfs",
+              "quic_auth",
+              "tt_site",
+              "tt_differs",
+              "reality_site",
+              "reality_differs",
+              "reality_far",
+              "exposed",
+              "noticeable",
+              "no_reference",
+              "no_reference_443",
+              "self_reference",
+              "obfuscated",
+              "failed",
+              "incomplete"
+            ],
+            "type": "string"
+          },
+          "inbound_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "level": {
+            "enum": [
+              "exposed",
+              "noticeable",
+              "inconclusive"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "inbound_id",
+          "name",
+          "level",
+          "code",
+          "action"
+        ],
+        "type": "object"
+      },
+      "QuietView": {
+        "additionalProperties": false,
+        "properties": {
+          "advice": {
+            "items": {
+              "$ref": "#/components/schemas/QuietAdvice"
+            },
+            "type": "array"
+          },
+          "verdict": {
+            "description": "Нода не тише самого заметного подключения",
+            "enum": [
+              "quiet",
+              "noticeable",
+              "exposed",
+              "inconclusive"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "verdict",
+          "advice"
         ],
         "type": "object"
       },
@@ -6274,6 +6851,60 @@
           "cert_valid",
           "dns_match",
           "ok"
+        ],
+        "type": "object"
+      },
+      "Rollback": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "current": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "current",
+          "version",
+          "available",
+          "reason",
+          "at"
+        ],
+        "type": "object"
+      },
+      "RollbackInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "description": "Пароль админа: откат не запускается из одной лишь украденной сессии",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "totp": {
+            "description": "Код из приложения, если включена 2FA",
+            "maxLength": 16,
+            "type": "string"
+          },
+          "version": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "password"
         ],
         "type": "object"
       },
@@ -6569,6 +7200,177 @@
         ],
         "type": "object"
       },
+      "ScannerDay": {
+        "additionalProperties": false,
+        "properties": {
+          "clients": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "day": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "own": {
+            "description": "Проверки самой панели",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "day",
+          "count",
+          "clients",
+          "own"
+        ],
+        "type": "object"
+      },
+      "ScannerRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "asn": {
+            "type": "string"
+          },
+          "client": {
+            "type": "boolean"
+          },
+          "count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "country": {
+            "type": "string"
+          },
+          "day": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "first": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "inbound": {
+            "type": "string"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "last": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "method": {
+            "type": "string"
+          },
+          "organization": {
+            "type": "string"
+          },
+          "own": {
+            "type": "boolean"
+          },
+          "protocol": {
+            "type": "string"
+          },
+          "ptr": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "scanner": {
+            "type": "string"
+          },
+          "tls": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "day",
+          "ip",
+          "inbound",
+          "protocol",
+          "reason",
+          "client",
+          "count",
+          "first",
+          "last",
+          "scanner"
+        ],
+        "type": "object"
+      },
+      "ScannerStatusView": {
+        "additionalProperties": false,
+        "properties": {
+          "dropped": {
+            "description": "Сколько событий нода не записала (переполнение очереди или лимитов)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "error": {
+            "description": "Ошибка последнего сбора, если он не удался",
+            "type": "string"
+          },
+          "error_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "last_ok": {
+            "description": "Последний удачный сбор журнала с ноды",
+            "format": "date-time",
+            "type": "string"
+          },
+          "unsupported": {
+            "description": "Нода не ведёт журнал (Mikan или старый Kinkan)",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "dropped",
+          "unsupported"
+        ],
+        "type": "object"
+      },
+      "ScannerView": {
+        "additionalProperties": false,
+        "properties": {
+          "coverage": {
+            "type": "string"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/ScannerDay"
+            },
+            "type": "array"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/ScannerRecord"
+            },
+            "type": "array"
+          },
+          "spike": {
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ScannerStatusView"
+          }
+        },
+        "required": [
+          "status",
+          "records",
+          "days",
+          "spike",
+          "coverage"
+        ],
+        "type": "object"
+      },
       "Servers": {
         "additionalProperties": false,
         "properties": {
@@ -6616,6 +7418,22 @@
           "user_agent",
           "created_at",
           "last_seen_at"
+        ],
+        "type": "object"
+      },
+      "SetTTConnectionsInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "value": {
+            "description": "Максимум TLS-соединений у клиента, 1–8",
+            "format": "int64",
+            "maximum": 8,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "value"
         ],
         "type": "object"
       },
@@ -6851,6 +7669,143 @@
           "happ_provider_id",
           "happ_hide_settings",
           "happ_crypt"
+        ],
+        "type": "object"
+      },
+      "SiteOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "existing": {
+            "type": "boolean"
+          },
+          "files": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nodes": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "same_title": {
+            "type": "boolean"
+          },
+          "several_nodes": {
+            "type": "boolean"
+          },
+          "size": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "existing",
+          "several_nodes",
+          "same_title",
+          "id",
+          "name",
+          "hash",
+          "title",
+          "size",
+          "files",
+          "created_at",
+          "nodes"
+        ],
+        "type": "object"
+      },
+      "SiteStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "http": {
+            "type": "string"
+          },
+          "https": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "hash"
+        ],
+        "type": "object"
+      },
+      "SiteView": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "files": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nodes": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "same_title": {
+            "type": "boolean"
+          },
+          "several_nodes": {
+            "type": "boolean"
+          },
+          "size": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "several_nodes",
+          "same_title",
+          "id",
+          "name",
+          "hash",
+          "title",
+          "size",
+          "files",
+          "created_at",
+          "nodes"
         ],
         "type": "object"
       },
@@ -7281,6 +8236,73 @@
           "proc_rss",
           "net_rx_bps",
           "net_tx_bps"
+        ],
+        "type": "object"
+      },
+      "TTProbeReport": {
+        "additionalProperties": false,
+        "properties": {
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            },
+            "type": "array"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "findings"
+        ],
+        "type": "object"
+      },
+      "TTProbeView": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "description": "IP, по которому шли все запросы проверки",
+            "type": "string"
+          },
+          "inbound_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "local_node": {
+            "description": "Нода на сервере панели: панель проверяет свой же адрес снаружи",
+            "type": "boolean"
+          },
+          "node_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "report": {
+            "$ref": "#/components/schemas/TTProbeReport"
+          },
+          "started_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "vantage": {
+            "description": "Запросы идут с сервера панели, а не из браузера или сети клиента",
+            "enum": [
+              "panel"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "started_at",
+          "node_id",
+          "inbound_id",
+          "vantage",
+          "address",
+          "local_node",
+          "report"
         ],
         "type": "object"
       },
@@ -8117,6 +9139,51 @@
         ],
         "type": "object"
       },
+      "TtConnectionsBody": {
+        "additionalProperties": false,
+        "properties": {
+          "default": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "max": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "value": {
+            "description": "Сколько TLS-соединений клиент может держать к подключению",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "value",
+          "default",
+          "max"
+        ],
+        "type": "object"
+      },
+      "TtProbeInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "inbound_id": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "reference_port": {
+            "description": "HTTPS cover-сайт на той же ноде; 0 — без сравнения",
+            "format": "int64",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inbound_id"
+        ],
+        "type": "object"
+      },
       "Tune": {
         "additionalProperties": false,
         "properties": {
@@ -8824,6 +9891,35 @@
           "plus",
           "routes",
           "inbounds"
+        ],
+        "type": "object"
+      },
+      "WrongKeyComparison": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "reference": {
+            "$ref": "#/components/schemas/AuthObservation"
+          },
+          "target": {
+            "$ref": "#/components/schemas/AuthObservation"
+          },
+          "verdict": {
+            "enum": [
+              "site",
+              "different",
+              "exposed",
+              "inconclusive"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "verdict",
+          "reason",
+          "target"
         ],
         "type": "object"
       },
@@ -10782,6 +11878,172 @@
         ]
       }
     },
+    "/api/v1/inbounds/{id}/tt-connections": {
+      "get": {
+        "operationId": "get-tt-connections",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TtConnectionsBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Соединения клиента TrustTunnel",
+        "tags": [
+          "inbounds"
+        ]
+      },
+      "put": {
+        "operationId": "set-tt-connections",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetTTConnectionsInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TtConnectionsBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Изменить соединения клиента TrustTunnel",
+        "tags": [
+          "inbounds"
+        ]
+      }
+    },
+    "/api/v1/kinkan/leak-policy": {
+      "get": {
+        "operationId": "get-leak-policy",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeakPolicy"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Настройки детектора подписок",
+        "tags": [
+          "user"
+        ],
+        "x-session-only": true
+      },
+      "put": {
+        "operationId": "set-leak-policy",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeakPolicy"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeakPolicy"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Изменить настройки детектора подписок",
+        "tags": [
+          "user"
+        ],
+        "x-session-only": true
+      }
+    },
     "/api/v1/marketplace": {
       "get": {
         "operationId": "list-marketplace",
@@ -11620,6 +12882,322 @@
         "x-session-only": true
       }
     },
+    "/api/v1/nodes/{id}/protocol-probe": {
+      "post": {
+        "operationId": "probe-node-protocols",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NodeProbeInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeProbeView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Проверить протоколы глазами сканера",
+        "tags": [
+          "node"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/nodes/{id}/protocol-probes": {
+      "delete": {
+        "operationId": "delete-node-protocol-probes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClearedOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Очистить историю проверок ноды",
+        "tags": [
+          "node"
+        ],
+        "x-session-only": true
+      },
+      "get": {
+        "operationId": "node-protocol-probes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProbeRunView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "История проверок протоколов",
+        "tags": [
+          "node"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/nodes/{id}/scanners": {
+      "delete": {
+        "operationId": "delete-node-scanners",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Очистить журнал сканеров ноды",
+        "tags": [
+          "node"
+        ],
+        "x-session-only": true
+      },
+      "get": {
+        "operationId": "node-scanners",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScannerView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Журнал неудачных обращений",
+        "tags": [
+          "node"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/nodes/{id}/site": {
+      "get": {
+        "operationId": "node-site-served",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeSiteServedOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Что отдаёт нода",
+        "tags": [
+          "sites"
+        ]
+      },
+      "put": {
+        "operationId": "set-node-site",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NodeSiteInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeSiteOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Сайт ноды",
+        "tags": [
+          "sites"
+        ]
+      }
+    },
     "/api/v1/nodes/{id}/speedtest": {
       "post": {
         "description": "Задержка, разброс и потери по 20 DNS-запросам к 1.1.1.1, затем загрузка и отдача через speed.cloudflare.com: каждое до 8 секунд или до лимита объёма, что наступит раньше, не больше 250 МБ на загрузку и 100 МБ на отдачу. Занимает около 20 секунд; пользователи ноды могут почувствовать нагрузку на время теста. Одновременно на ноде идёт один тест, на одну ноду не чаще раза в 5 минут (иначе 429 speed_test_cooldown).",
@@ -11778,6 +13356,60 @@
         "tags": [
           "node"
         ]
+      }
+    },
+    "/api/v1/nodes/{id}/trusttunnel-probe": {
+      "post": {
+        "operationId": "probe-node-trusttunnel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TtProbeInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TTProbeView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Проверить TrustTunnel глазами сканера",
+        "tags": [
+          "node"
+        ],
+        "x-session-only": true
       }
     },
     "/api/v1/nodes/{id}/update": {
@@ -12996,6 +14628,85 @@
         ]
       }
     },
+    "/api/v1/protocol-probes/{id}": {
+      "delete": {
+        "operationId": "delete-protocol-probe",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Удалить проверку из истории",
+        "tags": [
+          "node"
+        ],
+        "x-session-only": true
+      },
+      "get": {
+        "operationId": "protocol-probe",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeProbeView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Сохранённая проверка протоколов",
+        "tags": [
+          "node"
+        ],
+        "x-session-only": true
+      }
+    },
     "/api/v1/settings": {
       "get": {
         "operationId": "get-settings",
@@ -13294,6 +15005,130 @@
         "summary": "Профиль Clash с этой маршрутизацией, без сохранения",
         "tags": [
           "settings"
+        ]
+      }
+    },
+    "/api/v1/sites": {
+      "get": {
+        "operationId": "list-sites",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SiteView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Сайты нод",
+        "tags": [
+          "sites"
+        ]
+      },
+      "post": {
+        "operationId": "upload-site",
+        "parameters": [
+          {
+            "description": "Имя сайта в панели; пусто — заголовок главной страницы",
+            "explode": false,
+            "in": "query",
+            "name": "name",
+            "schema": {
+              "description": "Имя сайта в панели; пусто — заголовок главной страницы",
+              "maxLength": 100,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/zip": {
+              "schema": {
+                "contentMediaType": "application/octet-stream",
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteOutputBody"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Загрузить сайт (zip)",
+        "tags": [
+          "sites"
+        ]
+      }
+    },
+    "/api/v1/sites/{id}": {
+      "delete": {
+        "operationId": "delete-site",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Удалить сайт",
+        "tags": [
+          "sites"
         ]
       }
     },
@@ -14742,6 +16577,79 @@
         "x-session-only": true
       }
     },
+    "/api/v1/updates/rollback": {
+      "get": {
+        "operationId": "get-rollback",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rollback"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Доступный откат панели",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/updates/rollback/request": {
+      "post": {
+        "operationId": "request-rollback",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RollbackInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rollback"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Откатить панель к предыдущей совместимой версии",
+        "tags": [
+          "settings"
+        ],
+        "x-session-only": true
+      }
+    },
     "/api/v1/users": {
       "get": {
         "operationId": "list-users",
@@ -15617,6 +17525,50 @@
         "tags": [
           "users"
         ]
+      }
+    },
+    "/api/v1/users/{id}/leak-events": {
+      "get": {
+        "operationId": "get-user-leak-events",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeakUserOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Подозрительное использование подписки",
+        "tags": [
+          "user"
+        ],
+        "x-session-only": true
       }
     },
     "/api/v1/users/{id}/pools": {

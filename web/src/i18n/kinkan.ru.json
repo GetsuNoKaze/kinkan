@@ -28,7 +28,7 @@
       "leak_policy_invalid": "Проверьте пороги и окно детектора.",
       "config_managed": "Поле «{value}» kinkan заполняет сам, уберите его",
       "node_cannot_update": "Эта нода слишком старая, чтобы обновить её из панели: выполните kinkan update на её сервере один раз",
-      "addons_unavailable": "Способы оплаты ставит только установщик kinkan на сервере.",
+      "addons_unavailable": "Аддоны ставит только установщик kinkan на сервере.",
       "config_tt_connections": "mikan.client.max-connections: целое число от 1 до 8, только у TrustTunnel",
       "not_trusttunnel": "Это подключение не TrustTunnel",
       "reality_sni_foreign": "SNI принадлежит панели или другой ноде: цель REALITY на этой ноде ответит своим сертификатом, и клиенты не подключатся. Укажите имя самой цели"

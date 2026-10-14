@@ -54,7 +54,7 @@ func TestFitToSiteTakesTheNodesOwnWebServer(t *testing.T) {
 		return s.fitToSite(tpl, st, n)["reality-config"].(map[string]any)["dest"].(string)
 	}
 	syncer := func(chain string) *Syncer {
-		s := &Syncer{tls: func() (*nodeapi.TLSFiles, error) { return &nodeapi.TLSFiles{CertPEM: chain}, nil }}
+		s := &Syncer{tls: func() (*nodeapi.TLSFiles, string, error) { return &nodeapi.TLSFiles{CertPEM: chain}, "", nil }}
 		s.health.Store(&HealthView{OK: true, Health: nodeapi.Health{Site: &nodeapi.SiteStatus{Hash: "h1", HTTPS: "127.0.0.1:17443"}}})
 		return s
 	}
