@@ -178,9 +178,9 @@ pub(super) fn run(from: &str, version: &str, say: &mut dyn FnMut(&str)) -> Resul
     // An adapter request may have deferred its wake-up to this operation, just as
     // it does to an ordinary update. Do not strand it when auto-updates are off.
     if addon::pending()
-        && let Err(e) = super::panel_addons(say)
+        && let Err(e) = addon::apply_here(say)
     {
-        say(&format!("Payment adapters: {e:#}"));
+        say(&format!("Addons: {e:#}"));
     }
     result
 }
