@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Globe, Trash2, Upload } from "lucide-react";
 import { useRef, useState } from "react";
-import { api, errorText, rawApi, unwrap, type Schemas } from "../../api/client";
+import { api, errorText, unwrap, type Schemas } from "../../api/client";
 import { Drawer } from "../../components/overlay";
 import { Button, Field, Pill } from "../../components/ui";
 import { t } from "../../i18n";
@@ -104,7 +104,13 @@ function UploadForm({ onUploaded, onError }: { onUploaded: (existing: boolean) =
   const [name, setName] = useState("");
   const [picked, setPicked] = useState<File | null>(null);
   const upload = useMutation({
-    mutationFn: (f: File) => rawApi(`/api/v1/sites${name.trim() ? `?name=${encodeURIComponent(name.trim())}` : ""}`, { method: "POST", body: f, headers: { "Content-Type": "application/zip" } }),
+    // The zip goes as it is: the schema calls it a string, the serializer passes the File through.
+    mutationFn: (f: File) => unwrap(api.POST("/api/v1/sites", {
+      params: { query: name.trim() ? { name: name.trim() } : {} },
+      body: f as unknown as string,
+      bodySerializer: (body: unknown) => body as BodyInit,
+      headers: { "Content-Type": "application/zip" },
+    })),
     onSuccess: (r: { existing?: boolean }) => { setName(""); setPicked(null); if (file.current) file.current.value = ""; onUploaded(!!r.existing); },
     onError: (e) => onError(errorText(e)),
   });
