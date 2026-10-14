@@ -2,7 +2,8 @@ import type kinkanRu from "./kinkan.ru.json";
 
 // Kinkan's texts live in kinkan.ru.json / kinkan.en.json, apart from Mikan's dictionaries,
 // so that a merge from upstream never meets them. They are laid over Mikan's when a
-// language is loaded; the fork only adds keys, it changes none of Mikan's.
+// language is loaded. The fork adds keys and changes Mikan's only to call the product
+// Kinkan: Mikan's NOTICE.md asks a modified version not to present itself as mikan.
 
 export type KinkanDict = typeof kinkanRu;
 

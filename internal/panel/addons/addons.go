@@ -377,7 +377,7 @@ func New(dataDir, catalogURL, panelVersion string, log *slog.Logger, now func() 
 	if catalogURL == "" {
 		catalogURL = CatalogURL
 	}
-	pub, _ := release.Key(release.PublicKey)
+	pub, _ := release.Key(kinkanCatalogKey) // Kinkan: the marketplace is signed with Mikan's key (kinkan.go)
 	m := &Manager{catalogURL: catalogURL, pub: pub, version: panelVersion, log: log, now: now,
 		hc: &http.Client{Timeout: 15 * time.Second}, adapters: &http.Client{Timeout: AdapterTimeout}, infos: map[string]cachedInfo{}, infos2: map[string]cachedInfoV2{},
 		// The panel fetches what the addon names and nothing it points elsewhere to.

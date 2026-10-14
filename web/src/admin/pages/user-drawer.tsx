@@ -164,6 +164,7 @@ function UserBody({ u, onDeleted, onRename }: { u: User; onDeleted: () => void; 
       <ExpirySection u={u} />
       <TrafficSection u={u} />
       <DevicesSection u={u} />
+      <KinkanUserLeaks userID={u.id} /> {/* Kinkan */}
       <TariffSection u={u} />
       <NoteSection u={u} />
       <Disclosure title={t("userDrawer.advanced")} sub={t("userDrawer.advancedSub")}>
@@ -214,3 +215,5 @@ function UserBody({ u, onDeleted, onRename }: { u: User; onDeleted: () => void; 
     </>
   );
 }
+
+import { KinkanUserLeaks } from "./kinkan-user-leaks"; // Kinkan

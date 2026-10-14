@@ -2,6 +2,34 @@
 
 Fork release notes. Upstream history remains in CHANGELOG.md.
 
+## 0.5.0.5-tt.13
+### en
+- TrustTunnel: the admin chooses how many connections clients may keep to an inbound (1 to 8, default 1), on the inbound's page; subscriptions carry it as `max-connections`. Clients with the fix in getmikan/Citrus#54 open at most that many TLS connections; older clients limit only their pool and can still open several connections at a cold start.
+- REALITY: a server name that belongs to the panel or to another node is refused when the inbound is saved. The target on this node answers with its own certificate, so clients sending that name never connect; this is how VLESS stopped working on two nodes on 12.10.
+- Mikan's NOTICE and TRADEMARK are followed: the panel credits Mikan (Copyright (C) 2026 Miroshka and Mikan), says that Kinkan is a modified version, and no longer shows the name mikan. NOTICE.md and TRADEMARK.md are Mikan's, NOTICE-KINKAN.md is the fork's.
+### ru
+- TrustTunnel: админ выбирает, сколько соединений клиенты могут держать к подключению (от 1 до 8, по умолчанию 1), на странице подключения; подписка передаёт это как `max-connections`. Клиенты с правкой из getmikan/Citrus#54 открывают не больше стольких TLS-соединений; старые клиенты ограничивают только свой пул и при холодном старте всё ещё могут открыть несколько соединений.
+- REALITY: имя сервера, которое принадлежит панели или другой ноде, не даёт сохранить подключение. Цель на этой ноде отвечает своим сертификатом, и клиенты с таким именем не подключаются; так 12.10 перестал работать VLESS на двух нодах.
+- Соблюдаются NOTICE и TRADEMARK Mikan: панель указывает авторство Mikan (Copyright (C) 2026 Miroshka and Mikan), говорит, что Kinkan — изменённая версия, и больше не показывает имя mikan. NOTICE.md и TRADEMARK.md — файлы Mikan, NOTICE-KINKAN.md — форка.
+
+## 0.5.0.5-tt.12
+### en
+- Node site, answering like Caddy 2.11: another Host (or none, as a bare HTTP/2 preface has) gets an empty 200, CONNECT to the site a 308 to /, errors the site's own 404.html with the file's headers, and the ETag is Caddy 2.11's. The site's names are the node's certificate's.
+- REALITY aimed at a web server on the node's own address (a Caddy beside the node) moves to the node's site when the node's certificate is publicly trusted for every name REALITY shows, so the address shows one web server and the Caddy can go.
+- Scanner journal: each rejected REALITY client is recorded with the JA4 fingerprint of its TLS ClientHello; the journal says what kind of program it looks like and which fingerprints many addresses share (one program behind many IPs is a scan through a proxy network). The spike warning waits for three whole days of collection, so a node just moved to Kinkan no longer shows its usual background as a spike.
+- Protocol check: each TCP protocol is also sent a random wrong key and compared with the node's site (VLESS, Trojan, AnyTLS, VMess, and the QUIC protocols).
+- A subscription used from many networks or countries at once is flagged on the user's card (network and country only, no addresses, 30 days).
+- Quiet node by default: new installs and new nodes no longer get TUIC, whose own close codes give a node away to one probe; its card says so. The TrustTunnel card describes Kinkan's answer, not Mikan's 407.
+- The addon catalog (Mikan's marketplace) is checked with Mikan's key again; it was refused. A remote node still on Mikan's installer cannot follow the panel to Kinkan: its card now says why and shows the one command to run on it.
+### ru
+- Сайт ноды отвечает как Caddy 2.11: на чужой Host (или без него, как у «голой» преамбулы HTTP/2) пустой 200, на CONNECT к сайту 308 на /, ошибки страницей 404.html сайта с заголовками файла, ETag в формате Caddy 2.11. Имена сайта берутся из сертификата ноды.
+- REALITY, который смотрит на веб-сервер на собственном адресе ноды (Caddy рядом с нодой), переходит на сайт ноды, если сертификат ноды публично доверенный для всех имён REALITY: на адресе один веб-сервер, Caddy можно убрать.
+- Журнал сканеров: для каждого отклонённого REALITY-клиента записывается отпечаток JA4 его TLS ClientHello; журнал подсказывает, на какую программу он похож, и показывает отпечатки, общие для многих адресов (одна программа за многими IP означает скан через сеть прокси). Предупреждение о всплеске ждёт трёх полных дней сбора: у ноды, только что переведённой на Kinkan, обычный фон больше не выглядит всплеском.
+- Проверка протоколов: каждому TCP-протоколу отправляется случайный неверный ключ, ответ сравнивается с сайтом ноды (VLESS, Trojan, AnyTLS, VMess и QUIC-протоколы).
+- Подписка, которой пользуются из многих сетей или стран одновременно, помечается в карточке пользователя (только сеть и страна, без адресов, 30 дней).
+- Тихая нода по умолчанию: новые установки и новые ноды больше не получают TUIC, чьи коды закрытия выдают ноду одной пробой; это написано в его карточке. Карточка TrustTunnel описывает ответ Kinkan, а не 407 Mikan.
+- Каталог аддонов (маркетплейс Mikan) снова проверяется ключом Mikan, раньше он отвергался. Удалённая нода на установщике Mikan не может перейти за панелью на Kinkan: её карточка объясняет почему и показывает одну команду для её сервера.
+
 ## 0.5.0.5-tt.11
 ### en
 - Rollback from the panel: Settings → Updates can go back to the version that ran before the last update, keeping today's data, when that update did not change the database schema (Mikan's or Kinkan's). Automatic updates are turned off first, and the server backs up twice and goes back to the current version if the previous one does not start. Only an admin session can ask for it; the image comes from the server's own record, never from the request. Remote nodes are not rolled back. See ROLLBACK.md.

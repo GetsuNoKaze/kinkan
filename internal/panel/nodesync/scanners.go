@@ -48,6 +48,9 @@ func (s *Syncer) pullScanners(ctx context.Context) {
 			break
 		}
 		st.LastOK, st.Error, st.ErrorAt, st.Dropped = now, "", 0, snap.Dropped
+		if st.Since == 0 {
+			st.Since = now
+		}
 		if snap.Observer != "" {
 			st.Observer = snap.Observer
 		}

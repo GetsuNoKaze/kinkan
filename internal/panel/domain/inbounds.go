@@ -462,6 +462,9 @@ func (s *Inbounds) CheckTemplate(ctx context.Context, node db.Node, config, port
 	if err := proto.Validate(t, proto.Options{SelfStealPort: selfSteal, SitePort: site}); err != nil {
 		return nil, err
 	}
+	if err := s.kinkanForeignSNI(ctx, node, t); err != nil { // Kinkan
+		return nil, err
+	}
 	// Checked here, not in proto.Validate: nodes keep applying templates saved before.
 	if fp := t.Ext().Client.Fingerprint; fp != "" && !proto.ValidFingerprint(fp) {
 		return nil, &proto.Error{Code: "config_fingerprint", Field: "mikan.client.fingerprint", Detail: fp}

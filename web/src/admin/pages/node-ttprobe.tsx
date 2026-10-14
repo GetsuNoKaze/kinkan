@@ -109,6 +109,7 @@ function Report({ result, verdict, reason, onDownload }: { result: SingleResult;
   const shown = filter ? sorted.filter(({ f }) => f.level === filter) : sorted;
   return <>
     <Verdict result={result} verdict={verdict} reason={reason} count={count} />
+    <KinkanAuthProbe report={result.report} /> {/* Kinkan */}
     {result.local_node ? <div className="banner warn">{t("ttProbe.localNode")}</div> : null}
     <div className="flex flex-wrap gap-2" role="group" aria-live="polite">
       <button type="button" className="chip-btn" aria-pressed={filter === null} onClick={() => setFilter(null)}>{t("ttProbe.filterAll", { n: findings.length })}</button>
@@ -198,3 +199,5 @@ function reportReason(report: ProtocolReport) {
   if (!report.reference && report.verdict === "inconclusive") return t("nodeProbe.noReference");
   return report.verdict === "inconclusive" ? t("nodeProbe.insufficient") : undefined;
 }
+
+import { KinkanAuthProbe } from "./kinkan-auth-probe"; // Kinkan

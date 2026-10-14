@@ -239,6 +239,7 @@ func (c *clientBuilder) security() error {
 		c.q.Set("fp", c.fingerprint())
 	case "trusttunnel": // always TLS, no switch for it
 		c.y["client-fingerprint"] = c.fingerprint()
+		kinkanTrustTunnelClient(c.y, c.t) // Kinkan: the admin's client pool limit
 	}
 	if typ == "hysteria2" || typ == "tuic" {
 		delete(c.y, "tls")

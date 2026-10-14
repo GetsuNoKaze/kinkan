@@ -18,6 +18,7 @@ import { nodeLabel } from "../../../lib/node-label";
 import { useWarp } from "../node-warp";
 import { Editor, type ListenAt, ValidateResult, hostPort, listenAt, loopback, preloadEditor, useValidate } from "./shared";
 import { TargetPicker } from "./target";
+import { KinkanTTConnections } from "./kinkan-tt-connections"; // Kinkan
 
 export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onClose: () => void }) {
   const qc = useQueryClient();
@@ -298,6 +299,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                   />
                 </Field>
               ) : null}
+              {inbound ? <KinkanTTConnections inbound={inbound} locked={configChanged} /> : null /* Kinkan */}
               <Field
                 label={t("inbounds.outbound")}
                 error={errors.exit_node_id}

@@ -72,7 +72,7 @@ func (e *Engine) startScannerJournal() {
 			if name == "" {
 				continue
 			}
-			r := nodeapi.ScannerRecord{IP: host, Inbound: name, Protocol: ev.Protocol, Reason: ev.Reason, Method: ev.Method, Client: e.Reg.knownClientIP(host)}
+			r := nodeapi.ScannerRecord{IP: host, Inbound: name, Protocol: ev.Protocol, Reason: ev.Reason, Method: ev.Method, TLS: ev.TLS, Client: e.Reg.knownClientIP(host)}
 			if !j.Record(r, time.Now()) {
 				continue
 			}

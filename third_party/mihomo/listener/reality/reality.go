@@ -90,9 +90,10 @@ type Builder struct {
 
 func (b Builder) NewListener(l net.Listener) net.Listener {
 	return N.NewHandleContextListener(context.Background(), l, func(ctx context.Context, conn net.Conn) (net.Conn, error) {
-		c, err := utls.RealityServer(ctx, conn, b.realityConfig)
+		hello := authevent.NewHelloConn(conn)
+		c, err := utls.RealityServer(ctx, hello, b.realityConfig)
 		if err != nil {
-			authevent.Emit(authevent.Event{Protocol: "reality", Local: conn.LocalAddr().String(), Remote: conn.RemoteAddr().String(), Reason: "rejected_handshake"})
+			authevent.Emit(authevent.Event{Protocol: "reality", Local: conn.LocalAddr().String(), Remote: conn.RemoteAddr().String(), Reason: "rejected_handshake", TLS: hello.JA4()})
 			return nil, err
 		}
 		// Due to low implementation quality, the reality server intercepted half-close and caused memory leaks.

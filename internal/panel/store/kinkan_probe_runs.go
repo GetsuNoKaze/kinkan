@@ -120,6 +120,6 @@ func (s *Store) DeleteScanners(ctx context.Context, nodeID int64) error {
 	if err != nil {
 		return err
 	}
-	st.Dropped = 0
+	st.Dropped, st.Since = 0, 0
 	return s.SetScannerStatus(ctx, nodeID, st)
 }
