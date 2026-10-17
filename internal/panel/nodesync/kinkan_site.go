@@ -128,7 +128,7 @@ func (s *Syncer) ownWebServer(dest string, names any, n db.Node) bool {
 	if len(list) == 0 || s.tls == nil {
 		return false
 	}
-	files, err := s.tls()
+	files, _, err := s.tls()
 	if err != nil || files == nil {
 		return false
 	}
