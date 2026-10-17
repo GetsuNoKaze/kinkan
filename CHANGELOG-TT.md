@@ -2,6 +2,18 @@
 
 Fork release notes. Upstream history remains in CHANGELOG.md.
 
+## Unreleased — beta preparation
+### en
+- Merge Mikan 0.5.1.0 into the beta preparation branch. Release validation is tracked in BETA-READINESS.md; this is not a published beta or a migration to Citrus.
+- Backport Go 1.27.2's HTTP/2 HPACK encoder ownership fix (GO-2026-6617) to the bundled metacubex/http fork. Peer table-size settings are applied after the active frame writer finishes; a regression test covers the deferred update and HPACK size sequence.
+- Installer: update rustls from 0.23.45 to 0.23.46, following upstream's security update.
+- Require Go 1.27.2 or newer for manual builds as well as the release image, to include the standard library's security fixes.
+### ru
+- Mikan 0.5.1.0 слит в ветку подготовки беты. Проверки выпуска отмечаются в BETA-READINESS.md; бета ещё не опубликована, переход на Citrus выполняется отдельно.
+- В копию metacubex/http перенесено исправление гонки HPACK из Go 1.27.2 (GO-2026-6617). Настройки размера таблицы применяются после завершения текущей записи кадра; регрессионный тест проверяет отложенное обновление и последовательность размеров HPACK.
+- Установщик: rustls обновлён с 0.23.45 до 0.23.46 по исправлению безопасности upstream.
+- Для ручной сборки тоже требуется Go 1.27.2 или новее, с исправлениями безопасности стандартной библиотеки.
+
 ## 0.5.0.5-tt.13
 ### en
 - TrustTunnel: the admin chooses how many connections clients may keep to an inbound (1 to 8, default 1), on the inbound's page; subscriptions carry it as `max-connections`. Clients with the fix in getmikan/Citrus#54 open at most that many TLS connections; older clients limit only their pool and can still open several connections at a cold start.

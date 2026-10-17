@@ -136,9 +136,13 @@ jobs:
     permissions:
       contents: read
       packages: write
+    # Only the digest goes out: GitHub drops a job output that contains a secret's value,
+    # and the image name holds the owner, which is also DOCKERHUB_USERNAME. The jobs that
+    # need the name make it from GITHUB_REPOSITORY_OWNER themselves.
     outputs:
-      image: ${{ steps.name.outputs.image }}
       digest: ${{ steps.build.outputs.digest }}
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -147,6 +151,15 @@ jobs:
         run: |
           echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
           echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      # binfmt, buildkit and the base images come through Google's Docker Hub mirror;
+      # whatever still falls back to Docker Hub is pulled as the account.
+      - if: env.DOCKERHUB_USERNAME != ''
+        # A Docker Hub outage must not stop the build: everything comes through the mirror.
+        continue-on-error: true
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
         with:
           image: mirror.gcr.io/tonistiigi/binfmt:latest
@@ -209,7 +222,7 @@ jobs:
           workspaces: installer
           key: ${{ matrix.target }}
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
-      - uses: taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0 # v2.87.24
+      - uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a # v2.87.25
         with:
           tool: cargo-zigbuild
       - name: build
@@ -313,7 +326,17 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       packages: write
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
     steps:
+      # buildkit comes through the mirror; Docker Hub, if ever needed, as the account.
+      - if: env.DOCKERHUB_USERNAME != ''
+        # A Docker Hub outage must not stop the build: everything comes through the mirror.
+        continue-on-error: true
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
           driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
@@ -326,4 +349,5 @@ jobs:
         env:
           IMAGE: ${{ needs.image.outputs.image }}
           DIGEST: ${{ needs.image.outputs.digest }}
-        run: docker buildx imagetools create --tag "$IMAGE:latest" "$IMAGE@$DIGEST"
+        run: |
+          docker buildx imagetools create --tag "$IMAGE:latest" "$IMAGE@$DIGEST"
