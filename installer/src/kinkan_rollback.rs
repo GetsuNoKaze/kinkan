@@ -1,7 +1,7 @@
 //! Panel-requested rollback to the last running image. Image authority lives in a
 //! root-owned file outside the panel's mount; a request supplies version names only.
 use super::{Asked, Before, Phase, report, roll_back, start, update_dir};
-use crate::{DIR, addon, backup, clock, docker, config::Config, ops::Install, panelfs, release, setup, signals};
+use crate::{DIR, addon, backup, clock, config::Config, docker, ops::Install, panelfs, release, setup, signals};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path, process::Command};
