@@ -223,7 +223,7 @@ func TestNotesFor(t *testing.T) {
 // The support desk knows the official build by this fingerprint (mikan-bot keeps a copy):
 // a changed release key changes it, and the desk must be told.
 func TestKeyFingerprint(t *testing.T) {
-	if got := KeyFingerprint(); got != "f278e3dde3431658" {
+	if got := KeyFingerprint(); got != "3486cab68f9568f9" { // Kinkan: the fork's release key (Mikan's is f278e3dde3431658)
 		t.Fatalf("KeyFingerprint() = %s", got)
 	}
 }

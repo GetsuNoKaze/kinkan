@@ -114,14 +114,15 @@ func TestTrustTunnelFallbackOnNode(t *testing.T) {
 					if ev.Remote == "" || ev.Local == "" || ev.Protocol != "trusttunnel" || ev.Method != probe.method {
 						t.Fatalf("wrong auth event: %+v", ev)
 					}
-				default:
+				// Citrus hands events to the handler from its own goroutine, after the reply.
+				case <-time.After(2 * time.Second):
 					t.Fatal("missing unauthenticated event")
 				}
 			} else {
 				select {
 				case ev := <-events:
 					t.Fatalf("successful user logged: %+v", ev)
-				default:
+				case <-time.After(200 * time.Millisecond):
 				}
 			}
 		}
