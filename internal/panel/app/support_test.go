@@ -757,6 +757,10 @@ func TestSupportAdminNotices(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("messages: %q", got)
 	}
+	// Kinkan: the two go out on their own, in either order.
+	if strings.Contains(got[0], "закрыт") {
+		got[0], got[1] = got[1], got[0]
+	}
 	if !strings.HasPrefix(got[0], "777|") || !strings.Contains(got[0], "Поддержка вошла") || !strings.Contains(got[0], "ticket 9") || strings.Contains(got[0], g.Token) {
 		t.Errorf("the entry notice: %q", got[0])
 	}
