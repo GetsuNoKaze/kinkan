@@ -58,8 +58,8 @@ processSetting менял его из serve loop, пока writeFrameAsync мо�
 
 ## Условия беты — пока не закрыты
 
-- [ ] Linux CI целиком: PostgreSQL 18, go test -race ./..., vet, govulncheck.
-- [ ] Rust: fmt, clippy, test, locked build, cargo audit, fault-injection установщика.
+- [x] Linux CI целиком: PostgreSQL 18, go test -race ./..., vet, govulncheck (PR #57, 19.10; `-timeout 25m`: internal/panel/app идёт ~8 мин).
+- [x] Rust: fmt, clippy, test, locked build, cargo audit, fault-injection установщика (test-upgrade.sh переведён на config.json).
 - [x] Проверить воспроизводимость обеих third_party-копий по патчам (Linux, 17.10).
 - [x] Проверить OpenAPI/schema после слияния: сгенерированный JSON совпадает с web/src/api/openapi.json.
 - [ ] Изолированный Linux-стенд: чистая установка, регистрация ноды, сертификаты/ACME.
@@ -94,6 +94,7 @@ processSetting менял его из serve loop, пока writeFrameAsync мо�
 
 Проверено локально: `go build`, `go vet ./...`, `scripts/tt/check.sh`, сборка web (tsc, контраст AA, vite).
 Пересечения с новым в Mikan: страница панели («техработы»/котики) и сайт ноды работают на разных уровнях; SNI-роутер на 443 не занимает порты сайта ноды; PROXY-заголовок снимается до REALITY, JA4 за роутером работает.
-Не проверено: полный CI, стенд, телефон.
+Ошибки upstream rc.8, исправленные здесь (кандидаты в PR Mikan): `Config::load` читал `.env` раньше `config.json`, и после сорванного переезда SQLite → PostgreSQL повтор делал новый пароль базы, а неудачное обновление без отката читало старый образ; `chown` секретов не от root; `test-upgrade.sh` проверял только `.env`; гонки порядка в двух тестах поддержки.
+Не проверено: стенд, матрица протоколов, обновление tt.13 → бета, телефон.
 
 Продакшен не обновлялся. Бета не опубликована.
