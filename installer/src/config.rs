@@ -61,33 +61,37 @@ pub struct Config {
 }
 
 impl Config {
-    /// The settings of the install in root: .env while it is there, else config.json and the
-    /// secrets. A missing install is an io NotFound (Install::load tells it apart).
+    /// The settings of the install in root: config.json and the secrets once an update wrote
+    /// them, else the .env of before. A missing install is an io NotFound (Install::load
+    /// tells it apart).
+    ///
+    /// Kinkan: config.json wins while a .env is still there. The update writes config.json
+    /// first and removes .env only once the containers run on it, so a .env next to it is
+    /// never newer: an update that failed and kept the new version leaves the old .env, a
+    /// rollback writes the old settings to both, and either way the password a move made is
+    /// in secrets/ (the database may be initialized with it). `legacy` still says a .env is
+    /// there, for the update to remove.
     pub fn load(root: impl AsRef<Path>) -> Result<Self> {
         let root = root.as_ref().to_path_buf();
         let legacy = root.join(LEGACY);
-        match fs::read_to_string(&legacy) {
-            Ok(text) => return Ok(Self { legacy: true, ..Self::from_env_text(&root, &text) }),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        let env = match fs::read_to_string(&legacy) {
+            Ok(text) => Some(text),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
             Err(e) => return Err(e).with_context(|| format!("read {}", legacy.display())),
-        }
+        };
         let path = root.join(FILE);
-        let text = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+        let (text, legacy) = match (fs::read_to_string(&path), env) {
+            (Ok(text), env) => (text, env.is_some()),
+            (Err(e), Some(env)) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(Self { legacy: true, ..Self::from_env_text(&root, &env) });
+            }
+            (Err(e), _) => return Err(e).with_context(|| format!("read {}", path.display())),
+        };
         let mut values: BTreeMap<String, String> =
             serde_json::from_str(&text).with_context(|| format!("{} is not a JSON object of strings", path.display()))?;
         values.retain(|k, v| secret(k).is_none() && !v.is_empty());
-        for s in &SECRET_KEYS {
-            let file = root.join(SECRETS).join(s.file);
-            match fs::read_to_string(&file) {
-                Ok(v) if !v.trim().is_empty() => {
-                    values.insert(s.key.to_owned(), v.trim().to_owned());
-                }
-                Ok(_) => {}
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(e) => return Err(e).with_context(|| format!("read {}", file.display())),
-            }
-        }
-        Ok(Self { root, values, legacy: false })
+        values.extend(read_secrets(&root)?);
+        Ok(Self { root, values, legacy })
     }
 
     pub fn new(root: impl AsRef<Path>) -> Self {
@@ -232,6 +236,23 @@ fn plain_dsn(value: &str) -> bool {
 
 /// Writes a file readable by root only, replacing it at once: a new file under its own
 /// name (never a leftover one, never through a link), synced, then renamed over path.
+/// The secrets written under root/secrets, by key; empty and missing files are left out.
+fn read_secrets(root: &Path) -> Result<BTreeMap<String, String>> {
+    let mut values = BTreeMap::new();
+    for s in &SECRET_KEYS {
+        let file = root.join(SECRETS).join(s.file);
+        match fs::read_to_string(&file) {
+            Ok(v) if !v.trim().is_empty() => {
+                values.insert(s.key.to_owned(), v.trim().to_owned());
+            }
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e).with_context(|| format!("read {}", file.display())),
+        }
+    }
+    Ok(values)
+}
+
 pub fn write_private(path: &Path, data: &[u8]) -> Result<()> {
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
@@ -269,6 +290,22 @@ mod tests {
 
     // A panel's .env moves whole: the plain settings to config.json, the password and the
     // address to their own files of their readers, readable by them alone; .env goes last.
+    #[test]
+    fn config_json_wins_over_a_env_left_from_before() {
+        // Kinkan: an update that failed leaves the old .env next to what it wrote.
+        let d = dir("left-env");
+        fs::write(d.join(LEGACY), "MIKAN_IMAGE=old\nPANEL_PORT=21355\n").unwrap();
+        let c = Config::from_env_text(&d, "MIKAN_IMAGE=new\nPANEL_PORT=21355\nMIKAN_POSTGRES_PASSWORD=made-by-the-move\n");
+        c.save().unwrap();
+        let back = Config::load(&d).unwrap();
+        assert!(back.legacy(), "the .env is still there for the update to remove");
+        assert_eq!(back.get("MIKAN_IMAGE"), Some("new"));
+        assert_eq!(back.get("MIKAN_POSTGRES_PASSWORD"), Some("made-by-the-move"));
+        // Without config.json, the .env of before is the settings.
+        fs::remove_file(d.join(FILE)).unwrap();
+        assert_eq!(Config::load(&d).unwrap().get("MIKAN_IMAGE"), Some("old"));
+    }
+
     #[test]
     fn a_legacy_env_moves_and_reads_back() {
         let d = dir("move");

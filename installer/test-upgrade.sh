@@ -13,6 +13,24 @@ export TEST_STATE="$tmp"
 export PATH="$tmp/bin:$PATH"
 # The stand-in knows every command the updater may run and fails on any other, so a
 # wrong argument is caught even where the updater ignores the result (`unexpected`).
+cat >"$tmp/settings.sh" <<'SETTINGS'
+# Kinkan: the settings as KEY=VALUE, sorted, as Config::load reads them: config.json and
+# secrets/ once an update wrote them, else the .env of before (a failed update may leave it).
+settings() {
+  {
+    if [ -e /opt/mikan/config.json ]; then
+      sed -n 's/^ *"\([A-Z_]*\)": "\(.*\)",\{0,1\}$/\1=\2/p' /opt/mikan/config.json
+    else
+      grep -E '^[A-Z_]+=' /opt/mikan/.env | sed "s/=[\"']\(.*\)[\"']\$/=\1/"
+    fi
+    for f in postgres_password:MIKAN_POSTGRES_PASSWORD database_url:MIKAN_DATABASE_URL node_join:MIKAN_NODE_JOIN; do
+      [ -s "/opt/mikan/secrets/${f%%:*}" ] && printf '%s=%s\n' "${f#*:}" "$(cat "/opt/mikan/secrets/${f%%:*}")"
+    done
+  } | awk -F= '!seen[$1]++' | sort
+}
+setting() { settings | sed -n "s/^$1=//p"; }
+SETTINGS
+. "$tmp/settings.sh"
 cat >"$tmp/bin/docker" <<'DOCKER'
 #!/bin/sh
 set -eu
@@ -50,7 +68,8 @@ case "$1" in
 esac
 [ "$2 $3" = '--project-directory /opt/mikan' ] || unexpected "$@"
 shift 3
-new() { grep -q "^MIKAN_IMAGE=new-image" /opt/mikan/.env; }
+. "$TEST_STATE/settings.sh" # Kinkan
+new() { [ "$(setting MIKAN_IMAGE)" = new-image ]; } # Kinkan
 db='run --rm --no-deps -T --name mikan-database-'
 case "$*" in
   'exec -T panel mikan admin backup /data/panel/backup.db')
@@ -122,7 +141,7 @@ last() { grep -n -- "$1" "$tmp/trace" | tail -1 | cut -d: -f1; }
 fixture
 if "$bin" update next-image >"$tmp/output" 2>&1; then echo 'a move by a release that cannot make it must fail' >&2; exit 1; fi
 grep -q 'update to mikan 0.5.0.4 first' "$tmp/output"
-grep -q 'MIKAN_IMAGE=old-image' /opt/mikan/.env
+[ "$(setting MIKAN_IMAGE)" = old-image ]
 grep -q 'original users' /opt/mikan/data/panel/mikan.db
 if grep -q 'stop\|admin backup' "$tmp/trace"; then echo 'unexpected: the refused move changed something' >&2; exit 1; fi
 
@@ -131,19 +150,19 @@ touch "$tmp/pg-fail"
 if "$bin" update new-image >"$tmp/output" 2>&1; then echo 'startup fault must fail' >&2; exit 1; fi
 grep -q 'could not prepare the database' "$tmp/output"
 grep -q 'runs again' "$tmp/output"
-grep -q 'MIKAN_IMAGE=old-image' /opt/mikan/.env
+[ "$(setting MIKAN_IMAGE)" = old-image ]
 grep -q 'legacy compose' /opt/mikan/compose.yaml
 grep -q 'original users' /opt/mikan/data/panel/mikan.db
 grep -q 'stop postgres' "$tmp/trace"
 [ -e "$tmp/healthy" ]
 # The database volume may already be initialized with this password: it must survive.
-password=$(grep '^MIKAN_POSTGRES_PASSWORD=' /opt/mikan/.env)
+password=$(setting MIKAN_POSTGRES_PASSWORD)
 [ -n "$password" ]
-if grep -q 'MIKAN_DATABASE_URL=' /opt/mikan/.env; then echo 'unexpected: MIKAN_DATABASE_URL=' >&2; exit 1; fi
+if [ -n "$(setting MIKAN_DATABASE_URL)" ]; then echo 'unexpected: MIKAN_DATABASE_URL=' >&2; exit 1; fi
 rm "$tmp/pg-fail" "$tmp/trace"
 "$bin" update new-image >"$tmp/output" 2>&1
-grep -qx "$password" /opt/mikan/.env
-grep -q "MIKAN_DATABASE_URL=postgresql://mikan:${password#MIKAN_POSTGRES_PASSWORD=}@" /opt/mikan/.env
+[ "$(setting MIKAN_POSTGRES_PASSWORD)" = "$password" ]
+setting MIKAN_DATABASE_URL | grep -q "^postgresql://mikan:$password@"
 [ -e "$tmp/healthy" ]
 # The database's image is pulled before the backup and the stop, not by `compose up`.
 pull=$(at 'pull postgres:18-alpine@sha256:')
@@ -157,8 +176,8 @@ pg_fixture
 touch "$tmp/pg-fail-new"
 if "$bin" update new-image >"$tmp/output" 2>&1; then echo 'database fault must fail' >&2; exit 1; fi
 grep -q 'could not prepare the database' "$tmp/output"
-grep -q 'MIKAN_IMAGE=old-image' /opt/mikan/.env
-grep -q 'MIKAN_POSTGRES_PASSWORD=livepassword' /opt/mikan/.env
+[ "$(setting MIKAN_IMAGE)" = old-image ]
+[ "$(setting MIKAN_POSTGRES_PASSWORD)" = livepassword ]
 [ -e "$tmp/healthy" ]
 if grep -q 'stop postgres' "$tmp/trace"; then echo 'unexpected: stop postgres' >&2; exit 1; fi
 
@@ -168,8 +187,8 @@ touch "$tmp/migrate-fail"
 if "$bin" update new-image >"$tmp/output" 2>&1; then echo 'migration fault must fail' >&2; exit 1; fi
 grep -q 'could not migrate the database' "$tmp/output"
 grep -q 'runs again' "$tmp/output"
-grep -q 'MIKAN_IMAGE=old-image' /opt/mikan/.env
-grep -q 'MIKAN_POSTGRES_PASSWORD=livepassword' /opt/mikan/.env
+[ "$(setting MIKAN_IMAGE)" = old-image ]
+[ "$(setting MIKAN_POSTGRES_PASSWORD)" = livepassword ]
 grep -q 'legacy compose' /opt/mikan/compose.yaml
 [ -e "$tmp/healthy" ]
 # The final dump is taken with the panel stopped; the one before it was only the gate.
@@ -190,8 +209,8 @@ grep -q 'the panel is stopped' "$tmp/output"
 pg_fixture
 touch "$tmp/start-fail-new"
 if "$bin" update new-image >"$tmp/output" 2>&1; then echo 'startup fault must fail' >&2; exit 1; fi
-grep -q 'MIKAN_IMAGE=old-image' /opt/mikan/.env
-grep -q 'MIKAN_DATABASE_URL=' /opt/mikan/.env
+[ "$(setting MIKAN_IMAGE)" = old-image ]
+[ -n "$(setting MIKAN_DATABASE_URL)" ]
 grep -q 'legacy compose' /opt/mikan/compose.yaml
 [ -e "$tmp/healthy" ]
 grep -q 'runs again' "$tmp/output"
@@ -201,15 +220,15 @@ pg_fixture
 touch "$tmp/start-fail-new"
 echo '1 -> 2' >"$tmp/schema"
 if "$bin" update new-image >"$tmp/output" 2>&1; then echo 'startup fault must fail' >&2; exit 1; fi
-grep -q 'MIKAN_IMAGE=new-image' /opt/mikan/.env
+[ "$(setting MIKAN_IMAGE)" = new-image ]
 [ ! -e "$tmp/healthy" ]
 grep -q 'No automatic database rollback is safe' "$tmp/output"
 
 fixture
 touch "$tmp/migrate-fail"
 if "$bin" update new-image >"$tmp/output" 2>&1; then echo 'lost migration response must fail' >&2; exit 1; fi
-grep -q 'MIKAN_IMAGE=new-image' /opt/mikan/.env
-grep -q 'MIKAN_DATABASE_URL=' /opt/mikan/.env
+[ "$(setting MIKAN_IMAGE)" = new-image ]
+[ -n "$(setting MIKAN_DATABASE_URL)" ]
 [ ! -e "$tmp/healthy" ]
 echo 'new post-import payment43' >>"$tmp/pg"
 rm "$tmp/migrate-fail"
@@ -224,7 +243,7 @@ ls /opt/mikan/backups | grep -q '^pre-update-'
 fixture
 touch "$tmp/start-fail"
 if "$bin" update new-image >"$tmp/output" 2>&1; then echo 'panel startup fault must fail' >&2; exit 1; fi
-grep -q 'MIKAN_IMAGE=new-image' /opt/mikan/.env
+[ "$(setting MIKAN_IMAGE)" = new-image ]
 grep -q 'imported users' "$tmp/pg"
 [ ! -e "$tmp/healthy" ]
 grep -q 'No automatic database rollback is safe' "$tmp/output"
@@ -260,14 +279,14 @@ grep -q 'live users, payment77' "$tmp/pg"
 # A database-only archive (what the panel sends to Telegram, after age -d) puts the dump
 # back and keeps the server's own files: .env, certificates, node data.
 pg_fixture
-env_before=$(sha256sum /opt/mikan/.env)
+env_before=$(settings | sha256sum)
 mkdir -p "$tmp/dbonly/data/panel"
 echo 'telegram users, payment99' >"$tmp/dbonly/data/panel/backup.dump"
 tar -czf "$tmp/dbonly.tar.gz" -C "$tmp/dbonly" data
 "$bin" restore -y "$tmp/dbonly.tar.gz" >"$tmp/output" 2>&1
 grep -q 'telegram users, payment99' "$tmp/pg"
 grep -q "holds only the panel's database" "$tmp/output"
-[ "$(sha256sum /opt/mikan/.env)" = "$env_before" ]
+[ "$(settings | sha256sum)" = "$env_before" ]
 [ ! -e /opt/mikan/data/panel/restore.dump ]
 [ -e "$tmp/healthy" ]
 tar -tzf /opt/mikan/backups/pre-restore-*.tar.gz | grep -qx 'data/panel/backup.dump'
@@ -281,7 +300,7 @@ echo 'written after the backup' >/opt/mikan/data/panel/mikan.db
 "$bin" restore -y "$archive" >"$tmp/output" 2>&1
 grep -q 'original users' /opt/mikan/data/panel/mikan.db
 grep -q 'legacy compose' /opt/mikan/compose.yaml
-grep -q 'MIKAN_POSTGRES_PASSWORD=kept' /opt/mikan/.env
+[ "$(setting MIKAN_POSTGRES_PASSWORD)" = kept ]
 if grep -q 'database restore\|postgres' "$tmp/trace"; then echo 'unexpected: PostgreSQL on an SQLite restore' >&2; exit 1; fi
 [ -e "$tmp/healthy" ]
 strict
