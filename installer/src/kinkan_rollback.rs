@@ -1,7 +1,7 @@
 //! Panel-requested rollback to the last running image. Image authority lives in a
 //! root-owned file outside the panel's mount; a request supplies version names only.
 use super::{Asked, Before, Phase, report, roll_back, start, update_dir};
-use crate::{DIR, addon, backup, clock, docker, envfile::EnvFile, ops::Install, panelfs, release, setup, signals};
+use crate::{DIR, addon, backup, clock, docker, config::Config, ops::Install, panelfs, release, setup, signals};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path, process::Command};
@@ -136,9 +136,9 @@ pub(super) fn run(from: &str, version: &str, say: &mut dyn FnMut(&str)) -> Resul
         // data. A failed start returns to the image that was running before rollback.
         let gate = backup::backup_as(backup::PRE_UPDATE, say).context("the backup before rollback failed; the panel was not stopped")?;
         let _critical = signals::critical();
-        let mut recovery = EnvFile::from_text(root.join(".env"), &install.env.render());
+        let mut recovery = Config::from_env_text(root, &install.config.to_env_text());
         recovery.set("MIKAN_IMAGE", &current_image)?;
-        let env = recovery.render();
+        let env = recovery.to_env_text();
         let compose = fs::read_to_string(root.join("compose.yaml"))?;
         docker::compose_run(&["stop", "panel"])?;
         let saved = match backup::archive_stopped(root, backup::PRE_UPDATE, true) {
@@ -154,9 +154,9 @@ pub(super) fn run(from: &str, version: &str, say: &mut dyn FnMut(&str)) -> Resul
         say(&format!("Backup: {}", saved.display()));
         let before = Before { env: &env, compose: &compose, saved: &saved, current: &actual };
         let switched = (|| -> Result<()> {
-            install.env.set("MIKAN_IMAGE", &c.image)?;
-            install.env.set("MIKAN_VERSION", version)?;
-            install.env.save()?;
+            install.config.set("MIKAN_IMAGE", &c.image)?;
+            install.config.set("MIKAN_VERSION", version)?;
+            install.config.save()?;
             start(&install, root)
         })();
         if let Err(e) = switched {

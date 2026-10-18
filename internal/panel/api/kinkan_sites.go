@@ -60,7 +60,7 @@ type nodeSiteOutput struct {
 	}
 }
 
-func (h *handlers) registerSites() {
+func (h *handlers) registerKinkanSites() {
 	huma.Register(h.api, huma.Operation{OperationID: "list-sites", Method: http.MethodGet, Path: "/api/v1/sites", Tags: []string{"sites"}, Summary: "Сайты нод"}, h.listSites)
 	huma.Register(h.api, huma.Operation{OperationID: "upload-site", Method: http.MethodPost, Path: "/api/v1/sites", Tags: []string{"sites"}, Summary: "Загрузить сайт (zip)",
 		MaxBodyBytes: site.MaxArchive + 1, DefaultStatus: http.StatusCreated}, h.uploadSite)

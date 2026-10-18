@@ -101,6 +101,7 @@ func (n *nodeClient) drain(t *testing.T) map[string]nodeapi.Traffic {
 			cur := total[k]
 			total[k] = nodeapi.Traffic{Up: cur.Up + v.Up, Down: cur.Down + v.Down}
 		}
+		// An idle reply cuts no batch: there is nothing to acknowledge.
 		if !c.Idle {
 			if err := n.call(http.MethodPost, "/v1/counters/ack", nodeapi.AckRequest{Epoch: c.Epoch, Seq: c.Seq}, nil); err != nil {
 				t.Fatal(err)

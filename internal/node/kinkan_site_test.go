@@ -45,7 +45,7 @@ func packedSite(t *testing.T, title string) (*site.Site, []byte) {
 	return s, a
 }
 
-func freePort(t *testing.T) int {
+func kinkanFreePort(t *testing.T) int {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -84,7 +84,7 @@ func TestPutSiteChecksTheArchive(t *testing.T) {
 func TestSiteServing(t *testing.T) {
 	e := testEngine(t)
 	s, archive := packedSite(t, "Night")
-	port := freePort(t)
+	port := kinkanFreePort(t)
 	st := nodeapi.DesiredState{Site: &nodeapi.SiteState{Hash: s.Hash, HTTPPort: port}}
 
 	if !e.applySite(st) {
@@ -187,7 +187,7 @@ func TestSiteServingTLS(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := nodeapi.DesiredState{TLS: &nodeapi.TLSFiles{CertPEM: pair.CertPEM, KeyPEM: pair.KeyPEM},
-		Site: &nodeapi.SiteState{Hash: s.Hash, HTTPPort: freePort(t), HTTPSPort: freePort(t)}}
+		Site: &nodeapi.SiteState{Hash: s.Hash, HTTPPort: kinkanFreePort(t), HTTPSPort: kinkanFreePort(t)}}
 	if e.applySite(st) {
 		t.Fatal("missing")
 	}
@@ -246,7 +246,7 @@ func TestSiteHeaderLimitLikeCaddy(t *testing.T) {
 	if err := e.PutSite(s.Hash, archive); err != nil {
 		t.Fatal(err)
 	}
-	e.applySite(nodeapi.DesiredState{TLS: &nodeapi.TLSFiles{CertPEM: pair.CertPEM, KeyPEM: pair.KeyPEM}, Site: &nodeapi.SiteState{Hash: s.Hash, HTTPPort: freePort(t), HTTPSPort: freePort(t)}})
+	e.applySite(nodeapi.DesiredState{TLS: &nodeapi.TLSFiles{CertPEM: pair.CertPEM, KeyPEM: pair.KeyPEM}, Site: &nodeapi.SiteState{Hash: s.Hash, HTTPPort: kinkanFreePort(t), HTTPSPort: kinkanFreePort(t)}})
 	defer e.stopSite()
 	conn, err := tls.Dial("tcp", e.siteStatus().HTTPS, &tls.Config{InsecureSkipVerify: true, NextProtos: []string{"h2"}})
 	if err != nil {

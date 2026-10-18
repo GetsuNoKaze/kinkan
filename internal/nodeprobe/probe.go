@@ -131,7 +131,7 @@ func Scan(ctx context.Context, cfg Config) (r Report, err error) {
 		return r, nil
 	}
 	switch cfg.Protocol {
-	case "trusttunnel", "vless", "vmess", "trojan", "anytls":
+	case "trusttunnel", "vless", "trojan", "anytls":
 		tc := ttprobe.Config{Target: cfg.Target, Reference: cfg.Reference, Timeout: cfg.Timeout, TLS: cfg.TLS}
 		if cfg.Address != "" {
 			tc.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {

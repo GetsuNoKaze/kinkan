@@ -19,7 +19,7 @@ func Run(ctx context.Context, args []string, out, stderr io.Writer) error {
 	f := flag.NewFlagSet("kinkan probe", flag.ContinueOnError)
 	f.SetOutput(stderr)
 	kinkan := kinkanProbeFlags(f) // Kinkan
-	protocol := f.String("protocol", "trusttunnel", "inbound type: vless, vmess, trojan, anytls, trusttunnel, hysteria2, tuic, shadowquic, shadowsocks, snell, sudoku, mieru")
+	protocol := f.String("protocol", "trusttunnel", "inbound type: vless, trojan, anytls, trusttunnel, hysteria2, tuic, shadowquic, shadowsocks, snell, sudoku, mieru")
 	ref := f.String("reference", "", "HTTPS cover on the same node (QUIC probes compare HTTP/3)")
 	address := f.String("address", "", "pin target and cover connections to this IP; retain SNI and Host")
 	timeout := f.Duration("timeout", 5*time.Second, "deadline per connection (100ms..30s)")

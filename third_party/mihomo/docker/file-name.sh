@@ -1,6 +1,8 @@
 #!/bin/sh
-os="mihomo-linux-"
-case $TARGETPLATFORM in
+set -eu
+
+os="citrus-linux-"
+case "$TARGETPLATFORM" in
     "linux/amd64")
         arch="amd64-v1"
         ;;
@@ -17,9 +19,9 @@ case $TARGETPLATFORM in
         arch="riscv64"
         ;;
     *)
-        echo "Unknown architecture"
+        echo "Unsupported platform: $TARGETPLATFORM" >&2
         exit 1
         ;;        
 esac
 file_name="$os$arch-$(cat bin/version.txt)"
-echo $file_name
+printf '%s\n' "$file_name"

@@ -85,6 +85,11 @@ func buildConfig(st nodeapi.DesiredState, cert proto.Cert, allowPrivate bool) (r
 	}
 	for _, in := range st.Inbounds {
 		l, err := listenerFor(in, st.Slots, cert, proto.Options{SelfStealPort: st.SelfStealPort, SitePort: sitePort(st)})
+		// Behind the SNI router an inbound takes connections from it alone, each with the
+		// client's address in a PROXY header.
+		if err == nil && st.Router.Routed(in.Name) {
+			l["listen"], l["proxy-protocol"], l["proxy-protocol-trusted"] = "127.0.0.1", true, []string{"loopback"}
+		}
 		keep(in.Name, l, err)
 	}
 	if st.Relay != nil {
@@ -103,7 +108,8 @@ func buildConfig(st nodeapi.DesiredState, cert proto.Cert, allowPrivate bool) (r
 		"mixed-port":        0,
 		"find-process-mode": "off",
 		"profile":           map[string]any{"store-selected": false, "store-fake-ip": false},
-		"dns":               map[string]any{"enable": false},
+		"dns":               dnsConfig(st.DNS),
+		"sniffer":           snifferConfig(st.DNS),
 		"proxies":           proxies,
 		"rules":             rules(st, allowPrivate),
 		"listeners":         listeners,
@@ -126,6 +132,18 @@ func sharedListeners(st nodeapi.DesiredState) []string {
 	for _, in := range st.Inbounds {
 		if t, err := template(in); err == nil && proto.Shared(t.Type()) {
 			out = append(out, in.Name)
+		}
+	}
+	return out
+}
+
+// userListeners are the inbounds whose users are slots, each with whether the core knows
+// them by UUID (TUIC) rather than by name; the ones with one key for everyone are not.
+func userListeners(st nodeapi.DesiredState) map[string]bool {
+	out := map[string]bool{}
+	for _, in := range st.Inbounds {
+		if t, err := template(in); err == nil && !proto.Shared(t.Type()) {
+			out[in.Name] = t.Type() == "tuic"
 		}
 	}
 	return out

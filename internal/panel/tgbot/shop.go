@@ -7,10 +7,10 @@ import (
 	"html"
 	"strconv"
 	"strings"
-	"time"
 
 	"mikan/internal/panel/billing"
 	"mikan/internal/panel/events"
+	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/tgate"
 )
@@ -23,7 +23,7 @@ import (
 // 0.4.4 carry them for the built-in providers those adapters replaced. The longest,
 // py:<19 digits>.<4 digits>:a-<32>, is 62 bytes: Telegram takes 64.
 
-var providerCodes = map[string]string{"s": billing.Stars, "y": billing.AddonPrefix + "yookassa", "c": billing.AddonPrefix + "cryptobot"}
+var providerCodes = map[string]string{"s": billing.Stars, "b": billing.Balance, "y": billing.AddonPrefix + "yookassa", "c": billing.AddonPrefix + "cryptobot"}
 
 // addonCode is an adapter's code on a pay button.
 func addonCode(id string) string {
@@ -78,6 +78,10 @@ func (w *words) price(amount int64, currency string) string {
 	if currency == "XTR" {
 		return "⭐ " + strconv.FormatInt(amount, 10)
 	}
+	sign, ok := currencySigns[currency]
+	if !ok {
+		sign = currency
+	}
 	s := strconv.FormatInt(amount/100, 10)
 	if k := amount % 100; k != 0 {
 		sep := ","
@@ -86,8 +90,11 @@ func (w *words) price(amount int64, currency string) string {
 		}
 		s += fmt.Sprintf("%s%02d", sep, k)
 	}
-	return s + " ₽"
+	return s + " " + sign
 }
+
+// currencySigns: how amounts of a balance's currency show; another shows by its code.
+var currencySigns = map[string]string{"RUB": "₽", "USD": "$", "EUR": "€", "UAH": "₴", "BYN": "Br", "KZT": "₸", "UZS": "сўм", "USDT": "USDT"}
 
 // shopList: the tariffs on sale as buttons; prefix is "t" (renew) or "tn" (new).
 func (b *Bot) shopList(ctx context.Context, w *words, title, prefix, notice string, back []tgate.Button) (string, *tgate.Keyboard) {
@@ -233,6 +240,9 @@ func (b *Bot) shopInvoice(ctx context.Context, w *words, chat, userID int64, arg
 		}
 	}
 	text := fmt.Sprintf(w.invoice, html.EscapeString(name), html.EscapeString(w.price(p.Amount, p.Currency)), done)
+	if p.Provider == billing.Balance {
+		return w.balancePaidScreen(p.Amount, p.Currency)
+	}
 	return text, &tgate.Keyboard{InlineKeyboard: [][]tgate.Button{{{Text: fmt.Sprintf(w.payButton, w.price(p.Amount, p.Currency)), URL: p.PayUrl}}, back}}
 }
 
@@ -246,6 +256,8 @@ func (w *words) payError(err error) string {
 		return fmt.Sprintf(w.linkLimit, tgate.MaxLinks)
 	case errors.Is(err, billing.ErrNotYours):
 		return w.noSub
+	case errors.Is(err, billing.ErrBalanceLow):
+		return w.balanceLow
 	}
 	return w.payUnavailable
 }
@@ -260,12 +272,14 @@ func (b *Bot) paid(ctx context.Context, chat int64, p events.Payment, u db.User)
 	switch {
 	case p.Kind == billing.KindPackage:
 		text = fmt.Sprintf(w.paidPackage, html.EscapeString(p.TariffName), html.EscapeString(u.Name))
+	case p.Kind == billing.KindDevice:
+		text = fmt.Sprintf(w.paidDevice, html.EscapeString(u.Name), u.DeviceLimit.Int64)
 	case p.Created:
 		text = fmt.Sprintf(w.paidNew, html.EscapeString(u.Name), html.EscapeString(p.TariffName), html.EscapeString(b.subURL(ctx, u)))
 	default:
 		until := w.forever
 		if u.ExpiresAt.Valid {
-			until = w.date(time.Unix(u.ExpiresAt.Int64, 0).UTC())
+			until = w.date(store.Time(u.ExpiresAt.Int64))
 		}
 		text = fmt.Sprintf(w.paidRenew, html.EscapeString(u.Name), html.EscapeString(until))
 	}
@@ -287,12 +301,14 @@ func (b *Bot) refunded(ctx context.Context, chat int64, p events.Payment, u db.U
 		text = fmt.Sprintf(w.refundedGone, html.EscapeString(p.TariffName))
 	case p.Kind == billing.KindPackage:
 		text = fmt.Sprintf(w.refundedPackage, html.EscapeString(p.TariffName), html.EscapeString(u.Name))
+	case p.Kind == billing.KindDevice:
+		text = fmt.Sprintf(w.refundedDevice, html.EscapeString(u.Name), u.DeviceLimit.Int64)
 	case p.Disabled:
 		text = fmt.Sprintf(w.refundedNew, html.EscapeString(p.TariffName), html.EscapeString(u.Name))
 	default:
 		until := w.forever
 		if u.ExpiresAt.Valid {
-			until = w.date(time.Unix(u.ExpiresAt.Int64, 0).UTC())
+			until = w.date(store.Time(u.ExpiresAt.Int64))
 		}
 		text = fmt.Sprintf(w.refundedRenew, html.EscapeString(p.TariffName), html.EscapeString(u.Name), html.EscapeString(until))
 	}
@@ -367,6 +383,9 @@ func (b *Bot) trialInvoice(ctx context.Context, w *words, chat int64, code strin
 		return html.EscapeString(w.payError(err)), &tgate.Keyboard{InlineKeyboard: [][]tgate.Button{back}}
 	}
 	text := fmt.Sprintf(w.invoice, html.EscapeString(w.trialTitle+" · "+p.TariffName), html.EscapeString(w.price(p.Amount, p.Currency)), w.payNew)
+	if p.Provider == billing.Balance {
+		return w.balancePaidScreen(p.Amount, p.Currency)
+	}
 	return text, &tgate.Keyboard{InlineKeyboard: [][]tgate.Button{{{Text: fmt.Sprintf(w.payButton, w.price(p.Amount, p.Currency)), URL: p.PayUrl}}, back}}
 }
 

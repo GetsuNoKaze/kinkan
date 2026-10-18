@@ -65,6 +65,12 @@ type Config struct {
 	// Lang is the panel's default language, "" when unset: default group names and the
 	// notices in place of servers are in it.
 	Lang string
+	// InactiveServer: a subscription that cannot connect gets one notice in place of its
+	// servers (inactive.go), InactiveText its words ("": the built-in ones by state).
+	InactiveServer bool
+	InactiveText   string
+	// Tariffs names the tariffs, for {tariff} in the title and the notices.
+	Tariffs map[int64]string
 }
 
 // Binder hands devices their keys (domain.Devices).
@@ -95,6 +101,7 @@ type Handler struct {
 	shop       *billing.Service // nil: nothing on sale
 	promos     *promo.Service
 	pages      *subpage.Service // nil: the page as built, nothing of the admin's
+	balance    *domain.Balancer // nil: every node shows
 	happ       *HappLinks       // Happ crypt links, kept per subscription
 	log        *slog.Logger
 	logged     sync.Map // what has been logged lately → when, so a standing fault is one line an hour
@@ -134,6 +141,9 @@ func (h *Handler) warn(key, msg string, args ...any) {
 // SetShop takes payments: the providers' webhooks under /pay/ and the Mini App's shop.
 func (h *Handler) SetShop(s *billing.Service) { h.shop = s }
 func (h *Handler) SetPromo(s *promo.Service)  { h.promos = s }
+
+// SetBalancer keeps each client on one node of every balance group.
+func (h *Handler) SetBalancer(b *domain.Balancer) { h.balance = b }
 
 // SetPages gives the page what the admin made of it: its look, blocks, instructions, images.
 func (h *Handler) SetPages(s *subpage.Service) { h.pages = s }
@@ -264,7 +274,7 @@ func (h *Handler) serveProfile(w http.ResponseWriter, r *http.Request, u db.User
 	}
 	// The values are worked out only when a title or an announcement can use them.
 	var vars map[string]string
-	if cfg.Title != "" || cfg.Announce != "" {
+	if cfg.Title != "" || cfg.Announce != "" || cfg.InactiveServer && cfg.InactiveText != "" {
 		vars = titleValues(u, grants.Main(u.ID), h.boundFor(r.Context(), u, cfg), cfg, h.now())
 		if cfg.Announce != "" {
 			cfg.Announce = fillAppAnnounce(cfg.Announce, vars, r.UserAgent())
@@ -299,6 +309,10 @@ func (h *Handler) serveProfile(w http.ResponseWriter, r *http.Request, u db.User
 		return
 	case err != nil:
 		internalError(w)
+		return
+	}
+	if notice := inactiveNotice(cfg, domain.State(u, grants.Main(u.ID), h.now()), vars); notice != nil {
+		h.stub(w, u, cfg, format, notice)
 		return
 	}
 	prof, err := h.profile(r.Context(), u, cfg, slot, grants)
@@ -435,6 +449,15 @@ func (h *Handler) profile(ctx context.Context, u db.User, cfg Config, slot db.Sl
 	nodes := map[int64]bool{}
 	for _, n := range cfg.Nodes {
 		nodes[n.ID] = true
+	}
+	// One node of each balance group: the client's own. A balancer that fails shows the
+	// group whole rather than leave the client without servers.
+	if h.balance != nil && u.ID != 0 {
+		if picked, err := h.balance.Nodes(ctx, u.ID, nodes); err != nil {
+			h.warn("balance", "subscriptions: load balancing", "err", err)
+		} else {
+			nodes = picked
+		}
 	}
 	for _, in := range all {
 		if in.Enabled == 0 || !nodes[in.NodeID] || (len(allowed) > 0 && !slices.Contains(allowed, in.ID)) || in.PoolID.Valid && spent[in.PoolID.Int64] {
@@ -607,7 +630,7 @@ func (h *Handler) info(ctx context.Context, w http.ResponseWriter, u db.User, pr
 		}
 		for _, d := range devs {
 			out.Bound = append(out.Bound, DeviceItem{ID: d.ID, Name: d.Name, OS: d.Os, OSVersion: d.OsVersion, Model: d.Model, App: d.App, Shared: d.Hwid == "",
-				CreatedAt: time.Unix(d.CreatedAt, 0).UTC(), LastSeen: time.Unix(d.LastSeen, 0).UTC(), Used: used[d.ID]})
+				CreatedAt: store.Time(d.CreatedAt), LastSeen: store.Time(d.LastSeen), Used: used[d.ID]})
 		}
 		st, err := h.devices.UnbindState(ctx, u.ID)
 		if err != nil {
@@ -621,10 +644,7 @@ func (h *Handler) info(ctx context.Context, w http.ResponseWriter, u db.User, pr
 	if u.TrafficLimit.Valid {
 		out.Limit = &u.TrafficLimit.Int64
 	}
-	if u.ExpiresAt.Valid {
-		t := time.Unix(u.ExpiresAt.Int64, 0).UTC()
-		out.ExpiresAt = &t
-	}
+	out.ExpiresAt = store.TimePtr(u.ExpiresAt)
 	if t, ok := domain.NextReset(u, now); ok {
 		out.ResetsAt = &t
 	}
@@ -754,6 +774,10 @@ func (h *Handler) stub(w http.ResponseWriter, u db.User, cfg Config, format stri
 		if en {
 			name = "⛔ There are no servers this app can use — open the subscription link in a browser"
 		}
+	case errors.As(reason, new(*inactiveError)):
+		var ie *inactiveError
+		errors.As(reason, &ie)
+		name = ie.text
 	case errors.Is(reason, domain.ErrDeviceBanned):
 		name = "⛔ Устройство заблокировано"
 		if en {

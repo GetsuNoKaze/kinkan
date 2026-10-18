@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"mikan/internal/hostchan"
+	"mikan/internal/logbuf"
 	"mikan/internal/nodetls"
 	"mikan/internal/panel/acme"
 	"mikan/internal/panel/addons"
@@ -24,21 +26,23 @@ import (
 	"mikan/internal/panel/auth"
 	"mikan/internal/panel/autotune"
 	"mikan/internal/panel/billing"
-	"mikan/internal/panel/checkhost"
 	"mikan/internal/panel/dnscheck"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/events"
 	"mikan/internal/panel/infraalerts"
+	"mikan/internal/panel/ipgeo"
 	"mikan/internal/panel/nodesync"
 	"mikan/internal/panel/nodeupdate"
 	"mikan/internal/panel/panelimport"
 	"mikan/internal/panel/promo"
+	"mikan/internal/panel/reach"
 	"mikan/internal/panel/server"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/subpage"
 	"mikan/internal/panel/subs"
+	"mikan/internal/panel/support"
 	"mikan/internal/panel/tgate"
 	"mikan/internal/panel/tgbackup"
 	"mikan/internal/panel/tgbot"
@@ -61,13 +65,15 @@ type Panel struct {
 	NodeUpdates *nodeupdate.Service
 	// Gateway is the panel's side of Telegram: the token, polling, Stars, the alerts' way
 	// out; Telegram is the admin's setup of the bot, its notices and broadcasts on top of it.
-	Gateway   *tgate.Gateway
-	Telegram  *tgbot.Panel
-	Billing   *billing.Service
-	Updates   *updates.Checker
-	Alerts    *infraalerts.Monitor
-	Backups   *tgbackup.Service
-	Importer  *panelimport.Importer
+	Gateway  *tgate.Gateway
+	Telegram *tgbot.Panel
+	Billing  *billing.Service
+	Updates  *updates.Checker
+	Alerts   *infraalerts.Monitor
+	Backups  *tgbackup.Service
+	Importer *panelimport.Importer
+	// Support keeps the support access grants; the operator's terminal hooks into it.
+	Support   *support.Service
 	Addons    *addons.Manager
 	AddonsAPI *panelapi.Server
 	server    *server.Server
@@ -88,6 +94,10 @@ type Options struct {
 	Version    string
 	Web        fs.FS
 	TrustProxy bool
+	// SupportOff turns support access off whatever the setting says (MIKAN_SUPPORT_ACCESS=off).
+	SupportOff bool
+	// SupportBot is the support bot a support access is opened for; nil: none can be opened.
+	SupportBot support.Bot
 	Log        *slog.Logger
 	Now        func() time.Time
 	// Connect reaches a node; nil when the panel runs without nodes (tests, UI development).
@@ -111,6 +121,10 @@ type Options struct {
 	// one is not served; nil where the panel runs no server (tests, the CLI).
 	SubPort      func(port int) error
 	SubPortError func() string
+	// SubDomain serves a new subscription domain; SubCerts is its certificate. nil where
+	// the panel runs no server, and in development.
+	SubDomain func(name string)
+	SubCerts  *acme.Manager
 	// DataDir is where the host updater and the panel meet (update/); "" turns that off.
 	DataDir string
 	// Releases finds the release to update to; nil never checks.
@@ -119,6 +133,8 @@ type Options struct {
 	WarpAPI string
 	// AddonsCatalog is the marketplace's signed catalog; "" is the real one.
 	AddonsCatalog string
+	// AddonsCommunity is the registry of community addons; "" is the real one.
+	AddonsCommunity string
 	// Dev is the panel running for development: addon sources may be read over plain http
 	// from 127.0.0.1.
 	Dev bool
@@ -130,8 +146,12 @@ type Options struct {
 	// Resolve looks up the names the panel is told to dial (REALITY targets); nil is the
 	// system's resolver, tests set their own.
 	Resolve func(ctx context.Context, host string) ([]netip.Addr, error)
-	// CheckHost checks nodes' ports from Russia; nil: the check is not offered (tests).
-	CheckHost *checkhost.Client
+	// Reach checks ports from Russia (Globalping); nil: the check is not offered (tests).
+	Reach *reach.Client
+	// Geo asks the geo bases where an address is; nil: the check is not offered (tests).
+	Geo *ipgeo.Client
+	// Logs holds the last lines of the panel's log for the Diagnostics page; nil: none.
+	Logs *logbuf.Buffer
 }
 
 type noChanges struct{}
@@ -160,6 +180,19 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		IPLimit: p.ipLimit, UserLimit: p.userLimit, TOTP: auth.NewTOTPGuard(),
 		TrustProxy: o.TrustProxy, Log: o.Log, Now: o.Now, Pool: pool,
 	}
+	p.Support = support.New(st, o.Now, o.Log)
+	p.Support.SetSwitch(func(ctx context.Context) (string, error) {
+		if o.SupportOff {
+			return support.OffEnv, nil
+		}
+		on, err := set.On(ctx, settings.SupportAccess)
+		if err != nil || on {
+			return "", err
+		}
+		return support.OffSetting, nil
+	})
+	p.Support.SetBot(o.SupportBot)
+	deps.Support = p.Support
 	p.newKinkan(o, &deps) // Kinkan: the fork's services (kinkan.go)
 	if o.Connect != nil {
 		p.Nodes = nodesync.NewManager(st, set, pool, o.Connect, o.Log, o.Now)
@@ -178,6 +211,10 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	}
 	deps.PanelCert = o.PanelCert
 	deps.SubPort, deps.SubPortError = o.SubPort, o.SubPortError
+	deps.SubDomain = o.SubDomain
+	if o.SubCerts != nil {
+		deps.SubCerts = o.SubCerts
+	}
 	deps.Changes = changes
 	deps.Users = domain.NewUsers(st, pool, changes, o.Now)
 	deps.Users.SetEvents(hub)
@@ -202,6 +239,8 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	deps.Devices.SetEvents(hub)
 	p.st, p.devices = st, deps.Devices
 	deps.Packages = domain.NewPackages(st, o.Now)
+	deps.Campaigns = domain.NewCampaigns(st, o.Now)
+	deps.Balancer = domain.NewBalancer(st, o.Now, o.Log)
 	if o.Certs != nil {
 		deps.Cert, deps.RenewCert, deps.RenewCertNow = o.Certs.Status, o.Certs.Renew, o.Certs.RenewNow
 		deps.SetCert, deps.ClearCert = o.Certs.SetCustom, o.Certs.ClearCustom
@@ -233,18 +272,23 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		return ep.URL() + "/" + paths.Sub
 	}
 	p.Addons = addons.New(o.DataDir, o.AddonsCatalog, o.Version, o.Log, o.Now)
+	if o.AddonsCommunity != "" {
+		p.Addons.SetCommunityURL(o.AddonsCommunity)
+	}
 	p.Addons.SetDev(o.Dev)
 	deps.Addons = p.Addons
 	addonPages := addonpages.New(addonpages.Deps{Addons: p.Addons, Store: st.Q, Log: o.Log, Now: o.Now})
 	deps.Pages = addonPages
 	deps.DNS = o.DNS
-	deps.CheckHost = o.CheckHost
+	deps.Reach, deps.Geo = o.Reach, o.Geo
 	deps.DataDir = o.DataDir
+	deps.Logs, deps.Host = o.Logs, hostchan.New(o.DataDir)
 	promos := promo.New(st, o.Now)
 	promos.Changed = deps.Users.Changed
 	p.Billing = billing.New(billing.Deps{Store: st, Settings: set, Users: deps.Users, Log: o.Log, Now: o.Now, TrustProxy: o.TrustProxy,
 		MaxLinks: tgate.MaxLinks,
-		Addons:   deps.Addons, SubBase: subBase, Promo: promos, Events: hub})
+		Addons:   deps.Addons, SubBase: subBase, Promo: promos, Events: hub,
+		TopupWaiting: func(ctx context.Context, t db.Topup) { p.tellAdminOfTopup(ctx, t) }})
 	deps.Billing, deps.SubBase = p.Billing, subBase
 	// The bot may reach Telegram through a node when the panel's server cannot.
 	var tunnel func(ctx context.Context, nodeID int64, addr string) (net.Conn, error)
@@ -260,7 +304,8 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	// The panel's API for addons, with the Bot API proxy over the gateway for the addon that
 	// holds the bot.
 	p.AddonsAPI = panelapi.New(panelapi.Deps{Addons: p.Addons, Store: st, Hub: hub, Log: o.Log, Now: o.Now,
-		Telegram: p.Gateway, Settings: set, SubBase: subBase, Bot: tgbot.RPCHandler(backend), Users: deps.Users})
+		Telegram: p.Gateway, Settings: set, SubBase: subBase, Bot: tgbot.RPCHandler(backend), Users: deps.Users,
+		Inbounds: deps.Inbounds, Changes: deps.Changes, NodeState: nodeState(p.Nodes)})
 	// What the bot says comes from the bot addon (the official one is installed by itself,
 	// botaddon.go): the panel tells it through events, and keeps the broadcasts and the
 	// previews of the admin's texts.
@@ -275,6 +320,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	// The updates wait in the buffer for the addon that holds the bot.
 	p.Gateway.SetHandler(p.AddonsAPI.BotSlot())
 	deps.Telegram, deps.Gateway = p.Telegram, p.Gateway
+	p.Support.SetNotifier(p.tellAdminOfSupport)
 	p.Billing.SetTelegram(p.Gateway)
 	p.Billing.SetNotifier(tgbot.Notifications{Emit: emit, Log: o.Log})
 	p.Updates = updates.New(o.DataDir, o.Version, o.Releases, o.Log, o.Now)
@@ -351,16 +397,16 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		if err != nil {
 			return subs.Config{}, err
 		}
-		var domainName, publicHost, routing, fingerprint, rules string
+		var domainName, subDomain, publicHost, routing, fingerprint, rules string
 		var groups subs.Groups
-		for key, dst := range map[string]*string{settings.KeyDomain: &domainName, settings.KeyPublicHost: &publicHost, settings.KeyGroupMain: &groups.Main, settings.KeyGroupAuto: &groups.Auto,
+		for key, dst := range map[string]*string{settings.KeyDomain: &domainName, settings.KeySubDomain: &subDomain, settings.KeyPublicHost: &publicHost, settings.KeyGroupMain: &groups.Main, settings.KeyGroupAuto: &groups.Auto,
 			settings.KeyRouting: &routing, settings.KeyFingerprint: &fingerprint, settings.KeyRules: &rules} {
 			if *dst, err = set.String(ctx, key); err != nil {
 				return subs.Config{}, err
 			}
 		}
 		cfg := subs.Config{Brand: brand, SupportURL: support, Groups: groups, Routing: subs.ParseRouting(routing), Fingerprint: fingerprint,
-			Direct: []string{publicHost, domainName}, Lang: lang, Rules: subs.ServedRules(rules, groups.WithDefaults(lang))}
+			Direct: []string{publicHost, domainName, subDomain}, Lang: lang, Rules: subs.ServedRules(rules, groups.WithDefaults(lang))}
 		if cfg.Routes, _, err = settings.Get[subs.Routes](ctx, set, settings.KeyRoutes); err != nil {
 			return subs.Config{}, err
 		}
@@ -387,6 +433,20 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		}
 		if cfg.Happ.HideSettings, err = set.On(ctx, settings.HappHide); err != nil {
 			return subs.Config{}, err
+		}
+		if cfg.InactiveServer, err = set.On(ctx, settings.InactiveServer); err != nil {
+			return subs.Config{}, err
+		}
+		if cfg.InactiveText, err = set.String(ctx, settings.KeyInactiveText); err != nil {
+			return subs.Config{}, err
+		}
+		tariffs, err := st.Q.ListTariffs(ctx)
+		if err != nil {
+			return subs.Config{}, err
+		}
+		cfg.Tariffs = make(map[int64]string, len(tariffs))
+		for _, t := range tariffs {
+			cfg.Tariffs[t.ID] = t.Name
 		}
 		for key, dst := range map[string]*string{settings.KeySubTitle: &cfg.Title, settings.KeyAnnounce: &cfg.Announce, settings.KeyAnnounceURL: &cfg.AnnounceURL,
 			settings.KeyBrandAccent: &cfg.App.Accent, settings.KeyBrandLogo: &cfg.App.LogoURL,
@@ -418,6 +478,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 				sn.Endpoint = subs.Endpoint{Host: domain.NodeHost(n), SNI: n.Domain}
 				cfg.Direct = append(cfg.Direct, n.PublicHost, n.Domain)
 			}
+			sn.Endpoint.SNIRouter = n.SniRouter != 0
 			if o.TLS != nil {
 				if c, err := o.TLS.Pick(n); err == nil {
 					sn.Endpoint.PinSHA256 = c.Pin
@@ -450,6 +511,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	}}
 	subCfg := func(ctx context.Context) (subs.Config, error) { return cache.get(ctx, buildSubCfg) }
 	subHandler = subs.NewHandler(st, subCfg, subPageHandler, o.Now, deps.Devices, o.TrustProxy)
+	subHandler.SetBalancer(deps.Balancer)
 	subHandler.SetLogger(o.Log)
 	subHandler.SetTelegram(p.Gateway)
 	subHandler.SetReissuer(deps.Users)
@@ -464,7 +526,10 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	p.server = server.New(adminMux, subHandler)
 	p.server.SetLegacy(subHandler.Legacy())
 	if o.DataDir != "" {
-		p.server.SetSite(server.OwnSite(filepath.Join(o.DataDir, "www")))
+		set := settings.New(st.Q)
+		p.server.SetSite(server.OwnSite(filepath.Join(o.DataDir, "www"), settingsCached(func(ctx context.Context) (string, error) {
+			return set.String(ctx, settings.KeySiteTemplate)
+		})))
 	}
 	p.server.SetHSTS(o.HSTS)
 	if p.Nodes != nil && o.PanelCert != nil {
@@ -533,6 +598,15 @@ func (p *Panel) Run(ctx context.Context) {
 			every(ctx, 5*time.Second, func() {
 				if _, err := p.Apply(ctx); err != nil {
 					p.log.Error("reload settings", "err", err)
+				}
+			})
+		},
+		// A support grant whose time ran out is written to the journal and the admin is told
+		// within the half minute, not when the next request meets it.
+		func(ctx context.Context) {
+			every(ctx, 30*time.Second, func() {
+				if err := p.Support.Sweep(ctx); err != nil {
+					p.log.Error("support sweep", "err", err)
 				}
 			})
 		},
@@ -620,5 +694,48 @@ func every(ctx context.Context, d time.Duration, fn func()) {
 		case <-t.C:
 			fn()
 		}
+	}
+}
+
+// settingsCached is a setting read again only once this process changed a setting
+// (settings.Generation) or a minute went by (another process, the CLI): it is asked on
+// every request a stranger makes.
+func settingsCached(read func(context.Context) (string, error)) func() string {
+	var (
+		mu   sync.Mutex
+		gen  uint64
+		at   time.Time
+		have bool
+		v    string
+	)
+	return func() string {
+		g := settings.Generation()
+		mu.Lock()
+		defer mu.Unlock()
+		if !have || g != gen || time.Since(at) > time.Minute {
+			if s, err := read(context.Background()); err == nil {
+				v, gen, at, have = s, g, time.Now(), true
+			}
+		}
+		return v
+	}
+}
+
+// nodeState is what addons with nodes:read and inbounds:read learn of a node: whether the
+// panel reached it, its version and connections, which listeners run.
+func nodeState(m *nodesync.Manager) func(int64) panelapi.NodeState {
+	return func(id int64) panelapi.NodeState {
+		if m == nil {
+			return panelapi.NodeState{}
+		}
+		hv, ok := m.Health(id)
+		if !ok || hv.CheckedAt.IsZero() {
+			return panelapi.NodeState{}
+		}
+		st := panelapi.NodeState{Known: true, OK: hv.OK, Version: hv.Health.Version, Conns: hv.Health.Conns, Statuses: map[string]bool{}}
+		for _, l := range hv.Listeners {
+			st.Statuses[l.Name] = l.OK
+		}
+		return st
 	}
 }

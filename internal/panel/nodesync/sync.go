@@ -268,6 +268,13 @@ func (s *Syncer) desiredPin(ctx context.Context) (st nodeapi.DesiredState, pin s
 	}
 	st.Torrent = snap.torrent.Block()
 	st.Filters = snap.filters.State()
+	st.DNS = snap.exitDNS.State()
+	st.Detail = snap.detail
+	st.HTTPRedirect = n.HttpRedirect != 0 && n.Address != ""
+	st.APIAllow = s.apiAllow(ctx, n)
+	if n.SniRouter != 0 {
+		st.Router = sniRouter(st.Inbounds, n.Domain)
+	}
 	if n.FairShare != 0 && n.ChannelMbps.Valid {
 		st.Shaping = &nodeapi.Shaping{ChannelMbps: int(n.ChannelMbps.Int64)}
 	}
@@ -637,6 +644,9 @@ func (s *Syncer) pullCounters(ctx context.Context) {
 		if err := countSlots(ctx, q, c, owner); err != nil {
 			return err
 		}
+		if err := countSites(ctx, q, c, owner, now); err != nil {
+			return err
+		}
 		if c.Epoch != epoch {
 			if err := q.SetNodeState(ctx, db.SetNodeStateParams{Key: stateKeyOf("counters_epoch", s.id), Value: c.Epoch}); err != nil {
 				return err
@@ -827,7 +837,13 @@ func stateKey(st nodeapi.DesiredState) string {
 		B *nodeapi.TorrentBlock
 		F *nodeapi.Filters
 		H *nodeapi.Shaping
-	}{st.Inbounds, st.Slots, st.TLS, st.SelfStealPort, st.Warp, st.Relay, st.Exits, st.Torrent, st.Filters, st.Shaping})
+		D *nodeapi.ExitDNS
+		A []string
+		X bool
+		V bool
+		O *nodeapi.SNIRouter
+	}{st.Inbounds, st.Slots, st.TLS, st.SelfStealPort, st.Warp, st.Relay, st.Exits, st.Torrent, st.Filters, st.Shaping, st.DNS, st.APIAllow,
+		st.HTTPRedirect, st.Detail, st.Router})
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
 }
@@ -1084,4 +1100,47 @@ func countSlots(ctx context.Context, q *db.Queries, c nodeapi.Counters, owner ma
 		return nil
 	}
 	return q.AddSlotsTraffic(ctx, p)
+}
+
+// countSites keeps a batch's bytes by site, by subscription and day. What a node could not
+// have sent (too many sites, a name past the DNS bound, a negative or absurd amount) is
+// dropped; the rest of the batch counts as ever.
+func countSites(ctx context.Context, q *db.Queries, c nodeapi.Counters, owner map[string]int64, now time.Time) error {
+	day := domain.SiteDay(now)
+	for slot, sites := range c.Sites {
+		uid, ok := owner[slot]
+		if !ok || len(sites) > domain.MaxSitesPerSlot {
+			continue
+		}
+		for site, t := range sites {
+			if site == "" || len(site) > 253 || t.Up < 0 || t.Down < 0 || t.Up > maxBytesPerSecond*86400 || t.Down > maxBytesPerSecond*86400 {
+				continue
+			}
+			if err := q.AddUserSite(ctx, db.AddUserSiteParams{Day: day, UserID: uid, Site: site, Up: t.Up, Down: t.Down}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// sniRouter is the node's SNI router for the inbounds marked for it: each by the names its
+// clients ask for, the first REALITY one taking any other name (it passes a stranger on to
+// its target, as on a port of its own). nil when no inbound is marked.
+func sniRouter(inbounds []nodeapi.Inbound, nodeDomain string) *nodeapi.SNIRouter {
+	r := &nodeapi.SNIRouter{}
+	for _, in := range inbounds {
+		t, err := proto.Parse(string(in.Config))
+		if err != nil || !proto.SNI443(t) || !proto.CanSNI443(t) {
+			continue
+		}
+		r.Routes = append(r.Routes, nodeapi.SNIRoute{Inbound: in.Name, Names: proto.SNINames(t, nodeDomain)})
+		if r.Default == "" && proto.Reality(t) {
+			r.Default = in.Name
+		}
+	}
+	if len(r.Routes) == 0 {
+		return nil
+	}
+	return r
 }

@@ -19,7 +19,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/metacubex/mihomo/transport/vmess"
 )
 
 type KinkanConfig struct {
@@ -51,22 +50,11 @@ type WrongKeyComparison struct {
 	Reference *AuthObservation `json:"reference,omitempty"`
 }
 
-// captureConn lets the core produce a valid VMess AEAD request with a fresh unknown
-// UUID, without opening a tunnel or maintaining a second implementation of VMess.
-type captureConn struct {
-	net.Conn
-	bytes.Buffer
-}
-
-func (c *captureConn) Write(b []byte) (int, error) { return c.Buffer.Write(b) }
-func (c *captureConn) Read(b []byte) (int, error)  { return 0, io.EOF }
-
 func wrongKeyPayload(protocol string) ([]byte, error) {
 	key := make([]byte, 16)
 	if _, err := rand.Read(key); err != nil {
 		return nil, err
 	}
-	id := fmt.Sprintf("%x-%x-%x-%x-%x", key[:4], key[4:6], key[6:8], key[8:10], key[10:])
 	switch protocol {
 	case "vless":
 		// v0, UUID, no addons, TCP, port 80, IPv4 TEST-NET-1. No real destination.
@@ -78,14 +66,6 @@ func wrongKeyPayload(protocol string) ([]byte, error) {
 	case "anytls":
 		h := sha256.Sum256(key)
 		return append(h[:], 0, 0), nil // password digest, zero padding
-	case "vmess":
-		client, err := vmess.NewClient(vmess.Config{UUID: id, Security: "aes-128-gcm", IsAead: true})
-		if err != nil {
-			return nil, err
-		}
-		c := &captureConn{}
-		_, err = client.StreamConn(c, &vmess.DstAddr{AddrType: vmess.AtypIPv4, Addr: []byte{192, 0, 2, 1}, Port: 80})
-		return c.Bytes(), err
 	default:
 		return nil, fmt.Errorf("wrong-key framing is not implemented for %s", protocol)
 	}

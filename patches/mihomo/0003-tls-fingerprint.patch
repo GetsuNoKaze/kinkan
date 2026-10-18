@@ -1,23 +1,19 @@
 diff --git a/component/authevent/event.go b/component/authevent/event.go
-index 0b71b00..9275c6b 100644
+index 93a492ae..01bb0e97 100644
 --- a/component/authevent/event.go
 +++ b/component/authevent/event.go
-@@ -4,7 +4,11 @@ package authevent
- 
- import "sync/atomic"
- 
--type Event struct{ Protocol, Local, Remote, Reason, Method string }
-+type Event struct {
-+	Protocol, Local, Remote, Reason, Method string
+@@ -28,6 +28,8 @@ type Event struct {
+ 	Remote   string // client address
+ 	Reason   string // one of the Reason constants
+ 	Method   string // HTTP method, for HTTP-based protocols only
 +	// TLS is the JA4 fingerprint of the client's ClientHello, when the listener saw one.
 +	TLS string
-+}
- type handler struct{ fn func(Event) }
+ }
  
- var sink atomic.Pointer[handler]
+ // Reasons reported in Event.Reason.
 diff --git a/component/authevent/hello.go b/component/authevent/hello.go
 new file mode 100644
-index 0000000..99a26a8
+index 00000000..99a26a84
 --- /dev/null
 +++ b/component/authevent/hello.go
 @@ -0,0 +1,226 @@
@@ -249,7 +245,7 @@ index 0000000..99a26a8
 +}
 diff --git a/component/authevent/hello_test.go b/component/authevent/hello_test.go
 new file mode 100644
-index 0000000..86117c7
+index 00000000..86117c7c
 --- /dev/null
 +++ b/component/authevent/hello_test.go
 @@ -0,0 +1,104 @@
@@ -358,10 +354,10 @@ index 0000000..86117c7
 +	}
 +}
 diff --git a/listener/reality/reality.go b/listener/reality/reality.go
-index 40de0c9..d096c25 100644
+index 7242c9d5..a8531bdd 100644
 --- a/listener/reality/reality.go
 +++ b/listener/reality/reality.go
-@@ -90,9 +90,10 @@ type Builder struct {
+@@ -136,9 +136,12 @@ type Builder struct {
  
  func (b Builder) NewListener(l net.Listener) net.Listener {
  	return N.NewHandleContextListener(context.Background(), l, func(ctx context.Context, conn net.Conn) (net.Conn, error) {
@@ -369,8 +365,10 @@ index 40de0c9..d096c25 100644
 +		hello := authevent.NewHelloConn(conn)
 +		c, err := utls.RealityServer(ctx, hello, b.realityConfig)
  		if err != nil {
--			authevent.Emit(authevent.Event{Protocol: "reality", Local: conn.LocalAddr().String(), Remote: conn.RemoteAddr().String(), Reason: "rejected_handshake"})
-+			authevent.Emit(authevent.Event{Protocol: "reality", Local: conn.LocalAddr().String(), Remote: conn.RemoteAddr().String(), Reason: "rejected_handshake", TLS: hello.JA4()})
+-			authevent.EmitAddr("reality", authevent.ReasonRejectedHandshake, conn.LocalAddr(), conn.RemoteAddr())
++			if authevent.Enabled() {
++				authevent.Emit(authevent.Event{Protocol: "reality", Local: conn.LocalAddr().String(), Remote: conn.RemoteAddr().String(), Reason: authevent.ReasonRejectedHandshake, TLS: hello.JA4()})
++			}
  			return nil, err
  		}
  		// Due to low implementation quality, the reality server intercepted half-close and caused memory leaks.

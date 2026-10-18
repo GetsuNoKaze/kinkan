@@ -4,11 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/metacubex/mihomo/component/authevent"
 	"net"
 	"net/netip"
-	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -27,11 +24,9 @@ import (
 	"github.com/metacubex/mihomo/transport/tuic/common"
 
 	"github.com/metacubex/http"
-	"github.com/metacubex/http/httputil"
 	"github.com/metacubex/quic-go"
 	"github.com/metacubex/sing-quic/hysteria2"
 	"github.com/metacubex/sing-quic/hysteria2/realm"
-	E "github.com/metacubex/sing/common/exceptions"
 	"github.com/metacubex/tls"
 )
 
@@ -119,43 +114,11 @@ func New(config LC.Hysteria2Server, lc C.InboundListenConfig, tunnel C.Tunnel, a
 			return nil, fmt.Errorf("unknown obfs type: %s", config.Obfs)
 		}
 	}
-	var masqueradeHandler http.Handler
-	if config.Masquerade != "" {
-		masqueradeURL, err := url.Parse(config.Masquerade)
-		if err != nil {
-			return nil, E.Cause(err, "parse masquerade URL")
-		}
-		switch masqueradeURL.Scheme {
-		case "file":
-			masqueradeHandler = http.FileServer(http.Dir(masqueradeURL.Path))
-		case "http", "https":
-			masqueradeHandler = &httputil.ReverseProxy{
-				Rewrite: func(r *httputil.ProxyRequest) {
-					r.SetURL(masqueradeURL)
-					r.Out.Host = r.In.Host
-				},
-				ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-					w.WriteHeader(http.StatusBadGateway)
-				},
-				Transport: &http.Transport{
-					// fellow hysteria2's code skip verify
-					TLSClientConfig: &tls.Config{
-						InsecureSkipVerify: true,
-					},
-					// from http.DefaultTransport
-					ForceAttemptHTTP2:     true,
-					MaxIdleConns:          100,
-					IdleConnTimeout:       90 * time.Second,
-					TLSHandshakeTimeout:   10 * time.Second,
-					ExpectContinueTimeout: 1 * time.Second,
-					DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
-						return inner.HandleTcp(tunnel, address, "")
-					},
-				},
-			}
-		default:
-			return nil, E.New("unknown masquerade URL scheme: ", masqueradeURL.Scheme)
-		}
+	masqueradeHandler, err := newMasqueradeHandler(config.Masquerade, config.MasqueradeSkipCertVerify, func(ctx context.Context, network, address string) (net.Conn, error) {
+		return inner.HandleTcp(tunnel, address, "")
+	})
+	if err != nil {
+		return nil, err
 	}
 	var realmOptions *realm.Options
 	if config.RealmOpts.Enable {
@@ -215,28 +178,8 @@ func New(config LC.Hysteria2Server, lc C.InboundListenConfig, tunnel C.Tunnel, a
 		MaxConnectionReceiveWindow:     config.MaxConnectionReceiveWindow,
 	}
 
-	// Observe rejected /auth requests without repeating sing-quic's password check.
-	cover := masqueradeHandler
-	if cover == nil {
-		cover = http.NotFoundHandler()
-	}
-	masqueradeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" && r.Host == "hysteria" && r.URL.Path == "/auth" {
-			authPresent := r.Header.Get("Hysteria-Auth") != ""
-			rx, _ := strconv.ParseUint(r.Header.Get("Hysteria-CC-RX"), 10, 64)
-			// sing-quic also masquerades authenticated users when BBR is disabled.
-			// These requests cannot be classified here; avoid logging our own users.
-			ambiguous := authPresent && utils.StringToBps(config.Down) > 0 && config.IgnoreClientBandwidth && rx == 0
-			if !ambiguous {
-				reason := "no_credentials"
-				if authPresent {
-					reason = "wrong_credentials"
-				}
-				authevent.Emit(authevent.Event{Protocol: "hysteria2", Local: config.Listen, Remote: r.RemoteAddr, Reason: reason, Method: r.Method})
-			}
-		}
-		cover.ServeHTTP(w, r)
-	})
+	masqueradeHandler = authEventHandler(masqueradeHandler, utils.StringToBps(config.Down), config.IgnoreClientBandwidth)
+
 	service, err := hysteria2.NewService[string](hysteria2.ServiceOptions{
 		Context:               context.Background(),
 		Logger:                log.SingLogger,

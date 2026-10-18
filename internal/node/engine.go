@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,14 +22,18 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/metacubex/mihomo/component/eventbus"
 	C "github.com/metacubex/mihomo/constant"
 	"github.com/metacubex/mihomo/hub/executor"
 	"github.com/metacubex/mihomo/listener"
 	mlog "github.com/metacubex/mihomo/log"
 	"github.com/metacubex/mihomo/tunnel"
+	"github.com/metacubex/mihomo/tunnel/statistic"
 
 	"mikan/internal/acmechallenge"
 	"mikan/internal/fsutil"
+	"mikan/internal/hostchan"
+	"mikan/internal/logbuf"
 	"mikan/internal/nodeapi"
 	"mikan/internal/proto"
 	"mikan/internal/scan"
@@ -52,6 +55,8 @@ type Options struct {
 	// ACMEListen is where the panel's HTTP-01 challenges for this node are answered
 	// (acmechallenge.ParseListen); "" is port 80.
 	ACMEListen string
+	// Logs holds the last lines of the node's log for GET /v1/logs; nil: none to show.
+	Logs *logbuf.Buffer
 }
 
 type Engine struct {
@@ -61,12 +66,26 @@ type Engine struct {
 	version      string
 	started      time.Time
 	allowPrivate bool
+	logs         *logbuf.Buffer
+
+	// hostCh is the channel to the units on the node's server (see hostChan).
+	hostOnce sync.Once
+	hostCh   *hostchan.Channel
+	// lock keeps the TCP API for the panel alone (apilock.go); made on first use.
+	lockOnce sync.Once
+	lock     *apiLock
 
 	Reg *Registry
 	tun *Tunnel
 	// Challenge answers the ACME challenges the panel orders for the node's address, on
 	// port 80 while one is pending.
 	Challenge *acmechallenge.Server
+	redirect  atomic.Pointer[nodeapi.PortStatus] // the 301 on port 80; nil: off
+	// The SNI router on 443 (sni.go) and how its port went; nil: none.
+	routerMu     sync.Mutex
+	router       *sniRouter
+	routerAddr   string
+	routerStatus atomic.Pointer[nodeapi.PortStatus]
 
 	kinkanEngine // Kinkan: the node's site and scanner journal (kinkan.go)
 
@@ -81,14 +100,11 @@ type Engine struct {
 	// asks every few seconds with a short timeout, does not take the node for down.
 	shown atomic.Pointer[shownState]
 
-	errsMu sync.Mutex
-	errs   map[string]string // listener name → last listen error
-	marker chan string
-
 	sys  *sysSampler
 	host hostPortsCache
 
 	routes  string             // routesKey of what tunnel's proxies and rules hold now
+	exitDNS string             // exitDNSKey of the sniffer and resolver mihomo holds now
 	probeMu sync.Mutex         // one outbound probe at a time
 	warpMu  sync.Mutex         // the kept results below
 	warpGen int                // moves when a new config drops the kept results
@@ -191,9 +207,9 @@ func Start(o Options) (*Engine, error) {
 	C.SetHomeDir(home)
 
 	e := &Engine{
-		dataDir: dataDir, home: home, log: log, version: version, started: time.Now(), allowPrivate: o.AllowPrivate,
+		dataDir: dataDir, home: home, log: log, version: version, started: time.Now(), allowPrivate: o.AllowPrivate, logs: o.Logs,
 		listeners: map[string]nodeapi.ListenerStatus{},
-		errs:      map[string]string{}, marker: make(chan string, 8), sys: newSysSampler(),
+		sys:       newSysSampler(),
 		Challenge: acmechallenge.New(cmp.Or(o.ACMEListen, acmechallenge.DefaultListen)),
 	}
 	go e.pumpLogs()
@@ -202,22 +218,17 @@ func Start(o Options) (*Engine, error) {
 	if err != nil {
 		return nil, err
 	}
-	e.Reg = NewRegistry(cs.Epoch, cs.Seq, o.DeviceRelease, time.Now)
+	// The core lists an address of a user this long after its last connection closed: a
+	// device keeps its place as long.
+	statistic.DefaultManager.Users().IPRelease = o.DeviceRelease
+	e.Reg = NewRegistry(cs.Epoch, cs.Seq, o.DeviceRelease, time.Now, citrus{})
 	e.tun = &Tunnel{inner: tunnel.Tunnel, reg: e.Reg}
 	e.startScannerJournal() // Kinkan
 
-	base, _, err := buildConfig(nodeapi.DesiredState{}, proto.Cert{}, o.AllowPrivate)
-	if err != nil {
+	if err := applyBase(); err != nil {
 		return nil, err
 	}
-	cfg, err := executor.ParseWithBytes(base)
-	if err != nil {
-		return nil, fmt.Errorf("base config: %w", err)
-	}
-	// ApplyConfig patches listeners with the stock tunnel and drops any others, so it
-	// runs exactly once, with no listeners; ours are patched separately in Apply.
-	cfg.Listeners = map[string]C.InboundListener{}
-	executor.ApplyConfig(cfg, true)
+	e.exitDNS = exitDNSKey(nil)
 
 	st, ok, err := loadState(filepath.Join(dataDir, stateFile), log)
 	if err != nil {
@@ -230,8 +241,34 @@ func Start(o Options) (*Engine, error) {
 	}
 	e.restoreCounters(cs)
 	go e.sys.run()
-	go e.Reg.RunShaper(context.Background())
+	go e.Reg.Run(context.Background())
 	return e, nil
+}
+
+var (
+	baseOnce sync.Once
+	baseErr  error
+)
+
+// applyBase gives the core its general settings, once per process: ApplyConfig patches
+// listeners with the stock tunnel and drops any others, so it runs with no listeners and
+// ours are patched separately in Apply; the way out and the DNS come with every Apply.
+func applyBase() error {
+	baseOnce.Do(func() {
+		base, _, err := buildConfig(nodeapi.DesiredState{}, proto.Cert{}, false)
+		if err != nil {
+			baseErr = err
+			return
+		}
+		cfg, err := executor.ParseWithBytes(base)
+		if err != nil {
+			baseErr = fmt.Errorf("base config: %w", err)
+			return
+		}
+		cfg.Listeners = map[string]C.InboundListener{}
+		executor.ApplyConfig(cfg, true)
+	})
+	return baseErr
 }
 
 // restoreCounters brings back what the slots had counted before the restart. Apply ran
@@ -293,12 +330,23 @@ func (e *Engine) Apply(st nodeapi.DesiredState) (res nodeapi.ApplyResult, err er
 		e.warpMu.Unlock()
 	}
 
+	if key := exitDNSKey(st.DNS); key != e.exitDNS {
+		if err := applyExitDNS(cfg); err != nil {
+			e.log.Error("exit dns", "err", err)
+		} else {
+			e.exitDNS = key
+		}
+	}
+
 	e.Reg.SetSlots(st.Slots)
 	e.Reg.SetShaping(st.Shaping)
 	e.Reg.SetPolicies(st.Epoch, st.Policies)
 	e.Reg.SetShared(sharedListeners(st))
 	e.Reg.SetTorrent(st.Torrent)
 	e.Reg.SetIngress(st.Filters)
+	e.setRedirect(st.HTTPRedirect)
+	e.apiLock().set(st.APIAllow)
+	e.Reg.SetDetail(st.Detail)
 	pools := map[string]string{}
 	for _, in := range st.Inbounds {
 		if in.Pool != "" {
@@ -306,37 +354,40 @@ func (e *Engine) Apply(st nodeapi.DesiredState) (res nodeapi.ApplyResult, err er
 		}
 	}
 	e.Reg.SetPools(pools)
+	e.Reg.SetInbounds(userListeners(st))
 
-	recreated := withoutRejected(changedInbounds(e.applied, st), rejected)
-	e.errsMu.Lock()
-	for name := range cfg.Listeners {
-		delete(e.errs, name)
-	}
-	e.errsMu.Unlock()
-	listener.PatchInboundListeners(cfg.Listeners, e.tun, true)
-	e.syncLogs()
-
-	e.errsMu.Lock()
-	failed := map[string]C.InboundListener{}
+	// The core gives a listener whose users alone changed the new users in place, so the
+	// connections of everyone else stay; only what it started anew counts as recreated.
+	failed, started := e.patchListeners(cfg.Listeners)
+	listening := map[string]C.InboundListener{}
 	statuses := make([]nodeapi.ListenerStatus, 0, len(cfg.Listeners))
 	for name, l := range cfg.Listeners {
 		ls := nodeapi.ListenerStatus{Name: name, OK: true}
-		if msg, bad := e.errs[name]; bad {
+		if msg, bad := failed[name]; bad {
 			ls = listenFailed(name, msg)
 		} else {
-			failed[name] = l
+			listening[name] = l
 		}
 		statuses = append(statuses, ls)
 	}
-	hasFailures := len(failed) != len(cfg.Listeners)
-	e.errsMu.Unlock()
 	statuses = append(statuses, rejected...)
-	// A listener that failed to bind stays registered under its old instance in mihomo
-	// and would be skipped as "unchanged" next time; re-patching without it forgets it.
-	if hasFailures {
-		listener.PatchInboundListeners(failed, e.tun, true)
+	// A listener that failed to bind stays registered under its old, closed instance in
+	// the core and would be skipped as "unchanged" next time; re-patching without it
+	// forgets it.
+	if len(listening) != len(cfg.Listeners) {
+		listener.PatchInboundListeners(listening, e.tun, true)
 	}
 	sort.Slice(statuses, func(i, j int) bool { return statuses[i].Name < statuses[j].Name })
+	ports := make(map[string]string, len(st.Inbounds))
+	for _, in := range st.Inbounds {
+		ports[in.Name] = in.Port
+	}
+	e.setRouter(st.Router, ports)
+	recreated := make([]string, 0, len(started))
+	for name := range started {
+		recreated = append(recreated, name)
+	}
+	sort.Strings(recreated)
 
 	e.applied = st
 	e.listeners = map[string]nodeapi.ListenerStatus{}
@@ -438,9 +489,26 @@ func (e *Engine) Health() (h nodeapi.Health) {
 		ls, rev = append(ls, sh.listeners...), sh.revision
 	}
 	return nodeapi.Health{
-		Version: e.version, Core: "mihomo " + mihomoVersion(), Revision: rev, StartedAt: e.started,
+		Version: e.version, Core: coreVersion(), Revision: rev, StartedAt: e.started,
 		Listeners: ls, Conns: e.Reg.ConnCount(), System: e.sys.last(), Update: e.UpdateStatus(), Host: e.host.get(), Time: time.Now(),
+		Redirect: e.redirect.Load(), Router: e.routerStatus.Load(), APILock: e.apiLock().status(),
 	}
+}
+
+// setRedirect turns the 301 on port 80 on or off and keeps how it went for Health. A port
+// another program holds is tried again at the next Apply.
+func (e *Engine) setRedirect(on bool) {
+	if !on {
+		_ = e.Challenge.SetRedirect(false)
+		e.redirect.Store(nil)
+		return
+	}
+	st := &nodeapi.PortStatus{OK: true}
+	if err := e.Challenge.SetRedirect(true); err != nil {
+		st = &nodeapi.PortStatus{Error: err.Error()}
+		e.log.Warn("http redirect", "err", err)
+	}
+	e.redirect.Store(st)
 }
 
 // shownState is the last Apply as Health reports it: the listeners sorted by name.
@@ -472,54 +540,61 @@ func (e *Engine) saveState(st nodeapi.DesiredState) error {
 	return nil
 }
 
-// pumpLogs forwards mihomo's log stream: warnings and errors go to our logger,
-// listener bind errors are remembered for the listener status.
+// pumpLogs forwards the core's warnings and errors to our logger.
 func (e *Engine) pumpLogs() {
 	sub := mlog.Subscribe()
 	for ev := range sub {
 		msg := ev.Payload
-		if strings.HasPrefix(msg, markerPrefix) {
-			select {
-			case e.marker <- msg:
-			default:
-			}
-			continue
-		}
 		if ev.LogLevel < mlog.WARNING || connLine(msg) {
 			continue
 		}
-		if name, rest, ok := parseListenErr(msg); ok {
-			e.errsMu.Lock()
-			e.errs[name] = rest
-			e.errsMu.Unlock()
-		}
 		if ev.LogLevel >= mlog.ERROR {
-			e.log.Error("mihomo", "msg", msg)
+			e.log.Error("core", "msg", msg)
 		} else {
-			e.log.Warn("mihomo", "msg", msg)
+			e.log.Warn("core", "msg", msg)
 		}
 	}
 }
 
-const markerPrefix = "mikan-sync "
+// inboundStates is the mask of the core's listener events.
+var inboundStates = func() eventbus.Mask {
+	m, err := eventbus.ParseTypes(eventbus.TypeInboundState)
+	if err != nil {
+		panic(err)
+	}
+	return m
+}()
 
-// syncLogs waits until every log event emitted before this call has been processed:
-// mihomo delivers events in order, so seeing our own marker is a barrier.
-func (e *Engine) syncLogs() {
-	id := make([]byte, 8)
-	_, _ = rand.Read(id)
-	want := markerPrefix + hex.EncodeToString(id)
-	mlog.Warnln("%s", want)
-	timeout := time.After(2 * time.Second)
+// patchListeners puts ls in place of the running listeners and reports what the core did:
+// the listeners that failed to listen, with the error, and those it started anew (not the
+// ones that kept running, users updated in place). The core publishes the events of a
+// patch while it runs, so all of them are in the subscription once it returns.
+func (e *Engine) patchListeners(ls map[string]C.InboundListener) (failed map[string]string, started map[string]bool) {
+	// Each listener gives at most a stop and a start or failure; old ones dropped, a stop.
+	sub := eventbus.Subscribe(inboundStates, 4*len(ls)+64)
+	defer sub.Close()
+	listener.PatchInboundListeners(ls, e.tun, true)
+	failed, started = map[string]string{}, map[string]bool{}
 	for {
 		select {
-		case got := <-e.marker:
-			if got == want {
-				return
+		case ev := <-sub.C():
+			st, ok := ev.Data.(eventbus.InboundState)
+			if !ok {
+				continue
 			}
-		case <-timeout:
-			e.log.Warn("log barrier timed out; listener errors may be missing")
-			return
+			switch st.State {
+			case eventbus.InboundFailed:
+				failed[st.Inbound] = st.Error
+				delete(started, st.Inbound)
+			case eventbus.InboundStarted:
+				started[st.Inbound] = true
+				delete(failed, st.Inbound)
+			}
+		default:
+			if n := sub.TakeDropped(); n > 0 {
+				e.log.Warn("listener events lost; listener errors may be missing", "dropped", n)
+			}
+			return failed, started
 		}
 	}
 }
@@ -528,16 +603,6 @@ func (e *Engine) syncLogs() {
 // carry user IPs and destinations, so they never reach our logs, even as warnings.
 func connLine(msg string) bool {
 	return strings.HasPrefix(msg, "[TCP] ") || strings.HasPrefix(msg, "[UDP] ")
-}
-
-func parseListenErr(msg string) (name, reason string, ok bool) {
-	const p = "Listener "
-	const mid = " listen err: "
-	if !strings.HasPrefix(msg, p) {
-		return "", "", false
-	}
-	name, reason, ok = strings.Cut(msg[len(p):], mid)
-	return name, reason, ok
 }
 
 // listenFailed is the status of a listener that could not bind. A port another program
@@ -550,55 +615,29 @@ func listenFailed(name, msg string) nodeapi.ListenerStatus {
 	return ls
 }
 
-func withoutRejected(names []string, rejected []nodeapi.ListenerStatus) []string {
-	if len(rejected) == 0 {
-		return names
-	}
-	bad := make(map[string]bool, len(rejected))
-	for _, r := range rejected {
-		bad[r.Name] = true
-	}
-	return slices.DeleteFunc(names, func(n string) bool { return bad[n] })
-}
-
-func changedInbounds(prev, next nodeapi.DesiredState) []string {
-	old := map[string]string{}
-	for _, in := range prev.Inbounds {
-		raw, _ := json.Marshal(in)
-		old[in.Name] = string(raw)
-	}
-	slotsChanged := !sameSlots(prev.Slots, next.Slots)
-	var out []string
-	for _, in := range next.Inbounds {
-		raw, _ := json.Marshal(in)
-		if o, ok := old[in.Name]; !ok || o != string(raw) || slotsChanged {
-			out = append(out, in.Name)
-		}
-	}
-	return out
-}
-
-func sameSlots(a, b []nodeapi.Slot) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func mihomoVersion() string {
+// coreVersion names the network core the node is built with: Citrus, which go.mod puts in
+// place of mihomo, by its release tag or, for a commit of its dev branch, the commit.
+func coreVersion() string {
 	if bi, ok := debug.ReadBuildInfo(); ok {
 		for _, m := range bi.Deps {
 			if m.Path == "github.com/metacubex/mihomo" {
-				return m.Version
+				return coreName(m)
 			}
 		}
 	}
 	return "unknown"
+}
+
+func coreName(m *debug.Module) string {
+	if m.Replace == nil {
+		return "mihomo " + m.Version
+	}
+	v := m.Replace.Version
+	// A pseudo-version (v1.19.33-0.20261018104129-2cae038ea2a8) says nothing but its commit.
+	if parts := strings.Split(v, "-"); len(parts) >= 3 && len(parts[len(parts)-1]) == 12 {
+		v = parts[len(parts)-1][:7]
+	}
+	return "citrus " + v
 }
 
 // loadCounters reads the counters file. A missing or broken one starts a new counter

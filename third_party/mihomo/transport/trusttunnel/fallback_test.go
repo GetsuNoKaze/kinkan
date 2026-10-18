@@ -135,6 +135,12 @@ func TestFallbackRequestBodyStall(t *testing.T) {
 	defer backend.Close()
 	s := newFallbackService(t, backend)
 	s.fallbackIdleTimeout = 100 * time.Millisecond
+	// The idle stage cancels the backend request and the handler then answers
+	// 502. The stuck stage (aborting writes to a client that stopped reading) is
+	// not what this test checks: with its default of one more idle period it
+	// raced the 502 on a loaded runner and cut the answer off, so push it past
+	// the client's deadline. TestFallbackClientStopsReading covers that stage.
+	s.fallbackStuckTimeout = time.Minute
 
 	t.Run("handler", func(t *testing.T) {
 		body, bodyWriter := io.Pipe()
@@ -311,15 +317,7 @@ func startFallbackServer(t *testing.T, backend *httptest.Server, idleTimeout tim
 		t.Fatal(err)
 	}
 
-	tcpListener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	udpConn, err := net.ListenPacket("udp", tcpListener.Addr().String())
-	if err != nil {
-		_ = tcpListener.Close()
-		t.Fatal(err)
-	}
+	tcpListener, udpConn := listenTCPAndUDP(t)
 	s := NewService(ServiceOptions{
 		Ctx:      context.Background(),
 		Logger:   logger.NOP(),
@@ -405,6 +403,42 @@ func TestFallbackClientStopsReading(t *testing.T) {
 			}
 		})
 	}
+}
+
+// listenTCPAndUDP opens TCP and UDP on one port, as the inbound does. The free TCP
+// port may be one Windows keeps from UDP (the ranges Hyper-V and WinNAT exclude),
+// so another port is tried then.
+func listenTCPAndUDP(t *testing.T) (net.Listener, net.PacketConn) {
+	t.Helper()
+	// Free TCP ports come out sequentially, so a run of them can all fall inside
+	// one excluded UDP range; take a free UDP port first and open TCP on it, and
+	// only fall back to the other order.
+	var err error
+	for i := 0; i < 20; i++ {
+		var udpConn net.PacketConn
+		udpConn, err = net.ListenPacket("udp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var tcpListener net.Listener
+		tcpListener, err = net.Listen("tcp", udpConn.LocalAddr().String())
+		if err == nil {
+			return tcpListener, udpConn
+		}
+		_ = udpConn.Close()
+
+		tcpListener, err = net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		udpConn, err = net.ListenPacket("udp", tcpListener.Addr().String())
+		if err == nil {
+			return tcpListener, udpConn
+		}
+		_ = tcpListener.Close()
+	}
+	t.Fatal(err)
+	return nil, nil
 }
 
 func TestFallbackConnectReachesBackend(t *testing.T) {
@@ -815,8 +849,8 @@ func TestVerifyUnknownUser(t *testing.T) {
 		return "Basic " + base64.StdEncoding.EncodeToString([]byte(user+":"+password))
 	}
 	for user, password := range map[string]string{"alice": "secret", "empty": "", "unicode": "風" + strings.Repeat("x", 1000)} {
-		if got, ok := s.verify(basic(user, password)); !ok || got != user {
-			t.Fatalf("correct credentials for %q refused: user=%q, ok=%v", user, got, ok)
+		if got, ok := s.verify(basic(user, password)); !ok || got.Name() != user {
+			t.Fatalf("correct credentials for %q refused: entry=%v, ok=%v", user, got, ok)
 		}
 	}
 	for _, auth := range []string{basic("alice", "wrong"), basic("bob", "secret"), basic("bob", ""), basic("", ""), ""} {

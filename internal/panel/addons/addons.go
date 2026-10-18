@@ -75,7 +75,7 @@ const (
 // users:read and users:write are the bot's: the subscribers it talks to. users:all (read
 // every subscriber) and users:grant (give anyone days and traffic) reach all of them, are
 // implied by neither of those, and the admin is warned of both.
-var Permissions = []string{"bot", "users:read", "users:write", "users:all", "users:grant", "billing:invoice", "events", "kv", "ui"}
+var Permissions = []string{"bot", "users:read", "users:write", "users:all", "users:grant", "nodes:read", "inbounds:read", "inbounds:write", "billing:invoice", "events", "kv", "ui"}
 
 // MinMemMB and MaxMemMB bound what an addon may ask for; 0 is the host's default.
 const (
@@ -372,12 +372,16 @@ type Manager struct {
 	mu      sync.Mutex
 	catalog *Catalog
 	fetched time.Time
-	infos   map[string]described[Info]
-	infos2  map[string]described[InfoV2]
-	src     *sourceNet              // the way out to third-party sources (sources.go)
-	sources map[int64]SourceState   // the last fetch of each source
-	flights map[int64]*sourceFlight // fetches under way
-	noInfo  map[string]noInfo       // a /v2/info that failed, by addon
+	// The registry of community addons (community.go).
+	communityURL string
+	community    *Community
+	communityAt  time.Time
+	infos        map[string]described[Info]
+	infos2       map[string]described[InfoV2]
+	src          *sourceNet              // the way out to third-party sources (sources.go)
+	sources      map[int64]SourceState   // the last fetch of each source
+	flights      map[int64]*sourceFlight // fetches under way
+	noInfo       map[string]noInfo       // a /v2/info that failed, by addon
 
 	ask sync.Mutex // one request queued at a time: the number and the busy check
 }
@@ -389,7 +393,7 @@ func New(dataDir, catalogURL, panelVersion string, log *slog.Logger, now func() 
 		catalogURL = CatalogURL
 	}
 	pub, _ := release.Key(kinkanCatalogKey) // Kinkan: the marketplace is signed with Mikan's key (kinkan.go)
-	m := &Manager{catalogURL: catalogURL, pub: pub, version: panelVersion, log: log, now: now,
+	m := &Manager{catalogURL: catalogURL, communityURL: CommunityURL, pub: pub, version: panelVersion, log: log, now: now,
 		hc:    &http.Client{Timeout: 15 * time.Second},
 		infos: map[string]described[Info]{}, infos2: map[string]described[InfoV2]{}, noInfo: map[string]noInfo{},
 		src: newSourceNet(false), sources: map[int64]SourceState{}, flights: map[int64]*sourceFlight{},
