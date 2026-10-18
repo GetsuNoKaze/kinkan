@@ -77,7 +77,7 @@ func TestServeHTTPEmitsAuthEvent(t *testing.T) {
 }
 
 // With a fallback, requests without credentials are cover-site visits and are
-// not reported; wrong credentials still are.
+// not reported, except CONNECT; wrong credentials still are.
 func TestServeHTTPAuthEventWithFallback(t *testing.T) {
 	events := make(chan authevent.Event, 4)
 	authevent.SetHandler(func(e authevent.Event) { events <- e })
@@ -108,6 +108,17 @@ func TestServeHTTPAuthEventWithFallback(t *testing.T) {
 	case e := <-events:
 		t.Fatalf("cover-site visit reported: %+v", e)
 	case <-time.After(100 * time.Millisecond):
+	}
+
+	// A CONNECT without credentials is a proxy scan, not a visit: still reported.
+	serve(http.MethodConnect, "")
+	select {
+	case e := <-events:
+		if e.Reason != authevent.ReasonNoCredentials || e.Method != http.MethodConnect {
+			t.Fatalf("got %+v, want no_credentials for CONNECT", e)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("CONNECT without credentials not reported")
 	}
 
 	serve(http.MethodGet, "Basic "+base64.StdEncoding.EncodeToString([]byte("user:wrong")))

@@ -37,6 +37,10 @@ func TestTrustTunnelFallbackOnNode(t *testing.T) {
 	})
 	t.Cleanup(func() { authevent.SetHandler(nil) })
 	cover := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// A site refuses CONNECT, as Caddy does; Citrus turns a 2xx to one into a 502.
+		if r.Method == http.MethodConnect {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
 		_, _ = io.WriteString(w, "cover "+r.Method)
 	}))
 	t.Cleanup(cover.Close)
@@ -105,10 +109,15 @@ func TestTrustTunnelFallbackOnNode(t *testing.T) {
 			if h2 {
 				wantProto = 2
 			}
-			if err != nil || resp.StatusCode != 200 || string(body) != probe.body || resp.ProtoMajor != wantProto || resp.Header.Get("Proxy-Authenticate") != "" {
+			wantStatus := http.StatusOK
+			if probe.method == http.MethodConnect && probe.body != "" {
+				wantStatus = http.StatusMethodNotAllowed
+			}
+			if err != nil || resp.StatusCode != wantStatus || string(body) != probe.body || resp.ProtoMajor != wantProto || resp.Header.Get("Proxy-Authenticate") != "" {
 				t.Fatalf("h2=%v %s: status=%d proto=%s body=%q err=%v", h2, probe.method, resp.StatusCode, resp.Proto, body, err)
 			}
-			if probe.auth == "" || probe.auth == "Basic invalid" {
+			// Citrus reports no cover-site visit; a CONNECT without credentials is a scan.
+			if probe.auth == "Basic invalid" || probe.auth == "" && probe.method == http.MethodConnect {
 				select {
 				case ev := <-events:
 					if ev.Remote == "" || ev.Local == "" || ev.Protocol != "trusttunnel" || ev.Method != probe.method {

@@ -2,6 +2,7 @@ package trusttunnel
 
 import (
 	"net"
+	"strings"
 
 	"github.com/metacubex/mihomo/component/authevent"
 	"github.com/metacubex/mihomo/listener/inbounduser"
@@ -16,10 +17,12 @@ func (s *Service) verifyRequest(request *http.Request, authorization string) (en
 		reason := authevent.ReasonNoCredentials
 		if authorization != "" {
 			reason = authevent.ReasonWrongCredentials
-		} else if s.fallbackProxy != nil {
+		} else if s.fallbackProxy != nil && !strings.EqualFold(request.Method, http.MethodConnect) {
 			// With a fallback, a request without credentials is a visit to the
 			// cover site; reporting it would make every visitor look like a
-			// failed login to fail2ban-style consumers.
+			// failed login to fail2ban-style consumers. A CONNECT is not: no
+			// browser sends one to a site, so it is a proxy scan (Kinkan's
+			// scanner journal counts these).
 			return
 		}
 		authevent.Emit(authevent.Event{
