@@ -207,18 +207,28 @@ func TestSupportTerminalNodeFailures(t *testing.T) {
 		f.nodes.mu.Lock()
 		f.nodes.failure = c.err
 		f.nodes.mu.Unlock()
-		ws, resp, err := f.dial("node:2", f.grant.Token)
-		if err != nil {
-			t.Fatalf("%s: %v %v", name, err, resp)
-		}
 		var got struct{ Type, Code string }
-		ok := readUntil(t, ws, func(typ websocket.MessageType, data []byte) bool {
-			return typ == websocket.MessageText && json.Unmarshal(data, &got) == nil && got.Type == "error"
-		})
+		var ok bool
+		// Kinkan: the previous case's session leaves the hub when its handler returns, after
+		// the client has its error; until then a new one is refused as terminal_busy.
+		for try := 0; ; try++ {
+			ws, resp, err := f.dial("node:2", f.grant.Token)
+			if err != nil {
+				t.Fatalf("%s: %v %v", name, err, resp)
+			}
+			got = struct{ Type, Code string }{}
+			ok = readUntil(t, ws, func(typ websocket.MessageType, data []byte) bool {
+				return typ == websocket.MessageText && json.Unmarshal(data, &got) == nil && got.Type == "error"
+			})
+			_ = ws.CloseNow()
+			if got.Code != "terminal_busy" || c.code == "terminal_busy" || try == 50 {
+				break
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
 		if !ok || got.Code != c.code {
 			t.Errorf("%s: %+v, want %s", name, got, c.code)
 		}
-		_ = ws.CloseNow()
 	}
 	// None of them left a session in the journal or the registry: the next one opens.
 	f.nodes.mu.Lock()
