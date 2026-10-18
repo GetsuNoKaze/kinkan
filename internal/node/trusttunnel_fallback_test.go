@@ -144,6 +144,8 @@ func TestTrustTunnelFallbackOnNode(t *testing.T) {
 	}
 	reference := httptest.NewUnstartedServer(cover.Config.Handler)
 	reference.EnableHTTP2 = true
+	// The node's own site front (and Caddy) limit headers to 16 KiB, which HTTP/2 SETTINGS show.
+	reference.Config.MaxHeaderBytes = siteMaxHeaderBytes
 	reference.TLS = &tls.Config{Certificates: []tls.Certificate{certificate}, NextProtos: []string{"h2", "http/1.1"}}
 	reference.StartTLS()
 	t.Cleanup(reference.Close)
