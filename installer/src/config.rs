@@ -192,7 +192,10 @@ impl Config {
             }
             let value = self.get(s.key).unwrap_or_default();
             write_private(&path, value.as_bytes())?;
-            std::os::unix::fs::chown(&path, Some(s.owner), Some(s.owner)).with_context(|| format!("chown {}", path.display()))?;
+            // Kinkan: only root can hand it over; a test keeps it, as panelfs::hand_over does.
+            if rustix::process::geteuid().is_root() {
+                std::os::unix::fs::chown(&path, Some(s.owner), Some(s.owner)).with_context(|| format!("chown {}", path.display()))?;
+            }
             fs::set_permissions(&path, fs::Permissions::from_mode(0o400))?;
         }
         write_private(&self.root.join(FILE), json.as_bytes())

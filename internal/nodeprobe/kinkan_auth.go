@@ -18,7 +18,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
 )
 
 type KinkanConfig struct {
