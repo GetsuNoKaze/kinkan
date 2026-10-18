@@ -4,13 +4,21 @@ Fork release notes. Upstream history remains in CHANGELOG.md.
 
 ## Unreleased — beta preparation
 ### en
-- Merge Mikan 0.5.1.0 into the beta preparation branch. Release validation is tracked in BETA-READINESS.md; this is not a published beta or a migration to Citrus.
-- Backport Go 1.27.2's HTTP/2 HPACK encoder ownership fix (GO-2026-6617) to the bundled metacubex/http fork. Peer table-size settings are applied after the active frame writer finishes; a regression test covers the deferred update and HPACK size sequence.
+- Merge Mikan 0.5.1.1-rc.8: nodes run on Mikan's core, Citrus (`getmikan/Citrus`), and the HTTP server comes from Mikan's `getmikan/http`. Release validation is tracked in BETA-READINESS.md; this is not a published beta.
+- The TrustTunnel fallback and the auth events are Citrus's own now, so the fork no longer patches them. The JA4 fingerprint in REALITY auth events stays a fork patch.
+- Behind a fallback, Citrus does not report requests without credentials, since they are cover-site visits. The fork reports a CONNECT without credentials, which no browser sends to a site, so the scanner journal still counts proxy scans.
+- The TrustTunnel front announces the same 16 KiB header limit as the node's site front and Caddy (HTTP/2 SETTINGS `MAX_HEADER_LIST_SIZE`); before, it announced Go's 1 MB.
+- The wrong-key probe no longer covers VMess: the core has none, and Mikan turns VMess inbounds into VLESS.
+- Backport Go 1.27.2's HTTP/2 HPACK encoder ownership fix (GO-2026-6617) to the bundled HTTP server (now on top of `getmikan/http`). Peer table-size settings are applied after the active frame writer finishes; a regression test covers the deferred update and HPACK size sequence.
 - Installer: update rustls from 0.23.45 to 0.23.46, following upstream's security update.
 - Require Go 1.27.2 or newer for manual builds as well as the release image, to include the standard library's security fixes.
 ### ru
-- Mikan 0.5.1.0 слит в ветку подготовки беты. Проверки выпуска отмечаются в BETA-READINESS.md; бета ещё не опубликована, переход на Citrus выполняется отдельно.
-- В копию metacubex/http перенесено исправление гонки HPACK из Go 1.27.2 (GO-2026-6617). Настройки размера таблицы применяются после завершения текущей записи кадра; регрессионный тест проверяет отложенное обновление и последовательность размеров HPACK.
+- Слит Mikan 0.5.1.1-rc.8: ноды работают на ядре Mikan — Citrus (`getmikan/Citrus`), HTTP-сервер взят из `getmikan/http`. Проверки выпуска отмечаются в BETA-READINESS.md; бета ещё не опубликована.
+- Fallback TrustTunnel и события авторизации теперь есть в самом Citrus, форк их больше не патчит. Отпечаток JA4 в событиях REALITY остаётся патчем форка.
+- За fallback Citrus не сообщает о запросах без учётных данных: это посетители сайта-прикрытия. Форк сообщает о CONNECT без учётных данных (браузер не шлёт его на сайт), поэтому журнал сканеров по-прежнему видит прокси-сканы.
+- Фронт TrustTunnel объявляет тот же лимит заголовков 16 КиБ, что сайт ноды и Caddy (HTTP/2 SETTINGS `MAX_HEADER_LIST_SIZE`); раньше объявлял 1 МБ, как Go по умолчанию.
+- Проба неверного ключа больше не проверяет VMess: в ядре его нет, Mikan переводит такие inbound в VLESS.
+- В копию HTTP-сервера (теперь поверх `getmikan/http`) перенесено исправление гонки HPACK из Go 1.27.2 (GO-2026-6617). Настройки размера таблицы применяются после завершения текущей записи кадра; регрессионный тест проверяет отложенное обновление и последовательность размеров HPACK.
 - Установщик: rustls обновлён с 0.23.45 до 0.23.46 по исправлению безопасности upstream.
 - Для ручной сборки тоже требуется Go 1.27.2 или новее, с исправлениями безопасности стандартной библиотеки.
 
