@@ -95,12 +95,18 @@ func TestHysteria2ScannerAuthOnNode(t *testing.T) {
 					if resp.StatusCode != status {
 						t.Fatalf("status=%d, want %d", resp.StatusCode, status)
 					}
+					// Citrus hands events to the handler from its own goroutine, after the reply:
+					// wait for one, and give a stray one time to show up when none is due.
+					wait := 2 * time.Second
+					if reason == "" {
+						wait = 200 * time.Millisecond
+					}
 					select {
 					case ev := <-events:
 						if reason == "" || ev.Reason != reason || ev.Protocol != "hysteria2" || ev.Remote == "" {
 							t.Fatalf("unexpected event: %+v, expected reason %q", ev, reason)
 						}
-					default:
+					case <-time.After(wait):
 						if reason != "" {
 							t.Fatalf("missing event: %s", reason)
 						}
