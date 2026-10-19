@@ -234,12 +234,24 @@ func TestSupportTerminalNodeFailures(t *testing.T) {
 	f.nodes.mu.Lock()
 	f.nodes.failure = nil
 	f.nodes.mu.Unlock()
-	ws, resp, err := f.dial("node:2", f.grant.Token)
-	if err != nil {
-		t.Fatalf("%v %v", err, resp)
-	}
-	if !readUntil(t, ws, isControl("ready")) {
-		t.Fatal("not ready after the failures")
+	// Kinkan: the last case's session may still be leaving the hub, as above.
+	for try := 0; ; try++ {
+		ws, resp, err := f.dial("node:2", f.grant.Token)
+		if err != nil {
+			t.Fatalf("%v %v", err, resp)
+		}
+		var got struct{ Type, Code string }
+		answered := readUntil(t, ws, func(typ websocket.MessageType, data []byte) bool {
+			return typ == websocket.MessageText && json.Unmarshal(data, &got) == nil && (got.Type == "ready" || got.Type == "error")
+		})
+		_ = ws.CloseNow()
+		if answered && got.Type == "ready" {
+			return
+		}
+		if got.Code != "terminal_busy" || try == 50 {
+			t.Fatalf("not ready after the failures: %+v", got)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 
