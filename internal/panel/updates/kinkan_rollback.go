@@ -53,13 +53,13 @@ func (c *Checker) kinkanBusy() error {
 // Busy is a preflight check; requests check again while holding the queue lock.
 func (c *Checker) Busy() bool { return c.kinkanBusy() != nil }
 
-func (c *Checker) kinkanRequestUpdate() error {
+func (c *Checker) kinkanRequestUpdate(req map[string]string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if err := c.kinkanBusy(); err != nil {
 		return err
 	}
-	data, _ := json.Marshal(map[string]string{"at": c.now().UTC().Format(time.RFC3339)})
+	data, _ := json.Marshal(req)
 	return c.write("request", data)
 }
 

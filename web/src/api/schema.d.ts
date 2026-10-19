@@ -1207,6 +1207,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/nodes/{id}/regions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Регион ноды в сервисах
+         * @description Нода сама открывает Google, YouTube, Netflix, ChatGPT и другие сайты по IPv4 и IPv6 и читает, какую страну они ей дают или пускают ли её. Около 10 секунд; на ноде одна проверка за раз (409 regions_busy).
+         */
+        post: operations["check-node-regions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/nodes/{id}/restart": {
         parameters: {
             query?: never;
@@ -3553,7 +3573,7 @@ export interface components {
             /** @description Подробности как есть: ошибка соединения или ответ центра сертификации */
             detail?: string;
             fix?: components["schemas"]["CertFix"];
-            /** @description Что проверено: served, compat, dns, port80, acme, node_cert, node_port */
+            /** @description Что проверено: served, compat, dns, port80, acme, sub_served, sub_dns, sub_acme, node_cert, node_port */
             id: string;
             /** @description Имя ноды, если проверка про ноду */
             node?: string;
@@ -3567,7 +3587,7 @@ export interface components {
         };
         CertFix: {
             /** @enum {string} */
-            action: "renew" | "renew_node" | "use_zerossl" | "update_node" | "copy";
+            action: "renew" | "renew_node" | "renew_sub" | "use_zerossl" | "update_node" | "copy";
             /** @description Команда для сервера (action copy) */
             command?: string;
             /** Format: int64 */
@@ -5824,6 +5844,15 @@ export interface components {
              */
             moved: number;
         };
+        RegionAnswer: {
+            country?: string;
+            /**
+             * @description unreachable — сайт не ответил, unknown — ответ не разобрать, no_ip — у ноды нет адреса этого семейства
+             * @enum {string}
+             */
+            error?: "unreachable" | "unknown" | "no_ip";
+            open?: boolean;
+        };
         ReissueRules: {
             /**
              * Format: int64
@@ -6057,6 +6086,22 @@ export interface components {
             /** Format: int64 */
             interval?: number;
             no_countries?: boolean;
+        };
+        ServiceRegion: {
+            /** @description Ответ — пускает ли сайт адрес (open), а не страна */
+            access: boolean;
+            /** @description google, google_search, youtube, youtube_premium, youtube_music, netflix, chatgpt, cloudflare, prime_video, deezer, apple, steam, playstation, tiktok, ookla, jetbrains, bing, reddit */
+            service: string;
+            v4: components["schemas"]["RegionAnswer"];
+            v6: components["schemas"]["RegionAnswer"];
+        };
+        ServiceRegions: {
+            /** Format: date-time */
+            at: string;
+            /** @description Адрес ноды, как его видит Cloudflare */
+            ipv4?: string;
+            ipv6?: string;
+            services: components["schemas"]["ServiceRegion"][];
         };
         SessionView: {
             /** Format: date-time */
@@ -7200,6 +7245,20 @@ export interface components {
             verdict: "site" | "different" | "exposed" | "inconclusive";
         };
         XHTTPTuning: {
+            /** @description Размер куска отправки у приложений, байт: число или диапазон */
+            client_uplink_chunk_size?: string;
+            /** @description Имя заголовка или cookie с данными у приложений; должно совпасть с серверным */
+            client_uplink_data_key?: string;
+            /**
+             * @description Где приложения везут данные отправки вместо серверного; сервер должен принимать их там же (его auto принимает всё)
+             * @enum {string}
+             */
+            client_uplink_data_placement?: "" | "body" | "header" | "cookie";
+            /**
+             * @description Метод отправки у приложений вместо серверного; GET — только packet-up
+             * @enum {string}
+             */
+            client_uplink_http_method?: "" | "POST" | "PUT" | "PATCH" | "GET";
             /**
              * @description Режим XHTTP; пусто — по умолчанию
              * @enum {string}
@@ -7243,7 +7302,7 @@ export interface components {
              */
             uplink_data_placement?: "" | "body" | "header" | "cookie" | "auto";
             /**
-             * @description Метод отправки; GET — для CDN, которые не пропускают POST: только packet-up, данные в заголовке или cookie
+             * @description Метод отправки; GET — для CDN, которые не пропускают POST: только packet-up. Нода принимает отправку любым методом
              * @enum {string}
              */
             uplink_http_method?: "" | "POST" | "PUT" | "PATCH" | "GET";
@@ -10044,6 +10103,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ClearedOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "check-node-regions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceRegions"];
                 };
             };
             /** @description Error */

@@ -286,9 +286,15 @@ func (c *Checker) SetPolicy(p Policy) error {
 	return c.write("policy.json", data)
 }
 
-// Request asks the host to update now.
+// Request asks the host to update now, to the release the page shows when it shows one: a
+// host whose copy of the release index is older (GitHub's cache, for minutes after a
+// release) reads it again instead of calling its own version the latest.
 func (c *Checker) Request() error {
-	return c.kinkanRequestUpdate() // Kinkan: serialize update and rollback requests.
+	req := map[string]string{"at": c.now().UTC().Format(time.RFC3339)}
+	if s := c.State(); s.Available() {
+		req["version"] = s.Latest.Version
+	}
+	return c.kinkanRequestUpdate(req) // Kinkan: serialize update and rollback requests.
 }
 
 // Requested returns when the Update button was pressed, while the host has not taken
