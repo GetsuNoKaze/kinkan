@@ -2,9 +2,13 @@
 
 Fork release notes. Upstream history remains in CHANGELOG.md.
 
-## Unreleased — beta preparation
+## 0.5.1.1-tt.1-rc.1
+Beta: the beta channel only. Servers on the stable channel stay on 0.5.0.5-tt.13 until Mikan 0.5.1.1 is released and Kinkan follows it as 0.5.1.1-tt.1.
 ### en
-- Merge Mikan 0.5.1.1-rc.8: nodes run on Mikan's core, Citrus (`getmikan/Citrus`), and the HTTP server comes from Mikan's `getmikan/http`. Release validation is tracked in BETA-READINESS.md; this is not a published beta.
+- Merge Mikan 0.5.1.1-rc.10: nodes run on Mikan's core, Citrus (`getmikan/Citrus`), and the HTTP server comes from Mikan's `getmikan/http`. What is checked and what is not is in BETA-READINESS.md.
+- From Mikan rc.9 and rc.10: the node's region, asked over IPv4 and IPv6; the apps' own XHTTP upload; "Check the certificate" checks the subscription domain from outside; the node API waits for the saved state; the Update button names the release it shows.
+- Installer: when both `config.json` and `.env` are there (an update that stopped half way), `config.json` is read. Before, `.env` won, and a retried move from SQLite to PostgreSQL made a new database password.
+- The node's site comes back after a node restart, with the saved state.
 - The TrustTunnel fallback and the auth events are Citrus's own now, so the fork no longer patches them. The JA4 fingerprint in REALITY auth events stays a fork patch.
 - Behind a fallback, Citrus does not report requests without credentials, since they are cover-site visits. The fork reports a CONNECT without credentials, which no browser sends to a site, so the scanner journal still counts proxy scans.
 - The TrustTunnel front announces the same 16 KiB header limit as the node's site front and Caddy (HTTP/2 SETTINGS `MAX_HEADER_LIST_SIZE`); before, it announced Go's 1 MB.
@@ -13,7 +17,10 @@ Fork release notes. Upstream history remains in CHANGELOG.md.
 - Installer: update rustls from 0.23.45 to 0.23.46, following upstream's security update.
 - Require Go 1.27.2 or newer for manual builds as well as the release image, to include the standard library's security fixes.
 ### ru
-- Слит Mikan 0.5.1.1-rc.8: ноды работают на ядре Mikan — Citrus (`getmikan/Citrus`), HTTP-сервер взят из `getmikan/http`. Проверки выпуска отмечаются в BETA-READINESS.md; бета ещё не опубликована.
+- Слит Mikan 0.5.1.1-rc.10: ноды работают на ядре Mikan — Citrus (`getmikan/Citrus`), HTTP-сервер взят из `getmikan/http`. Что проверено, а что нет, — в BETA-READINESS.md.
+- Из Mikan rc.9 и rc.10: регион ноды по IPv4 и IPv6; собственная отправка данных XHTTP у приложений; «Проверить сертификат» проверяет домен подписки снаружи; API ноды ждёт восстановления сохранённого состояния; кнопка обновления называет релиз, который показывает.
+- Установщик: если есть и `config.json`, и `.env` (обновление остановилось на полпути), читается `config.json`. Раньше побеждал `.env`, и повтор переезда SQLite → PostgreSQL создавал новый пароль базы.
+- Сайт ноды возвращается после перезапуска ноды вместе с сохранённым состоянием.
 - Fallback TrustTunnel и события авторизации теперь есть в самом Citrus, форк их больше не патчит. Отпечаток JA4 в событиях REALITY остаётся патчем форка.
 - За fallback Citrus не сообщает о запросах без учётных данных: это посетители сайта-прикрытия. Форк сообщает о CONNECT без учётных данных (браузер не шлёт его на сайт), поэтому журнал сканеров по-прежнему видит прокси-сканы.
 - Фронт TrustTunnel объявляет тот же лимит заголовков 16 КиБ, что сайт ноды и Caddy (HTTP/2 SETTINGS `MAX_HEADER_LIST_SIZE`); раньше объявлял 1 МБ, как Go по умолчанию.
