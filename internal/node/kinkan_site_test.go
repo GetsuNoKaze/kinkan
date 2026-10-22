@@ -276,3 +276,22 @@ func TestSiteHeaderLimitLikeCaddy(t *testing.T) {
 	}
 	t.Fatal("no MAX_HEADER_LIST_SIZE in SETTINGS")
 }
+
+// The node's check of a target dials its own site on loopback (Kinkan): before, the check
+// was allowed but could not connect, so autotune took a working site for a dead one and
+// moved REALITY to a neighbour.
+func TestTargetOptionsDialTheSite(t *testing.T) {
+	e := testEngine(t)
+	if o := e.TargetOptions(); o.SitePort != 0 {
+		t.Fatalf("no site: SitePort %d", o.SitePort)
+	}
+	e.mu.Lock()
+	e.applied.Site = &nodeapi.SiteState{HTTPSPort: 17443}
+	e.mu.Unlock()
+	if o := e.TargetOptions(); o.SitePort != 17443 {
+		t.Fatalf("SitePort %d, want 17443", o.SitePort)
+	}
+	if !e.TargetAllowed("127.0.0.1:17443") {
+		t.Fatal("the site is not an allowed target")
+	}
+}

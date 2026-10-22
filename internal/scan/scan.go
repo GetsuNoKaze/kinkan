@@ -49,6 +49,7 @@ const (
 type Options struct {
 	// LoopbackPort allows 127.0.0.1:<port> alone: the panel's own HTTPS (self-steal).
 	LoopbackPort int
+	SitePort     int // Kinkan: the node's own website on loopback (kinkan.go)
 	// Any allows every address: tests and test setups.
 	Any bool
 	// Wide lets Neighbors go past its own /24: to the other /24s of the /16, the nearest
@@ -71,7 +72,7 @@ func (o Options) allowed(ip netip.Addr, port string) bool {
 	if o.Any || netaddr.IsPublic(ip) {
 		return true
 	}
-	return o.LoopbackPort > 0 && ip == netip.MustParseAddr("127.0.0.1") && port == strconv.Itoa(o.LoopbackPort)
+	return o.LoopbackPort > 0 && ip == netip.MustParseAddr("127.0.0.1") && port == strconv.Itoa(o.LoopbackPort) || o.kinkanSite(ip, port)
 }
 
 // Check tests dest as a REALITY target for clients sending sni ("" = the host of dest). It

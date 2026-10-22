@@ -77,6 +77,8 @@ type Deps struct {
 	// Neighbors is the panel's own scan; nil is scan.Neighbors. Tests put a fake here: the
 	// real one opens ~250 connections to public addresses.
 	Neighbors func(ctx context.Context, ip string, limit int, o scan.Options) ([]scan.Result, int, error)
+
+	kinkanSite // Kinkan: the node's own website as a target (kinkan.go)
 }
 
 // PanelPort is the panel's own port: the one loopback address a check may use.
@@ -100,6 +102,9 @@ func (d Deps) Check(ctx context.Context, dest, sni string) (scan.Result, error) 
 		return scan.Result{}, ErrBadDest
 	}
 	selfSteal := (host == "127.0.0.1" || host == "localhost") && port == strconv.Itoa(PanelPort(ctx, d.Settings))
+	if d.ownSite(host, port) { // Kinkan
+		return d.checkSite(ctx, port, sni), nil
+	}
 	if !selfSteal && !netaddr.PublicHost(host) {
 		return scan.Result{}, ErrPrivateDest
 	}

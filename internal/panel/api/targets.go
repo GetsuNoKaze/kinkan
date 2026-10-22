@@ -18,6 +18,7 @@ type checkTargetInput struct {
 		Dest string `json:"dest" maxLength:"255" doc:"host:port"`
 		SNI  string `json:"sni,omitempty" maxLength:"253" doc:"Имя для клиентов; по умолчанию — хост из dest"`
 	}
+	NodeID int64 `query:"node_id" minimum:"0" doc:"Kinkan: нода, чей собственный сайт (127.0.0.1:17443) проверить её же силами; 0 — без ноды"`
 }
 
 type checkTargetOutput struct{ Body scan.Result }
@@ -52,7 +53,7 @@ func (h *handlers) targetDeps(nodeID int64) targets.Deps {
 }
 
 func (h *handlers) checkTarget(ctx context.Context, in *checkTargetInput) (*checkTargetOutput, error) {
-	r, err := h.targetDeps(0).Check(ctx, in.Body.Dest, in.Body.SNI)
+	r, err := h.kinkanSiteDeps(ctx, in.NodeID, h.targetDeps(0)).Check(ctx, in.Body.Dest, in.Body.SNI) // Kinkan: the node's site
 	switch {
 	case errors.Is(err, targets.ErrBadDest):
 		return nil, huma.Error422UnprocessableEntity("bad_dest", &huma.ErrorDetail{Location: "body.dest", Message: "dest_format"})

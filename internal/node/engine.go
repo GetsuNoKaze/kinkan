@@ -504,7 +504,7 @@ const quotaSaveEvery = time.Minute
 func (e *Engine) TargetOptions() scan.Options {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return scan.Options{Any: e.allowPrivate, LoopbackPort: e.applied.SelfStealPort}
+	return scan.Options{Any: e.allowPrivate, LoopbackPort: e.applied.SelfStealPort, SitePort: sitePort(e.applied)} // Kinkan: SitePort
 }
 
 func (e *Engine) SetPolicies(req nodeapi.PoliciesRequest) {

@@ -9087,7 +9087,10 @@ export interface operations {
     };
     "check-target": {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Kinkan: нода, чей собственный сайт (127.0.0.1:17443) проверить её же силами; 0 — без ноды */
+                node_id?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;

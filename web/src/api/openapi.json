@@ -14265,6 +14265,20 @@
     "/api/v1/inbounds/check-target": {
       "post": {
         "operationId": "check-target",
+        "parameters": [
+          {
+            "description": "Kinkan: нода, чей собственный сайт (127.0.0.1:17443) проверить её же силами; 0 — без ноды",
+            "explode": false,
+            "in": "query",
+            "name": "node_id",
+            "schema": {
+              "description": "Kinkan: нода, чей собственный сайт (127.0.0.1:17443) проверить её же силами; 0 — без ноды",
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
