@@ -30,11 +30,9 @@ func forkCheck(args []string) error {
 		if err != nil {
 			return err
 		}
-		pub, err := release.Key(release.PublicKey)
-		if err != nil {
-			return err
-		}
-		if !pub.Equal(key.Public().(ed25519.PublicKey)) {
+		// The fork trusts its own key alone: the signing key has to be that one.
+		trusted := release.TrustedKeys()
+		if len(trusted) != 1 || !trusted[0].Equal(key.Public().(ed25519.PublicKey)) {
 			return errors.New("fork-check: signing key differs from the public key trusted by this build")
 		}
 	}

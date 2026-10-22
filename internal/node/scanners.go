@@ -2,10 +2,7 @@ package node
 
 import (
 	"context"
-	"github.com/metacubex/mihomo/component/authevent"
-	"github.com/metacubex/mihomo/component/mmdb"
-	C "github.com/metacubex/mihomo/constant"
-	"github.com/oschwald/maxminddb-golang"
+	"mikan/internal/netaddr"
 	"mikan/internal/nodeapi"
 	"mikan/internal/proto"
 	"mikan/internal/scannerlog"
@@ -15,6 +12,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/metacubex/mihomo/component/authevent"
+	"github.com/metacubex/mihomo/component/mmdb"
+	C "github.com/metacubex/mihomo/constant"
+	"github.com/oschwald/maxminddb-golang"
 )
 
 func (e *Engine) startScannerJournal() {
@@ -129,7 +131,7 @@ func (e *Engine) Scanners(ctx context.Context) (nodeapi.ScannerSnapshot, error) 
 func scannerMetadata(ip string) scannerlog.Metadata {
 	m := scannerlog.Metadata{Scanner: "unknown"}
 	a, err := netip.ParseAddr(ip)
-	if err != nil || !proto.PublicAddr(a) {
+	if err != nil || !netaddr.IsPublic(a) {
 		return m
 	}
 	// Read existing assets directly: no downloads or fatal-on-missing singletons.

@@ -11,11 +11,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/danielgtaylor/huma/v2"
+	"mikan/internal/netaddr"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
 	"mikan/internal/proto"
 	"mikan/internal/ttprobe"
+
+	"github.com/danielgtaylor/huma/v2"
 )
 
 type ttProbeInput struct {
@@ -112,7 +114,7 @@ func (h *handlers) probeTrustTunnel(ctx context.Context, in *ttProbeInput) (*ttP
 // Resolve once, reject every non-public answer, then pin the IP for ALL probes.
 // Neither the target nor the reference accepts arbitrary hosts from the request.
 func publicProbeDialer(ctx context.Context, host string, resolve func(context.Context, string) ([]netip.Addr, error)) (func(context.Context, string, string) (net.Conn, error), netip.Addr, error) {
-	if !proto.PublicHost(host) {
+	if !netaddr.PublicHost(host) {
 		return nil, netip.Addr{}, errors.New("not a public host")
 	}
 	if resolve == nil {
@@ -125,7 +127,7 @@ func publicProbeDialer(ctx context.Context, host string, resolve func(context.Co
 		return nil, netip.Addr{}, errors.New("no public address")
 	}
 	for _, ip := range addrs {
-		if !ip.IsValid() || !proto.PublicAddr(ip) {
+		if !ip.IsValid() || !netaddr.IsPublic(ip) {
 			return nil, netip.Addr{}, errors.New("non-public DNS answer")
 		}
 	}

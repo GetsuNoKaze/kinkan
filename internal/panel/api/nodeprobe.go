@@ -8,12 +8,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/danielgtaylor/huma/v2"
+	"mikan/internal/netaddr"
 	"mikan/internal/nodeprobe"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
 	"mikan/internal/proto"
 	"mikan/internal/ttprobe"
+
+	"github.com/danielgtaylor/huma/v2"
 )
 
 type nodeProbeInput struct {
@@ -58,7 +60,7 @@ func (h *handlers) probeNode(ctx context.Context, in *nodeProbeInput) (*nodeProb
 	ctx, cancel := context.WithTimeout(ctx, 240*time.Second)
 	defer cancel()
 	referenceHost := strings.TrimSpace(in.Body.ReferenceHost)
-	if referenceHost != "" && (!proto.PublicHost(referenceHost) || strings.ContainsAny(referenceHost, ":/?#@[]%\\ \t\r\n")) {
+	if referenceHost != "" && (!netaddr.PublicHost(referenceHost) || strings.ContainsAny(referenceHost, ":/?#@[]%\\ \t\r\n")) {
 		return nil, huma.Error422UnprocessableEntity("probe_public_host")
 	}
 	node, err := h.nodeOf(ctx, in.ID)
