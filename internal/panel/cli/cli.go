@@ -30,7 +30,7 @@ import (
 	"mikan/internal/panel/store/db"
 )
 
-const usage = `mikan — VPN panel on the mihomo core
+const usage = `mikan — VPN panel on the Citrus core
 
 Commands:
   probe [flags] HTTPS_URL        check unauthenticated inbounds (--protocol or --inbounds)

@@ -31,3 +31,4 @@ Thumbs.db
 
 # The patched mihomo is kept whole, its test certificates included (scripts/tt/mihomo.sh --check).
 !third_party/mihomo/**
+.github/assets/avatar-concepts/

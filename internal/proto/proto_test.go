@@ -41,21 +41,23 @@ func code(err error) string {
 	return ""
 }
 
-func TestPresetsConvertAndRender(t *testing.T) {
+func TestPresetsRender(t *testing.T) {
 	priv, pub := realityKey(t)
-	reality := `{"reality":{"private_key":"` + priv + `","short_ids":["a1b2c3d4"],"dest":"www.microsoft.com:443","server_names":["www.microsoft.com"]}`
+	reality := `reality-config:
+  dest: www.microsoft.com:443
+  private-key: ` + priv + `
+  short-id: [a1b2c3d4]
+  server-names: [www.microsoft.com]
+`
 	cases := map[string]string{
-		"vless_reality_vision": reality + `}`,
-		"vless_reality_xhttp":  reality + `,"path":"/x7k2","mode":"stream-one"}`,
-		"hysteria2":            `{"obfs_password":"obfs123"}`,
-		"tuic_v5":              `{"congestion_control":"bbr"}`,
+		"vless_reality_vision": "type: vless\n" + reality + "mikan:\n  flow: xtls-rprx-vision\n",
+		"vless_reality_xhttp":  "type: vless\n" + reality + "xhttp-config:\n  path: /x7k2\n  mode: stream-one\n",
+		"hysteria2":            "type: hysteria2\nalpn: [h3]\nobfs: salamander\nobfs-password: obfs123\n",
+		"tuic_v5":              "type: tuic\nalpn: [h3]\ncongestion-controller: bbr\n",
 	}
 	cert := Cert{CertPath: "/data/tls/cert.pem", KeyPath: "/data/tls/key.pem"}
-	for preset, settings := range cases {
-		tpl, err := FromPreset(preset, []byte(settings))
-		if err != nil {
-			t.Fatalf("%s: %v", preset, err)
-		}
+	for preset, src := range cases {
+		tpl := mustParse(t, src)
 		// Round trip through YAML: what the panel stores and the editor shows.
 		tpl = mustParse(t, Marshal(tpl))
 		if err := Validate(tpl, Options{}); err != nil {
@@ -87,7 +89,7 @@ func TestPresetsConvertAndRender(t *testing.T) {
 				t.Fatalf("vision client: %s %v", c.URI, c.Mihomo)
 			}
 		case "vless_reality_xhttp":
-			if q.Get("type") != "xhttp" || q.Get("path") != "/x7k2" || q.Get("mode") != "stream-one" || q.Get("flow") != "" || c.Mihomo["udp"] != false {
+			if q.Get("type") != "xhttp" || q.Get("path") != "/x7k2" || q.Get("mode") != "stream-one" || q.Get("flow") != "" || c.Mihomo["udp"] != true {
 				t.Fatalf("xhttp client: %s %v", c.URI, c.Mihomo)
 			}
 			if opts := c.Mihomo["xhttp-opts"].(map[string]any); opts["reuse-settings"] == nil {
@@ -124,10 +126,10 @@ func TestRealityReplayWindow(t *testing.T) {
 		}
 		return fmt.Sprintf("%.0f", toFloat(l["reality-config"].(map[string]any)["max-time-difference"]))
 	}
-	if got := window(src); got != "7200000000" {
-		t.Fatalf("default window: %s (mihomo reads microseconds: 2 h = 7200000000)", got)
+	if got := window(src); got != "7200000" {
+		t.Fatalf("default window: %s (the Citrus core reads milliseconds: 2 h = 7200000)", got)
 	}
-	if got := window(src + "  max-time-difference: 60000000\n"); got != "60000000" {
+	if got := window(src + "  max-time-difference: 60000\n"); got != "60000" {
 		t.Fatalf("the template's own window: %s", got)
 	}
 	// The template itself stays as the admin wrote it.
@@ -350,5 +352,22 @@ func TestParseErrorsAreCodes(t *testing.T) {
 	}
 	if _, err := Parse("# only a comment\n"); code(err) != "config_empty" {
 		t.Fatalf("got %v", err)
+	}
+}
+
+// A REALITY server that requires X25519MLKEM768 gets clients that offer it; the others
+// leave it to the app.
+func TestRealityRequiredPostQuantum(t *testing.T) {
+	priv, _ := realityKey(t)
+	src := "type: vless\nreality-config:\n  dest: www.microsoft.com:443\n  private-key: " + priv + "\n  short-id: [a1b2]\n  server-names: [www.microsoft.com]\n"
+	in := ClientInput{Name: "X", Host: "vpn.example.com", Port: 443, Slot: slots[0]}
+	for extra, want := range map[string]any{"": nil, "  require-x25519mlkem768: true\n": true} {
+		c, err := ClientConfig(mustParse(t, src+extra), in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := c.Mihomo["reality-opts"].(map[string]any)["support-x25519mlkem768"]; got != want {
+			t.Fatalf("%q: support-x25519mlkem768 %v, want %v", extra, got, want)
+		}
 	}
 }

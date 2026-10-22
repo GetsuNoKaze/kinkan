@@ -24,13 +24,19 @@ The **Protocols** section holds the protocols clients use to reach your nodes. A
 | TrustTunnel | 4443/tcp | Clash apps only; answers a request without a key with 407, so a scanner can tell it is a proxy |
 | ShadowQUIC | 4443/udp | Clash apps only |
 | Mieru | 5443/tcp | Clash apps only |
-| Shadowsocks-2022 | 6443/tcp | one key for everyone |
+| Shadowsocks-2022 | 6443/tcp | a key per client (AES methods), UDP inside TCP |
 | Sudoku | 7443/tcp | one key for everyone, Clash apps only |
 | Snell | 9443/tcp | one key for everyone, Clash apps only |
 | Own config | | a mihomo listener template in YAML |
 
 :::caution[One-key protocols]
-In mihomo, Shadowsocks-2022, Sudoku and Snell work with a single key for everyone. The node cannot tell users apart, so these protocols have no traffic accounting, limits, device binding or automatic fixes. A disabled or expired user keeps access until the key changes, and the only way to change it is to delete the connection and add it again.
+Sudoku, Snell and Shadowsocks-2022 with the ChaCha20 method work with a single key for everyone. The node cannot tell users apart, so these protocols have no traffic accounting, limits, device binding or automatic fixes. A disabled or expired user keeps access until the key changes, and the only way to change it is to delete the connection and add it again.
+
+Shadowsocks-2022 with the AES methods (`2022-blake3-aes-128-gcm` by default) gives every client a key of its own, and all of this works on it as on VLESS.
+:::
+
+:::note[TLS in TLS]
+In Trojan and in VLESS without Vision (REALITY XHTTP, gRPC and PQ, TLS XHTTP, TLS WebSocket and both CDN ones) the TLS of the sites a client opens goes inside the protocol's own TLS. DPI can tell a proxy by the sizes of the first packets. Vision and AnyTLS hide this pattern: keep a protocol with one of them next to it. The list of presets marks such protocols "TLS in TLS".
 :::
 
 ## Who gets what
@@ -64,13 +70,13 @@ The **Configure** button opens the tabs "Main", "Masking" (XHTTP only) and "Conf
 - **Obfuscation** for Hysteria2: Salamander or Gecko. Gecko cuts the QUIC handshake into pieces of random size with padding, against DPI that recognizes QUIC by packet sizes. Only Clash apps on mihomo 1.19.26+ receive it, so keep a plain Hysteria2 next to it.
 - **TLS fingerprint**: as in the settings (Chrome by default), Chrome, Firefox, Safari, iOS, Android, Edge, 360, QQ, a random browser, or "Own…" with any uTLS profile name, for example `chrome120`. The shared default is set in **Settings → Subscription**. Hysteria2 and TUIC have no fingerprint.
 - **Way out to the internet**: direct, [WARP](/mikan/en/nodes/warp/) or [via a node](/mikan/en/nodes/cascades/).
-- **Traffic pool**: if you have pools, a protocol can count against a separate limit, see [Pools and packages](/mikan/en/billing/pools/).
+- **Server group**: the group decides which traffic the protocol spends: the main one, a limit of its own, none, or it is not included in the plan. A protocol in no group spends the main traffic. See [Server groups and traffic packages](/mikan/en/billing/pools/).
 - **Behind a proxy (nginx, HAProxy)**: see [Behind a proxy](/mikan/en/protocols/behind-proxy/).
 - **Automatic fixes**: switches for moving the port and changing the site, see [Automatic fixes](/mikan/en/protocols/autotune/).
 
 ## Own config
 
-The "Own config" preset opens a YAML editor with a mihomo listener of type vless, vmess, trojan, hysteria2, tuic or anytls. mikan fills in the name, port, address, users and certificate itself. The "Check" button validates the config before saving.
+The "Own config" preset opens a YAML editor with a mihomo listener of type vless, trojan, hysteria2, tuic or anytls. mikan fills in the name, port, address, users and certificate itself. The "Check" button validates the config before saving.
 
 ## From the command line
 

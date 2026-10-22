@@ -21,6 +21,7 @@ import (
 
 	"mikan/internal/panel/billing"
 	"mikan/internal/panel/domain"
+	"mikan/internal/panel/model"
 	"mikan/internal/panel/panelimport"
 	"mikan/internal/panel/promo"
 	"mikan/internal/panel/server"
@@ -28,6 +29,7 @@ import (
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/subpage"
 	"mikan/internal/proto"
+	"mikan/internal/textutil"
 )
 
 // Config is resolved per request, so settings changes apply without a restart.
@@ -332,11 +334,12 @@ func (h *Handler) serveProfile(w http.ResponseWriter, r *http.Request, u db.User
 	case "clash":
 		prof.Rules = RulesFor(cfg.Rules, app)
 		prof.Routes, prof.App, prof.Lang = cfg.Routes, app, cfg.Lang
-		body, err := h.clashProfile(prof, cfg)
+		body, ps, err := h.clashProfile(prof, cfg)
 		if err != nil {
 			h.profileFailed(w, u, cfg, format, err)
 			return
 		}
+		h.mikanGroups(w, r, u, prof, ps)
 		w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
 		// Clash apps name the profile after the file: the same name as Profile-Title.
 		w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(fileName(profileTitle(cfg, vars)))+".yaml")
@@ -352,30 +355,43 @@ func (h *Handler) serveProfile(w http.ResponseWriter, r *http.Request, u db.User
 		w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(fileName(profileTitle(cfg, vars)))+".json")
 		_, _ = w.Write(body)
 	default:
-		links, err := URIs(prof)
+		links, ps, err := uris(prof)
 		if err != nil {
 			h.profileFailed(w, u, cfg, format, err)
 			return
 		}
+		h.mikanGroups(w, r, u, prof, ps)
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte(base64.StdEncoding.EncodeToString([]byte(links))))
 	}
 }
 
 // clashProfile is the Clash profile of prof: the admin's own (cfg.Template) when the app can
-// take it, the built-in one otherwise.
-func (h *Handler) clashProfile(prof Profile, cfg Config) ([]byte, error) {
-	if cfg.Template == "" || !prof.routable() {
-		return Mihomo(prof, cfg.Groups.WithDefaults(cfg.Lang), cfg.Routing)
+// take it, the built-in one otherwise; and the panel's proxies in it.
+func (h *Handler) clashProfile(prof Profile, cfg Config) ([]byte, []proxy, error) {
+	builtIn := func() ([]byte, []proxy, error) {
+		c, ps, err := mihomoConfig(prof, cfg.Groups.WithDefaults(cfg.Lang), cfg.Routing)
+		if err != nil {
+			return nil, nil, err
+		}
+		body, err := marshalYAML(c)
+		return body, ps, err
 	}
-	body, err := Template(prof, cfg.Template)
+	if cfg.Template == "" || !prof.routable() {
+		return builtIn()
+	}
+	c, ps, err := templateConfig(prof, cfg.Template)
 	var te *TemplateError
 	if errors.As(err, &te) {
 		// Saved templates are checked; one that went bad must not leave apps without a profile.
 		h.warn("template/"+te.Code, "subscription: the own Clash profile does not render, the built-in one goes out", "err", err)
-		return Mihomo(prof, cfg.Groups.WithDefaults(cfg.Lang), cfg.Routing)
+		return builtIn()
 	}
-	return body, err
+	if err != nil {
+		return nil, nil, err
+	}
+	body, err := marshalYAML(c)
+	return body, ps, err
 }
 
 // profileFailed answers a profile that could not be made: with nothing for this app to
@@ -395,7 +411,7 @@ func forApp(ins []db.Inbound, app App, state string) []db.Inbound {
 	out := make([]db.Inbound, 0, len(ins))
 	for _, in := range ins {
 		t, err := parseTemplate(in.Config)
-		if err != nil || !app.Supports(proto.NeedsOf(t)) || proto.Shared(t.Type()) && !active {
+		if err != nil || !app.Supports(proto.NeedsOf(t)) || proto.Shared(t) && !active {
 			continue
 		}
 		out = append(out, in)
@@ -435,7 +451,11 @@ func (h *Handler) profile(ctx context.Context, u db.User, cfg Config, slot db.Sl
 	if err != nil {
 		return prof, err
 	}
-	allowed := domain.DecodeInbounds(u.Inbounds)
+	servers, err := domain.TariffServers(ctx, h.st.Q, u.TariffID)
+	if err != nil {
+		return prof, err
+	}
+	access := domain.AccessOf(u, servers)
 	if grants == nil {
 		if grants, err = domain.UserGrantsLeft(ctx, h.st.Q, u.ID, h.now()); err != nil {
 			return prof, err
@@ -446,9 +466,20 @@ func (h *Handler) profile(ctx context.Context, u db.User, cfg Config, slot db.Sl
 	if err != nil {
 		return prof, err
 	}
-	nodes := map[int64]bool{}
+	prof.all, prof.access, prof.grants = all, access, grants
+	on := map[int64]bool{}
 	for _, n := range cfg.Nodes {
-		nodes[n.ID] = true
+		on[n.ID] = true
+	}
+	// The nodes the client may use: a balance group places the client among these only, so
+	// a node the tariff leaves out is never the one the client gets.
+	nodes := map[int64]bool{}
+	for _, in := range all {
+		// A node whose only protocols are in a group closed or spent for the client serves it
+		// nothing: it is no candidate of a balance group either.
+		if on[in.NodeID] && access.Usable(in) && !(in.PoolID.Valid && spent[in.PoolID.Int64]) {
+			nodes[in.NodeID] = true
+		}
 	}
 	// One node of each balance group: the client's own. A balancer that fails shows the
 	// group whole rather than leave the client without servers.
@@ -460,7 +491,7 @@ func (h *Handler) profile(ctx context.Context, u db.User, cfg Config, slot db.Sl
 		}
 	}
 	for _, in := range all {
-		if in.Enabled == 0 || !nodes[in.NodeID] || (len(allowed) > 0 && !slices.Contains(allowed, in.ID)) || in.PoolID.Valid && spent[in.PoolID.Int64] {
+		if in.Enabled == 0 || !nodes[in.NodeID] || !access.Allows(in) || in.PoolID.Valid && spent[in.PoolID.Int64] {
 			continue
 		}
 		prof.Inbounds = append(prof.Inbounds, in)
@@ -511,7 +542,7 @@ func (h *Handler) operatorHeaders(w http.ResponseWriter, r *http.Request, u db.U
 	devices := int64(-1)
 	var bot string
 	if cfg.App.Enabled {
-		if cfg.Binding && u.DeviceLimit.Valid && domain.BindsDevices(u.DeviceMode) {
+		if cfg.Binding && u.DeviceLimit.Valid && model.BindsDevices(u.DeviceMode) {
 			if n, err := h.st.Q.CountBoundDevices(r.Context(), u.ID); err == nil {
 				devices = n
 			}
@@ -593,11 +624,7 @@ type DeviceItem struct {
 
 func (h *Handler) info(ctx context.Context, w http.ResponseWriter, u db.User, prof Profile, cfg Config) {
 	now := h.now()
-	grants, err := domain.UserGrantsLeft(ctx, h.st.Q, u.ID, now)
-	if err != nil {
-		internalError(w)
-		return
-	}
+	grants := prof.grants
 	out := Info{Name: u.Name, Brand: cfg.Brand, SupportURL: cfg.SupportURL, State: domain.State(u, grants.Main(u.ID), now), UsedUp: u.UsedUp, UsedDown: u.UsedDown,
 		Binding: cfg.Binding, Bound: []DeviceItem{}}
 	if u.TrafficLimit.Valid {
@@ -678,7 +705,7 @@ func (h *Handler) info(ctx context.Context, w http.ResponseWriter, u db.User, pr
 			out.Locations = append(out.Locations, n.Name)
 		}
 	}
-	pools, err := h.poolInfo(ctx, u.ID, grants)
+	pools, err := h.poolInfo(ctx, u, grants, prof.access.Groups(prof.all))
 	if err != nil {
 		internalError(w)
 		return
@@ -761,7 +788,7 @@ func sameOrigin(r *http.Request) bool { return server.FetchSite(r.Header, r.Host
 // stub answers a device that gets no keys: one placeholder server named after the reason,
 // so the app shows it where the servers would be, and the headers Happ-like apps read.
 func (h *Handler) stub(w http.ResponseWriter, u db.User, cfg Config, format string, reason error) {
-	en := cfg.Lang == "en"
+	en := textutil.Lang(cfg.Lang).En()
 	name := "⛔ Все места для устройств заняты — откройте ссылку подписки в браузере"
 	if en {
 		name = "⛔ All device places are taken — open the subscription link in a browser"
@@ -884,24 +911,27 @@ type PoolInfo struct {
 	Extra int64  `json:"extra,omitempty"` // bytes left in the pool's traffic packages
 }
 
-// poolInfo lists the user's pools worth showing: those with a limit or some traffic.
-func (h *Handler) poolInfo(ctx context.Context, userID int64, grants domain.GrantsLeft) ([]PoolInfo, error) {
+// poolInfo lists the user's server groups worth showing apart from the main traffic: those
+// with a limit of their own, and those without a limit that carried some traffic, each with
+// a server the user may use. A group in the main traffic is part of it; a closed one is not
+// the user's.
+// poolInfo is what the page shows of u's groups: each of its own limit, or without one
+// that it used, among the groups it reaches (reach: Access.Groups, an exhausted one included,
+// which the page must show).
+func (h *Handler) poolInfo(ctx context.Context, u db.User, grants domain.GrantsLeft, reach map[int64]bool) ([]PoolInfo, error) {
+	userID := u.ID
 	rows, err := h.st.Q.ListUserPools(ctx, userID)
 	if err != nil || len(rows) == 0 {
 		return nil, err
 	}
-	pools, err := h.st.Q.ListTrafficPools(ctx)
+	names, err := domain.PoolNames(ctx, h.st.Q)
 	if err != nil {
 		return nil, err
-	}
-	names := map[int64]string{}
-	for _, p := range pools {
-		names[p.ID] = p.Name
 	}
 	var out []PoolInfo
 	for _, r := range rows {
 		used := r.UsedUp + r.UsedDown
-		if r.Excluded || !r.TrafficLimit.Valid && used == 0 {
+		if !reach[r.PoolID] || r.Mode != domain.PoolOwn && (r.Mode != domain.PoolUnlimited || used == 0) {
 			continue
 		}
 		pi := PoolInfo{Name: names[r.PoolID], Used: used}
