@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"github.com/metacubex/mihomo/transport/xdrive"
 
 	"github.com/metacubex/mihomo/listener/reality"
 	"github.com/metacubex/mihomo/listener/sing"
@@ -14,24 +15,28 @@ type VlessUser struct {
 }
 
 type VlessServer struct {
-	Enable          bool
-	Listen          string
-	Users           []VlessUser
-	Decryption      string
-	WsPath          string
-	XHTTPConfig     XHTTPConfig
-	GrpcServiceName string
-	Certificate     string
-	PrivateKey      string
-	ClientAuthType  string
-	ClientAuthCert  string
-	EchKey          string
-	AllowInsecure   bool
-	ShadowTLS       ShadowTLS      `yaml:"shadow-tls" json:"shadow-tls,omitempty"`
-	ResTLS          ResTLS         `yaml:"res-tls" json:"res-tls,omitempty"`
-	JLSConfig       JLSConfig      `yaml:"jls-config" json:"jls-config,omitempty"`
-	RealityConfig   reality.Config `yaml:"reality-config" json:"reality-config,omitempty"`
-	MuxOption       sing.MuxOption `yaml:"mux-option" json:"mux-option,omitempty"`
+	XDriveConfig       *xdrive.Config `inbound:"xdrive-config,omitempty" yaml:"xdrive-config,omitempty" json:"xdrive-config,omitempty"`
+	Enable             bool
+	Listen             string
+	Users              []VlessUser
+	Decryption         string
+	WsPath             string
+	XHTTPConfig        XHTTPConfig
+	FallbackPage       string // an HTML page for the requests not the inbound's own on an HTTP transport (listener/fallback)
+	GrpcServiceName    string
+	Certificate        string
+	PrivateKey         string
+	ClientAuthType     string
+	ClientAuthCert     string
+	EchKey             string
+	AllowInsecure      bool
+	TrustedProxyHeader string
+	TrustedProxies     []string
+	ShadowTLS          ShadowTLS      `yaml:"shadow-tls" json:"shadow-tls,omitempty"`
+	ResTLS             ResTLS         `yaml:"res-tls" json:"res-tls,omitempty"`
+	JLSConfig          JLSConfig      `yaml:"jls-config" json:"jls-config,omitempty"`
+	RealityConfig      reality.Config `yaml:"reality-config" json:"reality-config,omitempty"`
+	MuxOption          sing.MuxOption `yaml:"mux-option" json:"mux-option,omitempty"`
 }
 
 type XHTTPConfig struct {
@@ -56,6 +61,7 @@ type XHTTPConfig struct {
 	ScStreamUpServerSecs string
 	ScMaxBufferedPosts   string
 	ScMaxEachPostBytes   string
+	ServerMaxHeaderBytes int
 }
 
 func (t VlessServer) String() string {

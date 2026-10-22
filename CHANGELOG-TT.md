@@ -2,6 +2,52 @@
 
 Fork release notes. Upstream history remains in CHANGELOG.md.
 
+## 0.5.2.1-tt.1
+Stable, on Mikan 0.5.2.0 (the 0.5.1.1 betas released). From here on Kinkan follows Mikan's stable releases, not every candidate. After the panel, update the nodes (Nodes → Update all): the new core and much of the list below work only on updated nodes.
+### en
+- Merge Mikan 0.5.2.0, after its betas 0.5.1.1-rc.11 to rc.15: server groups and what a plan includes, Shadowsocks-2022 with a key per client, the core's own speed limits, the shared port 443, the node API for the panel alone, the front page for strangers, the activity log, the panel as an app, and the nodes' core from Citrus ca8204d9. Mikan's release notes list everything; read "Update the nodes together with the panel" and "Shadowsocks-2022 (AES): refresh the subscriptions" there before updating.
+- The marketplace is checked with its own keys again, as Mikan now signs its catalog and the community registry apart from its releases; the fork's copy of Mikan's release key for the catalog is gone. Kinkan's releases are signed by Kinkan's key alone, the only one in `ReleaseKeys`, the installer and `install.sh`.
+- The fork's patches to the core (the JA4 fingerprint in REALITY auth events, CONNECT without credentials behind a fallback) apply on Citrus ca8204d9 unchanged.
+- The fork's buttons and update notice on a node's card follow the card to its own file (`nodes/card.tsx`).
+- REALITY on the node's own site (`127.0.0.1:17443`) passes the target checks: `mikan admin targets check`/`apply`, the form's Check button (it now says which node) and autotune's SNI check, all done by the node itself. Before, the panel refused it as an internal address and the node's check could not dial it, so autotune took a working site for a dead one and moved the inbound to a neighbour's site; clients with the old subscription then failed until they refreshed it.
+- Installer: rustls-webpki 0.103.15 → 0.103.16 (RUSTSEC-2026-0382) and webpki-roots 1.0.9 → 1.0.10 (RUSTSEC-2026-0381): distrusted intermediate certificates are no longer accepted.
+- The fork's own fixes of 18.10 to the installer (`config.json` read before `.env` after an update that stopped half way, secrets handed over only as root, `test-upgrade.sh` on `config.json`) give way to Mikan's, which 0.5.2.0 ships; the fork keeps only its rollback point in the upgrade test.
+### ru
+- Слит Mikan 0.5.2.0 — выпущенные беты 0.5.1.1-rc.11–rc.15: группы серверов и состав тарифа, Shadowsocks-2022 с ключом на клиента, ограничение скорости в самом ядре, общий порт 443, API ноды только для панели, страница для чужих, журнал действий, панель как приложение, ядро нод — Citrus ca8204d9. Полный список — в заметках Mikan; перед обновлением прочитайте там «Update the nodes together with the panel» и «Shadowsocks-2022 (AES): refresh the subscriptions».
+- Маркетплейс снова проверяется своими ключами: Mikan теперь подписывает каталог и реестр сообщества отдельно от релизов, поэтому копия релизного ключа Mikan для каталога в форке больше не нужна. Релизы Kinkan подписаны только ключом Kinkan — он единственный в `ReleaseKeys`, установщике и `install.sh`.
+- Патчи форка к ядру (отпечаток JA4 в событиях REALITY, CONNECT без учётных данных за fallback) ложатся на Citrus ca8204d9 без изменений.
+- Кнопки форка и сообщение об обновлении в карточке ноды переехали вместе с карточкой в отдельный файл (`nodes/card.tsx`).
+- REALITY на собственном сайте ноды (`127.0.0.1:17443`) проходит проверки цели: `mikan admin targets check`/`apply`, кнопка «Проверить» в форме (теперь передаёт ноду) и проверку автоподбора SNI — всё силами самой ноды. Раньше панель отвергала такую цель как внутренний адрес, а проверка на ноде не могла до неё дозвониться, и автоподбор принимал живой сайт за упавший и переставлял подключение на сайт соседа; клиенты со старой подпиской после этого не подключались, пока не обновят её.
+- Установщик: rustls-webpki 0.103.15 → 0.103.16 (RUSTSEC-2026-0382) и webpki-roots 1.0.9 → 1.0.10 (RUSTSEC-2026-0381): недоверенные промежуточные сертификаты больше не принимаются.
+- Собственные исправления установщика от 18.10 (`config.json` читается раньше `.env` после прерванного обновления, секреты передаются владельцу только от root, `test-upgrade.sh` на `config.json`) уступили место исправлениям Mikan, вошедшим в 0.5.2.0; в тесте обновления форк оставил только свою точку отката.
+
+## 0.5.1.1-tt.1-rc.1
+Beta: the beta channel only. Servers on the stable channel stay on 0.5.0.5-tt.13 until Mikan 0.5.1.1 is released and Kinkan follows it as 0.5.1.1-tt.1.
+### en
+- Merge Mikan 0.5.1.1-rc.10: nodes run on Mikan's core, Citrus (`getmikan/Citrus`), and the HTTP server comes from Mikan's `getmikan/http`. What is checked and what is not is in BETA-READINESS.md.
+- From Mikan rc.9 and rc.10: the node's region, asked over IPv4 and IPv6; the apps' own XHTTP upload; "Check the certificate" checks the subscription domain from outside; the node API waits for the saved state; the Update button names the release it shows.
+- Installer: when both `config.json` and `.env` are there (an update that stopped half way), `config.json` is read. Before, `.env` won, and a retried move from SQLite to PostgreSQL made a new database password.
+- The node's site comes back after a node restart, with the saved state.
+- The TrustTunnel fallback and the auth events are Citrus's own now, so the fork no longer patches them. The JA4 fingerprint in REALITY auth events stays a fork patch.
+- Behind a fallback, Citrus does not report requests without credentials, since they are cover-site visits. The fork reports a CONNECT without credentials, which no browser sends to a site, so the scanner journal still counts proxy scans.
+- The TrustTunnel front announces the same 16 KiB header limit as the node's site front and Caddy (HTTP/2 SETTINGS `MAX_HEADER_LIST_SIZE`); before, it announced Go's 1 MB.
+- The wrong-key probe no longer covers VMess: the core has none, and Mikan turns VMess inbounds into VLESS.
+- Backport Go 1.27.2's HTTP/2 HPACK encoder ownership fix (GO-2026-6617) to the bundled HTTP server (now on top of `getmikan/http`). Peer table-size settings are applied after the active frame writer finishes; a regression test covers the deferred update and HPACK size sequence.
+- Installer: update rustls from 0.23.45 to 0.23.46, following upstream's security update.
+- Require Go 1.27.2 or newer for manual builds as well as the release image, to include the standard library's security fixes.
+### ru
+- Слит Mikan 0.5.1.1-rc.10: ноды работают на ядре Mikan — Citrus (`getmikan/Citrus`), HTTP-сервер взят из `getmikan/http`. Что проверено, а что нет, — в BETA-READINESS.md.
+- Из Mikan rc.9 и rc.10: регион ноды по IPv4 и IPv6; собственная отправка данных XHTTP у приложений; «Проверить сертификат» проверяет домен подписки снаружи; API ноды ждёт восстановления сохранённого состояния; кнопка обновления называет релиз, который показывает.
+- Установщик: если есть и `config.json`, и `.env` (обновление остановилось на полпути), читается `config.json`. Раньше побеждал `.env`, и повтор переезда SQLite → PostgreSQL создавал новый пароль базы.
+- Сайт ноды возвращается после перезапуска ноды вместе с сохранённым состоянием.
+- Fallback TrustTunnel и события авторизации теперь есть в самом Citrus, форк их больше не патчит. Отпечаток JA4 в событиях REALITY остаётся патчем форка.
+- За fallback Citrus не сообщает о запросах без учётных данных: это посетители сайта-прикрытия. Форк сообщает о CONNECT без учётных данных (браузер не шлёт его на сайт), поэтому журнал сканеров по-прежнему видит прокси-сканы.
+- Фронт TrustTunnel объявляет тот же лимит заголовков 16 КиБ, что сайт ноды и Caddy (HTTP/2 SETTINGS `MAX_HEADER_LIST_SIZE`); раньше объявлял 1 МБ, как Go по умолчанию.
+- Проба неверного ключа больше не проверяет VMess: в ядре его нет, Mikan переводит такие inbound в VLESS.
+- В копию HTTP-сервера (теперь поверх `getmikan/http`) перенесено исправление гонки HPACK из Go 1.27.2 (GO-2026-6617). Настройки размера таблицы применяются после завершения текущей записи кадра; регрессионный тест проверяет отложенное обновление и последовательность размеров HPACK.
+- Установщик: rustls обновлён с 0.23.45 до 0.23.46 по исправлению безопасности upstream.
+- Для ручной сборки тоже требуется Go 1.27.2 или новее, с исправлениями безопасности стандартной библиотеки.
+
 ## 0.5.0.5-tt.13
 ### en
 - TrustTunnel: the admin chooses how many connections clients may keep to an inbound (1 to 8, default 1), on the inbound's page; subscriptions carry it as `max-connections`. Clients with the fix in getmikan/Citrus#54 open at most that many TLS connections; older clients limit only their pool and can still open several connections at a cold start.

@@ -195,6 +195,8 @@ func NatTable() C.NatTable {
 
 // Rules return all rules
 func Rules() []C.Rule {
+	configMux.RLock()
+	defer configMux.RUnlock()
 	return rules
 }
 
@@ -208,7 +210,54 @@ func UpdateRules(newRules []C.Rule, newSubRule map[string][]C.Rule, rp map[strin
 	rules = newRules
 	ruleProviders = rp
 	subRules = newSubRule
+	ruleGeneration++
 	configMux.Unlock()
+}
+
+// ErrRulesChanged is returned by ReplaceRules when the config was reloaded or
+// the proxies were replaced after the snapshot the new rules were parsed against.
+var ErrRulesChanged = errors.New("the config changed while the rules were parsed")
+
+// ruleGeneration counts the replacements of everything the top level rules are
+// resolved against (proxies, rule providers, sub-rules). Guarded by configMux.
+var ruleGeneration uint64
+
+// RuleSnapshot is a consistent view of what the top level rules resolve against.
+// The maps are shared with the tunnel and must not be modified.
+type RuleSnapshot struct {
+	Proxies       map[string]C.Proxy
+	Providers     map[string]P.ProxyProvider
+	RuleProviders map[string]P.RuleProvider
+	SubRules      map[string][]C.Rule
+
+	generation uint64
+}
+
+// SnapshotRules returns the proxies, providers, rule providers and sub-rules,
+// read together under the config lock.
+func SnapshotRules() RuleSnapshot {
+	configMux.RLock()
+	defer configMux.RUnlock()
+	return RuleSnapshot{
+		Proxies:       proxies,
+		Providers:     providers,
+		RuleProviders: ruleProviders,
+		SubRules:      subRules,
+		generation:    ruleGeneration,
+	}
+}
+
+// ReplaceRules swaps the top level rules for newRules, parsed against snap.
+// Sub-rules and rule providers are kept. If the config changed since snap was
+// taken, nothing is replaced and ErrRulesChanged is returned.
+func ReplaceRules(snap RuleSnapshot, newRules []C.Rule) error {
+	configMux.Lock()
+	defer configMux.Unlock()
+	if snap.generation != ruleGeneration {
+		return ErrRulesChanged
+	}
+	rules = newRules
+	return nil
 }
 
 // Proxies return all proxies
@@ -231,6 +280,7 @@ func UpdateProxies(newProxies map[string]C.Proxy, newProviders map[string]P.Prox
 	configMux.Lock()
 	proxies = newProxies
 	providers = newProviders
+	ruleGeneration++
 	configMux.Unlock()
 }
 
@@ -344,6 +394,7 @@ func resolveMetadata(metadata *C.Metadata) (proxy C.Proxy, rule C.Rule, err erro
 				} else {
 					log.Debugln("[DNS] %s --> %s", metadata.Host, ip.String())
 					metadata.DstIP = ip
+					metadata.DstIPChecked = true
 				}
 				resolved = true
 			}
@@ -441,7 +492,7 @@ func handleUDPConn(packet C.PacketAdapter) {
 	sender, loaded := natTable.GetOrCreate(key, func() C.PacketSender {
 		sender := newPacketSender()
 		if sniffingEnable && snifferDispatcher.Enable() {
-			return snifferDispatcher.UDPSniff(packet, sender)
+			return snifferDispatcher.UDPSniff(packet, sender, protocolVerdict)
 		}
 		return sender
 	})
@@ -463,6 +514,13 @@ func handleUDPConn(packet C.PacketAdapter) {
 				return nil, nil, err
 			}
 
+			// the user's limits are checked before the outbound is dialed
+			admission, err := statistic.DefaultManager.Admit(metadata)
+			if err != nil {
+				logRejected(metadata, err)
+				return nil, nil, err
+			}
+
 			dialMetadata := metadata.Pure()
 			ctx, cancel := context.WithTimeout(context.Background(), C.DefaultUDPTimeout)
 			defer cancel()
@@ -472,11 +530,12 @@ func handleUDPConn(packet C.PacketAdapter) {
 				logMetadataErr(metadata, rule, proxy, err)
 			})
 			if err != nil {
+				admission.Release()
 				return nil, nil, err
 			}
 			logMetadata(metadata, rule, rawPc)
 
-			pc := statistic.NewUDPTracker(rawPc, statistic.DefaultManager, metadata, rule, 0, 0, true)
+			pc := statistic.NewUDPTrackerAdmitted(rawPc, statistic.DefaultManager, metadata, rule, 0, 0, admission)
 
 			sender.AddMapping(originMetadata, dialMetadata)
 			oAddrPort := dialMetadata.AddrPort()
@@ -499,6 +558,31 @@ func handleUDPConn(packet C.PacketAdapter) {
 	sender.Send(packet) // nonblocking
 }
 
+// protocolVerdict matches the metadata of a packet in an established UDP
+// session again, after a protocol sniffer recognised the session later than
+// its first packet. The session's outbound cannot change any more, so the only
+// decision that can be honoured is a REJECT: the packet is dropped.
+func protocolVerdict(metadata *C.Metadata) bool {
+	_ = preHandleMetadata(metadata) // error was pre-checked
+	proxy, rule, err := resolveMetadata(metadata)
+	if err != nil || proxy == nil {
+		return false
+	}
+	for adapter := C.ProxyAdapter(proxy); adapter != nil; adapter = adapter.Unwrap(metadata, false) {
+		switch adapter.Type() {
+		case C.Reject, C.RejectDrop:
+			ruleName := "no rule"
+			if rule != nil {
+				ruleName = fmt.Sprintf("%s(%s)", rule.RuleType().String(), rule.Payload())
+			}
+			log.Infoln("[UDP] %s --> %s sniffed as %s, match %s using %s, dropped",
+				metadata.SourceDetail(), metadata.LogAddress(), metadata.SniffProtocol, ruleName, proxy.Name())
+			return true
+		}
+	}
+	return false
+}
+
 func handleTCPConn(connCtx C.ConnContext) {
 	if !isHandle(connCtx.Metadata().Type) {
 		_ = connCtx.Conn().Close()
@@ -509,10 +593,35 @@ func handleTCPConn(connCtx C.ConnContext) {
 		_ = conn.Close()
 	}(connCtx.Conn())
 
+	remoteConn, cancel := dialTCPConn(connCtx)
+	if remoteConn == nil {
+		return
+	}
+	defer cancel()
+	defer func(remoteConn C.Conn) {
+		_ = remoteConn.Close()
+	}(remoteConn)
+	handleSocket(connCtx.Conn(), remoteConn)
+}
+
+// dialTCPConn does everything handleTCPConn does before the relay: sniffing,
+// the rules, the user limits and the dial. It returns the tracked remote conn
+// and the cancel func of the connect context, or a nil conn when the
+// connection ends here.
+//
+// It is a function of its own so that its frame (about 1 KiB) is not on the
+// stack while the relay waits: a relay goroutine spends its life blocked in a
+// read at the bottom of the stack, and the runtime shrinks a stack at GC only
+// when it uses less than a quarter of it. Every byte of frames above that
+// read counts towards keeping an idle connection's goroutine at 16 KiB
+// instead of 8 KiB.
+//
+//go:noinline
+func dialTCPConn(connCtx C.ConnContext) (C.Conn, context.CancelFunc) {
 	metadata := connCtx.Metadata()
 	if !metadata.Valid() {
 		log.Warnln("[Metadata] not valid: %#v", metadata)
-		return
+		return nil, nil
 	}
 	fixMetadata(metadata) // fix some metadata not set via metadata.SetRemoteAddr or metadata.SetRemoteAddress
 
@@ -536,12 +645,23 @@ func handleTCPConn(connCtx C.ConnContext) {
 	// If both trials have failed, we can do nothing but give up
 	if preHandleFailed {
 		log.Debugln("[Metadata PreHandle] failed to sniff a domain for connection %s --> %s, give up",
-			metadata.SourceDetail(), metadata.RemoteAddress())
-		return
+			metadata.SourceDetail(), metadata.LogAddress())
+		return nil, nil
 	}
 
+	proxy, rule, err := resolveMetadata(metadata)
+	if err != nil {
+		log.Warnln("[Metadata] parse failed: %s", err.Error())
+		return nil, nil
+	}
+
+	// While the outbound dials, wait for the client's first bytes, so that a
+	// connection with a lazy handshake can send them along with it. The
+	// outbounds that never have one skip it: a goroutine, a buffer and three
+	// deadline changes per connection.
 	peekMutex := sync.Mutex{}
-	if !conn.Peeked() {
+	peeking := !conn.Peeked() && mayNeedHandshake(proxy, metadata)
+	if peeking {
 		peekMutex.Lock()
 		go func() {
 			defer peekMutex.Unlock()
@@ -551,11 +671,18 @@ func handleTCPConn(connCtx C.ConnContext) {
 		}()
 	}
 
-	proxy, rule, err := resolveMetadata(metadata)
+	// the user's limits are checked before the outbound is dialed
+	admission, err := statistic.DefaultManager.Admit(metadata)
 	if err != nil {
-		log.Warnln("[Metadata] parse failed: %s", err.Error())
-		return
+		logRejected(metadata, err)
+		return nil, nil
 	}
+	tracked := false
+	defer func() {
+		if !tracked {
+			admission.Release()
+		}
+	}()
 
 	dialMetadata := metadata
 	if len(metadata.Host) > 0 {
@@ -571,8 +698,7 @@ func handleTCPConn(connCtx C.ConnContext) {
 	var peekBytes []byte
 	var peekLen int
 
-	ctx, cancel := context.WithTimeout(context.Background(), C.DefaultTCPTimeout)
-	defer cancel()
+	ctx, cancel := tcpConnectContext(context.Background())
 	remoteConn, err := retry(ctx, func(ctx context.Context) (remoteConn C.Conn, err error) {
 		remoteConn, err = proxy.DialContext(ctx, dialMetadata)
 		if err != nil {
@@ -608,46 +734,83 @@ func handleTCPConn(connCtx C.ConnContext) {
 		logMetadataErr(metadata, rule, proxy, err)
 	})
 	if err != nil {
-		return
+		cancel()
+		return nil, nil
 	}
 	logMetadata(metadata, rule, remoteConn)
 
-	remoteConn = statistic.NewTCPTracker(remoteConn, statistic.DefaultManager, metadata, rule, int64(peekLen), 0, true)
-	defer func(remoteConn C.Conn) {
-		_ = remoteConn.Close()
-	}(remoteConn)
+	remoteConn = statistic.NewTCPTrackerAdmitted(remoteConn, statistic.DefaultManager, metadata, rule, int64(peekLen), 0, admission)
+	tracked = true
 
-	_ = conn.SetReadDeadline(time.Now()) // stop unfinished peek
-	peekMutex.Lock()
-	defer peekMutex.Unlock()
-	_ = conn.SetReadDeadline(time.Time{}) // reset
-	handleSocket(conn, remoteConn)
+	if peeking {
+		_ = conn.SetReadDeadline(time.Now()) // stop unfinished peek
+		peekMutex.Lock()                     // the peek is over
+		peekMutex.Unlock()
+		_ = conn.SetReadDeadline(time.Time{}) // reset
+	}
+	return remoteConn, cancel
+}
+
+// mayNeedHandshake reports whether the outbound proxy picks for metadata may
+// return a connection with a lazy handshake (N.NeedHandshake), which sends the
+// client's first bytes with it. DIRECT and the rejecting outbounds never do.
+// A group is followed to the proxy it picks now; should it pick another one
+// for the dial, the first bytes just go after the handshake.
+func mayNeedHandshake(proxy C.Proxy, metadata *C.Metadata) bool {
+	for adapter := proxy; adapter != nil; adapter = adapter.Unwrap(metadata, false) {
+		switch adapter.Type() {
+		case C.Direct, C.Compatible, C.Reject, C.RejectDrop:
+			return false
+		}
+	}
+	return true
+}
+
+// logRejected logs a connection refused by the limits of its user, at most
+// once a second per user; every rejection is counted in /traffic/users.
+func logRejected(metadata *C.Metadata, err error) {
+	var limitErr *statistic.LimitError
+	if !errors.As(err, &limitErr) {
+		log.Infoln("[%s] %s --> %s rejected: %s", strings.ToUpper(metadata.NetWork.String()), metadata.SourceDetail(), metadata.LogAddress(), err)
+		return
+	}
+	if limitErr.Quiet {
+		return
+	}
+	suppressed := ""
+	if limitErr.Suppressed > 0 {
+		suppressed = fmt.Sprintf(" (and %d more since the last line)", limitErr.Suppressed)
+	}
+	log.Infoln("[%s] %s --> %s rejected by the user limits: %s%s", strings.ToUpper(metadata.NetWork.String()), metadata.SourceDetail(), metadata.LogAddress(), limitErr.Detail, suppressed)
 }
 
 func logMetadataErr(metadata *C.Metadata, rule C.Rule, proxy C.ProxyAdapter, err error) {
 	if rule == nil {
-		log.Warnln("[%s] dial %s %s --> %s error: %s", strings.ToUpper(metadata.NetWork.String()), proxy.Name(), metadata.SourceDetail(), metadata.RemoteAddress(), err.Error())
+		log.Warnln("[%s] dial %s %s --> %s error: %s", strings.ToUpper(metadata.NetWork.String()), proxy.Name(), metadata.SourceDetail(), metadata.LogAddress(), err.Error())
 	} else {
-		log.Warnln("[%s] dial %s (match %s/%s) %s --> %s error: %s", strings.ToUpper(metadata.NetWork.String()), proxy.Name(), rule.RuleType().String(), rule.Payload(), metadata.SourceDetail(), metadata.RemoteAddress(), err.Error())
+		log.Warnln("[%s] dial %s (match %s/%s) %s --> %s error: %s", strings.ToUpper(metadata.NetWork.String()), proxy.Name(), rule.RuleType().String(), rule.Payload(), metadata.SourceDetail(), metadata.LogAddress(), err.Error())
 	}
 }
 
 func logMetadata(metadata *C.Metadata, rule C.Rule, remoteConn C.Connection) {
+	if !log.Enabled(log.INFO) {
+		return // the arguments are not cheap: skip them when nobody gets the line
+	}
 	switch {
 	case metadata.SpecialProxy != "":
-		log.Infoln("[%s] %s --> %s using %s", strings.ToUpper(metadata.NetWork.String()), metadata.SourceDetail(), metadata.RemoteAddress(), remoteConn.Chains().String())
+		log.Infoln("[%s] %s --> %s using %s", strings.ToUpper(metadata.NetWork.String()), metadata.SourceDetail(), metadata.LogAddress(), remoteConn.Chains().String())
 	case rule != nil:
 		if rule.Payload() != "" {
-			log.Infoln("[%s] %s --> %s match %s using %s", strings.ToUpper(metadata.NetWork.String()), metadata.SourceDetail(), metadata.RemoteAddress(), fmt.Sprintf("%s(%s)", rule.RuleType().String(), rule.Payload()), remoteConn.Chains().String())
+			log.Infoln("[%s] %s --> %s match %s using %s", strings.ToUpper(metadata.NetWork.String()), metadata.SourceDetail(), metadata.LogAddress(), fmt.Sprintf("%s(%s)", rule.RuleType().String(), rule.Payload()), remoteConn.Chains().String())
 		} else {
-			log.Infoln("[%s] %s --> %s match %s using %s", strings.ToUpper(metadata.NetWork.String()), metadata.SourceDetail(), metadata.RemoteAddress(), rule.RuleType().String(), remoteConn.Chains().String())
+			log.Infoln("[%s] %s --> %s match %s using %s", strings.ToUpper(metadata.NetWork.String()), metadata.SourceDetail(), metadata.LogAddress(), rule.RuleType().String(), remoteConn.Chains().String())
 		}
 	case mode == Global:
-		log.Infoln("[%s] %s --> %s using GLOBAL", strings.ToUpper(metadata.NetWork.String()), metadata.SourceDetail(), metadata.RemoteAddress())
+		log.Infoln("[%s] %s --> %s using GLOBAL", strings.ToUpper(metadata.NetWork.String()), metadata.SourceDetail(), metadata.LogAddress())
 	case mode == Direct:
-		log.Infoln("[%s] %s --> %s using DIRECT", strings.ToUpper(metadata.NetWork.String()), metadata.SourceDetail(), metadata.RemoteAddress())
+		log.Infoln("[%s] %s --> %s using DIRECT", strings.ToUpper(metadata.NetWork.String()), metadata.SourceDetail(), metadata.LogAddress())
 	default:
-		log.Infoln("[%s] %s --> %s doesn't match any rule using %s", strings.ToUpper(metadata.NetWork.String()), metadata.SourceDetail(), metadata.RemoteAddress(), remoteConn.Chains().String())
+		log.Infoln("[%s] %s --> %s doesn't match any rule using %s", strings.ToUpper(metadata.NetWork.String()), metadata.SourceDetail(), metadata.LogAddress(), remoteConn.Chains().String())
 	}
 }
 
@@ -721,6 +884,9 @@ func getRules(metadata *C.Metadata) []C.Rule {
 }
 
 func shouldStopRetry(err error) bool {
+	if isLocalResourceExhaustion(err) {
+		return true
+	}
 	if errors.Is(err, resolver.ErrIPNotFound) {
 		return true
 	}

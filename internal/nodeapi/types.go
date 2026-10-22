@@ -8,17 +8,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"mikan/internal/proto"
 	"mikan/internal/scan"
-)
-
-const (
-	PresetVlessVision = "vless_reality_vision"
-	PresetVlessXHTTP  = "vless_reality_xhttp"
-	PresetHysteria2   = "hysteria2"
-	PresetTUIC        = "tuic_v5"
+	"mikan/internal/textutil"
 )
 
 // DesiredState is the complete configuration of a node. Applying the same state twice
@@ -45,6 +38,79 @@ type DesiredState struct {
 	// Filters keep users' traffic from places and strangers from the node; nil: none.
 	// Nodes older than the filters ignore it.
 	Filters *Filters `json:"filters,omitempty"`
+	// Shaping splits the node's channel evenly between the users moving traffic; nil: off.
+	// Nodes older than it ignore it.
+	Shaping *Shaping `json:"shaping,omitempty"`
+	// DNS is how the node names the sites users reach (ExitDNS); nil: as before it, the
+	// address the user's device sent and the host's resolver. Nodes older than it ignore it.
+	DNS *ExitDNS `json:"dns,omitempty"`
+	// HTTPRedirect: the node holds port 80 (or MIKAN_ACME_LISTEN) for good and answers plain
+	// HTTP with 301 to https, the ACME challenges as before. Nodes older than it ignore it.
+	HTTPRedirect bool `json:"http_redirect,omitempty"`
+	// Detail: the node sums each slot's bytes by site (Counters.Sites). Off by default;
+	// nodes older than it ignore it.
+	Detail bool `json:"detail,omitempty"`
+	// Router shares the node's TCP 443 between inbounds by the TLS name the client asks for
+	// (SNIRouter); nil: none. Nodes older than it ignore it, and their routed inbounds stay
+	// on their own ports.
+	Router *SNIRouter `json:"sni_router,omitempty"`
+	// FrontPage is the built-in page (frontpage.Templates) a stranger gets: from the inbounds
+	// on an HTTP transport for a request that is not theirs (the core's fallback-page), and
+	// on the names of Router.Stub over TLS with the node's certificate (TLS); "": none. Nodes
+	// older than it ignore it.
+	FrontPage string `json:"front_page,omitempty"`
+	// APIAllow: the node's API answers only these networks ("203.0.113.5/32"), loopback and
+	// the addresses the panel has reached it from; nil: anyone (the panel's certificate
+	// still guards it). Empty but not nil is on too, with the panel's addresses alone. The
+	// node refuses the others in its own listener and asks its server's firewall for the
+	// same rule; both lift by themselves after APILockStale without the panel. Nodes older
+	// than it ignore it.
+	APIAllow []string `json:"api_allow,omitzero"`
+}
+
+// APILockStale is how long the panel may stay away before a node with APIAllow opens its
+// API to everyone again: a panel that moved to an address the rule does not know gets in
+// within this time, and the rule comes back with its new address.
+const APILockStale = 15 * time.Minute
+
+// SNIRouter: the node listens on Listen (":443" when empty) and hands each connection to
+// the inbound whose Names hold the ClientHello's SNI, with a PROXY v2 header; any other
+// name to Default ("": closed). The routed inbounds listen on loopback with PROXY protocol.
+type SNIRouter struct {
+	Listen  string     `json:"listen,omitempty"`
+	Routes  []SNIRoute `json:"routes"`
+	Default string     `json:"default,omitempty"`
+	// Stub: the names that get the node's front page (DesiredState.FrontPage) instead, ""
+	// for a ClientHello with no name; with no Default it takes any other name too. Nodes
+	// older than it ignore it.
+	Stub []string `json:"stub,omitempty"`
+}
+
+type SNIRoute struct {
+	Inbound string   `json:"inbound"`
+	Names   []string `json:"names"`
+}
+
+// Routed says whether inbound name runs behind the router.
+func (r *SNIRouter) Routed(name string) bool {
+	if r == nil {
+		return false
+	}
+	if r.Default == name {
+		return true
+	}
+	for _, x := range r.Routes {
+		if x.Inbound == name {
+			return true
+		}
+	}
+	return false
+}
+
+// Shaping is the fair share of a node: ChannelMbps (each way) is split evenly between the
+// groups (users) moving traffic at the moment, a user's own cap staying the ceiling.
+type Shaping struct {
+	ChannelMbps int `json:"channel_mbps"`
 }
 
 // Filters are the ingress and egress filters of the node.
@@ -73,10 +139,6 @@ type Inbound struct {
 	Listen string          `json:"listen"`
 	Port   string          `json:"port"`             // "443" or a range "20000-20100"
 	Config json.RawMessage `json:"config,omitempty"` // proto.Template as JSON
-	// Preset and Settings are the format of mikan ≤ 0.1.2; the node still reads them
-	// from a saved state, the panel no longer sends them.
-	Preset   string          `json:"preset,omitempty"`
-	Settings json.RawMessage `json:"settings,omitempty"`
 	// Pool is the traffic pool the inbound counts to ("" = the main quota): its own
 	// limit per user, separate from the rest (GitHub issue #6).
 	Pool string `json:"pool,omitempty"`
@@ -102,14 +164,19 @@ type Policy struct {
 	// OtherIPs are the slot's devices on the panel's other nodes: they count against
 	// DeviceLimit here too, and may connect here without taking another device.
 	OtherIPs []string `json:"other_ips,omitempty"`
-	// Pools are the slot's quotas in traffic pools; a pool not listed has no limit.
-	// QuotaRemaining is then the quota of the inbounds outside every pool.
+	// Pools are the slot's quotas in traffic pools (server groups); a pool not listed has
+	// no limit, one listed with Main counts to QuotaRemaining like the inbounds outside every
+	// pool, which QuotaRemaining is the quota of.
 	Pools []PoolQuota `json:"pools,omitempty"`
 	// TorrentExempt: the torrent blocker leaves the slot alone.
 	TorrentExempt bool `json:"torrent_exempt,omitempty"`
 	// BannedUntil (unix seconds) keeps the slot out until then: the torrent blocker
 	// caught it on some node of the panel. 0: no ban.
 	BannedUntil int64 `json:"banned_until,omitempty"`
+	// SpeedMbps caps the slot's traffic each way, in Mbit/s; 0: no cap. Slots of one Group
+	// (a user's devices) share one cap. Nodes older than the caps ignore both.
+	SpeedMbps int    `json:"speed_mbps,omitempty"`
+	Group     string `json:"group,omitempty"`
 }
 
 type PoliciesRequest struct {
@@ -127,14 +194,39 @@ type TLSFiles struct {
 	KeyPEM  string `json:"key_pem"`
 }
 
+// ChallengeRequest asks the node to answer an ACME HTTP-01 challenge for its own address
+// (PUT /v1/acme/challenge/{token}): the panel orders the node's certificate, the CA comes
+// to the node's port 80. Nodes that predate it answer 404 and stay on a pinned
+// self-signed certificate.
+type ChallengeRequest struct {
+	KeyAuth string `json:"key_auth"`
+}
+
+// The node's answers to a challenge it cannot take: port 80 held by another program (the
+// message names it when the node can tell), or too many pending at once.
+const (
+	CodePort80Busy        = "port80_busy"
+	CodeTooManyChallenges = "too_many_challenges"
+)
+
 // Counters is a batch of traffic deltas. The node returns the same batch until it is
 // acknowledged, so the panel can apply it idempotently by (Epoch, Seq).
 type Counters struct {
-	Epoch  string                        `json:"epoch"`
-	Seq    int64                         `json:"seq"`
-	Slots  map[string]Traffic            `json:"slots"`           // outside every pool
-	Pools  map[string]map[string]Traffic `json:"pools,omitempty"` // slot → pool → traffic
-	Online map[string]Online             `json:"online"`          // live view, not part of the batch
+	Epoch string                        `json:"epoch"`
+	Seq   int64                         `json:"seq"`
+	Slots map[string]Traffic            `json:"slots"`           // the main traffic: outside every group, and the groups in it
+	Pools map[string]map[string]Traffic `json:"pools,omitempty"` // slot → pool → traffic
+	// Sites are the slots' bytes by site (DesiredState.Detail): slot → site → traffic, a
+	// part of the batch like the rest. Nodes older than it send none.
+	Sites map[string]map[string]Traffic `json:"sites,omitempty"`
+	// Relay is what the node's relay carried for the other nodes' cascades, by the source
+	// node's relay user (relay-<id>): a part of the batch like the rest, which counts for
+	// this node's load alone, as the source node counted the same bytes for its users.
+	// Nodes older than it send none.
+	Relay  map[string]Traffic `json:"relay,omitempty"`
+	Online map[string]Online  `json:"online"` // live view, not part of the batch
+	// RelayOnline is the relay's open connections by source, a live view like Online.
+	RelayOnline map[string]int `json:"relay_online,omitempty"`
 	// Idle: no batch was cut because there was no traffic to report. There is nothing to
 	// store and nothing to acknowledge; only Online is of use. Nodes before 0.4.4 cut an
 	// empty batch instead, which must be acknowledged like any other.
@@ -167,6 +259,26 @@ type Health struct {
 	// Host is what listens on the node's server, whoever runs it; nil when the node does not
 	// say (before 0.5.0.2, or it cannot read the kernel's tables).
 	Host *HostPorts `json:"host,omitempty"`
+	// Time is the node's clock as it answered: the panel holds it against its own and warns
+	// of a skew. Older nodes send none.
+	Time time.Time `json:"time,omitzero"`
+	// Redirect is how DesiredState.HTTPRedirect went; nil while it is off or the node is
+	// older than it.
+	Redirect *PortStatus `json:"http_redirect,omitempty"`
+	// Router is how DesiredState.Router went; nil while there is none or the node is older.
+	Router *PortStatus `json:"sni_router,omitempty"`
+	// APILock is how DesiredState.APIAllow went on the node's server: Error says why its
+	// firewall has no rule (nft missing, an installer too old to know it); the node refuses
+	// strangers in its own listener either way. nil while it is off or the node is older.
+	APILock *PortStatus `json:"api_lock,omitempty"`
+}
+
+// PortStatus is how a port the node holds for a feature of its own went (the 301 on port
+// 80, the SNI router on 443, the firewall rule on the API port): Error says why it is not
+// held (another program has it, the host could not put the rule in).
+type PortStatus struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
 }
 
 // HostPorts are the ports something listens on at the node's server: TCP sockets in the
@@ -230,21 +342,9 @@ func (u UpdateStatus) Clean() (UpdateStatus, bool) {
 	default:
 		return UpdateStatus{}, false
 	}
-	u.Version, u.From, u.At = clip(u.Version, MaxUpdateField), clip(u.From, MaxUpdateField), clip(u.At, MaxUpdateField)
-	u.Error = clip(u.Error, MaxUpdateError)
+	u.Version, u.From, u.At = textutil.Clip(u.Version, MaxUpdateField), textutil.Clip(u.From, MaxUpdateField), textutil.Clip(u.At, MaxUpdateField)
+	u.Error = textutil.Clip(u.Error, MaxUpdateError)
 	return u, true
-}
-
-// clip cuts s to at most n bytes without splitting a character.
-func clip(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	s = s[:n]
-	for !utf8.ValidString(s) {
-		s = s[:len(s)-1]
-	}
-	return s
 }
 
 type System struct {
@@ -311,11 +411,20 @@ type TargetCheckRequest struct {
 }
 
 // TargetScanRequest asks the node for REALITY targets in the /24 around IP, its public
-// address.
+// address; Wide lets it go on through the rest of the /16 (scan.Options.Wide). A node
+// older than 0.5.1.0 ignores Wide and scans the /24.
 type TargetScanRequest struct {
 	IP    string `json:"ip"`
 	Limit int    `json:"limit,omitempty"`
+	Wide  bool   `json:"wide,omitempty"`
 }
+
+// Scan times: the /24 is quick; a wide scan stops itself at WideScanTime, and the panel
+// waits a little longer than that for its answer.
+const (
+	ScanTime     = 30 * time.Second
+	WideScanTime = 2 * time.Minute
+)
 
 type TargetResult = scan.Result
 
@@ -338,37 +447,6 @@ type Error struct {
 }
 
 func (e *Error) Error() string { return e.Code + ": " + e.Message }
-
-// Preset settings stored in inbounds.settings and passed to the node as-is.
-
-type RealitySettings struct {
-	PrivateKey  string   `json:"private_key"`
-	PublicKey   string   `json:"public_key"`
-	ShortIDs    []string `json:"short_ids"`
-	Dest        string   `json:"dest"`
-	ServerNames []string `json:"server_names"`
-}
-
-type VlessVisionSettings struct {
-	Reality RealitySettings `json:"reality"`
-}
-
-type VlessXHTTPSettings struct {
-	Reality RealitySettings `json:"reality"`
-	Path    string          `json:"path"`
-	Mode    string          `json:"mode"` // "stream-one": "auto" hangs on mihomo v1.19.31 (S-01a)
-}
-
-type Hysteria2Settings struct {
-	ObfsPassword string `json:"obfs_password,omitempty"`
-	UpMbps       int    `json:"up_mbps,omitempty"`
-	DownMbps     int    `json:"down_mbps,omitempty"`
-	Masquerade   string `json:"masquerade,omitempty"`
-}
-
-type TUICSettings struct {
-	CongestionControl string `json:"congestion_control"`
-}
 
 // Warp is a WireGuard tunnel to Cloudflare WARP on the node. The listed inbounds leave
 // through it whole, and so do the listed domains and networks for every inbound; the
@@ -431,10 +509,14 @@ func ExitName(id int64) string { return "NODE-" + strconv.FormatInt(id, 10) }
 // ProbeResult is the internet as seen through one outbound of the node.
 type ProbeResult = WarpStatus
 
-// PoolQuota is what is left of one traffic pool for a slot, as of the policy's BaseSeq.
+// PoolQuota is what is left of one traffic pool (a server group) for a slot, as of the
+// policy's BaseSeq. With Main the group counts to the slot's main quota instead: the
+// node counts its traffic there and turns the slot away from it when the main quota is
+// out; Remaining then repeats QuotaRemaining for nodes that do not know Main.
 type PoolQuota struct {
 	Pool      string `json:"pool"`
 	Remaining int64  `json:"remaining"` // bytes; -1 = unlimited
+	Main      bool   `json:"main,omitempty"`
 }
 
 // TorrentBlock is the torrent blocker: the node looks at the first bytes a user sends
@@ -479,6 +561,31 @@ type TorrentHits struct {
 	Hits  []TorrentHit `json:"hits"`
 }
 
+// ServiceRegions is what the sites themselves make of the node's address (POST
+// /v1/regions): the country each one serves it, or whether it lets it in, over IPv4 and
+// IPv6 apart. Unlike a geo base, it is asked from the node, as its clients' apps come.
+type ServiceRegions struct {
+	At       time.Time       `json:"at"`
+	IPv4     string          `json:"ipv4,omitempty" doc:"Адрес ноды, как его видит Cloudflare"`
+	IPv6     string          `json:"ipv6,omitempty"`
+	Services []ServiceRegion `json:"services"`
+}
+
+// ServiceRegion is one site.
+type ServiceRegion struct {
+	Service string       `json:"service" doc:"google, google_search, youtube, youtube_premium, youtube_music, netflix, chatgpt, cloudflare, prime_video, deezer, apple, steam, playstation, tiktok, ookla, jetbrains, bing, reddit"`
+	Access  bool         `json:"access" doc:"Ответ — пускает ли сайт адрес (open), а не страна"`
+	V4      RegionAnswer `json:"v4"`
+	V6      RegionAnswer `json:"v6"`
+}
+
+// RegionAnswer is a country, or open for an access check, or the reason there is none.
+type RegionAnswer struct {
+	Country string `json:"country,omitempty"`
+	Open    *bool  `json:"open,omitempty"`
+	Error   string `json:"error,omitempty" enum:"unreachable,unknown,no_ip" doc:"unreachable — сайт не ответил, unknown — ответ не разобрать, no_ip — у ноды нет адреса этого семейства"`
+}
+
 // SpeedTest is the node's own way to the internet (POST /v1/speedtest): latency, jitter
 // and loss of small UDP DNS queries, then download and upload against a speed test
 // server. A test that broke off keeps what it measured and says where in Error.
@@ -491,3 +598,29 @@ type SpeedTest struct {
 	UpBps    int64     `json:"up_bps" doc:"Отдача, бит/с"`
 	Error    string    `json:"error,omitempty"`
 }
+
+// Diagnosis is a server's look at what it needs to work (POST /v1/diagnose on a node; the
+// panel runs the same on its own server): names, the internet, the places updates come
+// from, its clock, disk and memory. The targets are fixed: nothing in the request says
+// where to connect.
+type Diagnosis struct {
+	At    time.Time  `json:"at"`
+	Items []DiagItem `json:"items"`
+}
+
+// DiagItem is one check of a Diagnosis.
+type DiagItem struct {
+	ID     string            `json:"id" enum:"dns,internet,github,ghcr,clock,disk,memory"`
+	Status string            `json:"status" enum:"ok,warn,fail,skip"`
+	Code   string            `json:"code,omitempty" doc:"Почему не ok: timeout, refused, dns, tls, skew, low и другие"`
+	Params map[string]string `json:"params,omitempty"`
+	Detail string            `json:"detail,omitempty" doc:"Слова ошибки, без секретов"`
+}
+
+// The states of a check.
+const (
+	CheckOK   = "ok"
+	CheckWarn = "warn"
+	CheckFail = "fail"
+	CheckSkip = "skip"
+)

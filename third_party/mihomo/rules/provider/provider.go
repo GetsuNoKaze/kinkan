@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/metacubex/mihomo/common/pool"
@@ -18,6 +20,12 @@ import (
 )
 
 var tunnel P.Tunnel
+
+const (
+	maxIndexedProviderRules   = 1_000_000
+	maxIndexedProviderEntries = 2_000_000
+	maxClassicalProviderRules = 50_000
+)
 
 func SetTunnel(t P.Tunnel) {
 	tunnel = t
@@ -61,7 +69,20 @@ type mrsRuleStrategy interface {
 
 type baseProvider struct {
 	behavior P.RuleBehavior
-	strategy ruleStrategy
+	// strategy holds a strategyHolder. A refresh builds a new strategy and
+	// swaps it in whole, so routing goroutines always see a complete one.
+	strategy atomic.Value
+}
+
+type strategyHolder struct{ ruleStrategy }
+
+func (bp *baseProvider) getStrategy() ruleStrategy {
+	holder, _ := bp.strategy.Load().(strategyHolder)
+	return holder.ruleStrategy
+}
+
+func (bp *baseProvider) setStrategy(strategy ruleStrategy) {
+	bp.strategy.Store(strategyHolder{strategy})
 }
 
 func (bp *baseProvider) Type() P.ProviderType {
@@ -73,15 +94,19 @@ func (bp *baseProvider) Behavior() P.RuleBehavior {
 }
 
 func (bp *baseProvider) Count() int {
-	return bp.strategy.Count()
+	if strategy := bp.getStrategy(); strategy != nil {
+		return strategy.Count()
+	}
+	return 0
 }
 
 func (bp *baseProvider) Match(metadata *C.Metadata, helper C.RuleMatchHelper) bool {
-	return bp.strategy != nil && bp.strategy.Match(metadata, helper)
+	strategy := bp.getStrategy()
+	return strategy != nil && strategy.Match(metadata, helper)
 }
 
 func (bp *baseProvider) Strategy() any {
-	return bp.strategy
+	return bp.getStrategy()
 }
 
 type ruleSetProvider struct {
@@ -110,7 +135,7 @@ func (rp *ruleSetProvider) MarshalJSON() ([]byte, error) {
 			Behavior:    rp.behavior.String(),
 			Format:      rp.format.String(),
 			Name:        rp.Fetcher.Name(),
-			RuleCount:   rp.strategy.Count(),
+			RuleCount:   rp.Count(),
 			Type:        rp.Type().String(),
 			UpdatedAt:   rp.UpdatedAt(),
 			VehicleType: rp.VehicleType().String(),
@@ -122,7 +147,7 @@ func (rp *RuleSetProvider) Close() error {
 	return rp.ruleSetProvider.Close()
 }
 
-func NewRuleSetProvider(name string, behavior P.RuleBehavior, format P.RuleFormat, interval time.Duration, vehicle P.Vehicle, payload []string, bundleFile resource.BundleFile, parse common.ParseRuleFunc) P.RuleProvider {
+func NewRuleSetProvider(name string, behavior P.RuleBehavior, format P.RuleFormat, interval time.Duration, vehicle P.Vehicle, payload []string, bundleFile resource.BundleFile, parse common.ParseRuleFunc) (P.RuleProvider, error) {
 	rp := &ruleSetProvider{
 		baseProvider: baseProvider{
 			behavior: behavior,
@@ -131,24 +156,30 @@ func NewRuleSetProvider(name string, behavior P.RuleBehavior, format P.RuleForma
 	}
 
 	onUpdate := func(strategy ruleStrategy) {
-		rp.strategy = strategy
+		rp.setStrategy(strategy)
 		tunnel.RuleUpdateCallback().Emit(rp)
 	}
 
-	rp.strategy = newStrategy(behavior, parse)
+	strategy := newStrategy(behavior, parse)
 	if len(payload) > 0 { // using as fallback rules
-		rp.strategy = rulesParseInline(payload, rp.strategy)
+		var err error
+		strategy, err = rulesParseInline(payload, strategy)
+		if err != nil {
+			return nil, err
+		}
 	}
+	rp.setStrategy(strategy)
 	rp.Fetcher = resource.NewFetcher(name, interval, vehicle, bundleFile, func(bytes []byte) (ruleStrategy, error) {
 		return rulesParse(bytes, newStrategy(behavior, parse), format)
 	}, onUpdate)
+	rp.Fetcher.SetResourceType("rule")
 
 	wrapper := &RuleSetProvider{
 		rp,
 	}
 
 	runtime.SetFinalizer(wrapper, (*RuleSetProvider).Close)
-	return wrapper
+	return wrapper, nil
 }
 
 func newStrategy(behavior P.RuleBehavior, parse common.ParseRuleFunc) ruleStrategy {
@@ -173,6 +204,17 @@ var (
 )
 
 func rulesParse(buf []byte, strategy ruleStrategy, format P.RuleFormat) (ruleStrategy, error) {
+	return rulesParseWithLimit(buf, strategy, format, ruleLimit(strategy.Behavior()))
+}
+
+func ruleLimit(behavior P.RuleBehavior) int {
+	if behavior == P.Classical {
+		return maxClassicalProviderRules
+	}
+	return maxIndexedProviderRules
+}
+
+func rulesParseWithLimit(buf []byte, strategy ruleStrategy, format P.RuleFormat, limit int) (ruleStrategy, error) {
 	strategy.Reset()
 	if format == P.MrsRule {
 		return rulesMrsParse(buf, strategy)
@@ -259,6 +301,9 @@ func rulesParse(buf []byte, strategy ruleStrategy, format P.RuleFormat) (ruleStr
 		}
 
 		strategy.Insert(str)
+		if strategy.Count() > limit {
+			return nil, fmt.Errorf("rule provider exceeds the %d-rule limit for %s behavior", limit, strategy.Behavior())
+		}
 	}
 
 	strategy.FinishInsert()
@@ -266,15 +311,19 @@ func rulesParse(buf []byte, strategy ruleStrategy, format P.RuleFormat) (ruleStr
 	return strategy, nil
 }
 
-func rulesParseInline(rs []string, strategy ruleStrategy) ruleStrategy {
+func rulesParseInline(rs []string, strategy ruleStrategy) (ruleStrategy, error) {
 	strategy.Reset()
+	limit := ruleLimit(strategy.Behavior())
 	for _, r := range rs {
 		if r != "" {
 			strategy.Insert(r)
+			if strategy.Count() > limit {
+				return nil, fmt.Errorf("inline rule provider exceeds the %d-rule limit for %s behavior", limit, strategy.Behavior())
+			}
 		}
 	}
 	strategy.FinishInsert()
-	return strategy
+	return strategy, nil
 }
 
 type InlineProvider struct {
@@ -311,7 +360,7 @@ func (i *inlineProvider) MarshalJSON() ([]byte, error) {
 		providerForApi{
 			Behavior:    i.behavior.String(),
 			Name:        i.Name(),
-			RuleCount:   i.strategy.Count(),
+			RuleCount:   i.Count(),
 			Type:        i.Type().String(),
 			VehicleType: i.VehicleType().String(),
 			UpdatedAt:   i.updateAt,
@@ -319,22 +368,25 @@ func (i *inlineProvider) MarshalJSON() ([]byte, error) {
 		})
 }
 
-func NewInlineProvider(name string, behavior P.RuleBehavior, payload []string, parse common.ParseRuleFunc) P.RuleProvider {
+func NewInlineProvider(name string, behavior P.RuleBehavior, payload []string, parse common.ParseRuleFunc) (P.RuleProvider, error) {
 	ip := &inlineProvider{
 		baseProvider: baseProvider{
 			behavior: behavior,
-			strategy: newStrategy(behavior, parse),
 		},
 		payload:  payload,
 		name:     name,
 		updateAt: time.Now(),
 	}
-	ip.strategy = rulesParseInline(payload, ip.strategy)
+	strategy, err := rulesParseInline(payload, newStrategy(behavior, parse))
+	if err != nil {
+		return nil, err
+	}
+	ip.setStrategy(strategy)
 
 	wrapper := &InlineProvider{
 		ip,
 	}
 
 	//runtime.SetFinalizer(wrapper, (*InlineProvider).Close)
-	return wrapper
+	return wrapper, nil
 }

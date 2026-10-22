@@ -15,9 +15,11 @@ type Hysteria2RealmServerOption struct {
 	MaxRealms          int      `inbound:"max-realms,omitempty"`
 	MaxRealmsPerIP     int      `inbound:"max-realms-per-ip,omitempty"`
 	TrustedProxyHeader string   `inbound:"trusted-proxy-header,omitempty"`
+	TrustedProxies     []string `inbound:"trusted-proxies,omitempty"`
 	RealmNamePattern   string   `inbound:"realm-name-pattern,omitempty"`
 	Certificate        string   `inbound:"certificate,omitempty"`
 	PrivateKey         string   `inbound:"private-key,omitempty"`
+	AllowInsecure      bool     `inbound:"allow-insecure,omitempty"`
 	ClientAuthType     string   `inbound:"client-auth-type,omitempty"`
 	ClientAuthCert     string   `inbound:"client-auth-cert,omitempty"`
 	EchKey             string   `inbound:"ech-key,omitempty"`
@@ -45,7 +47,7 @@ type Hysteria2RealmServer struct {
 }
 
 func NewHysteria2RealmServer(options *Hysteria2RealmServerOption) (*Hysteria2RealmServer, error) {
-	base, err := NewBase(&options.BaseOption)
+	base, err := newStreamBase(&options.BaseOption)
 	if err != nil {
 		return nil, err
 	}
@@ -59,9 +61,11 @@ func NewHysteria2RealmServer(options *Hysteria2RealmServerOption) (*Hysteria2Rea
 			MaxRealms:          options.MaxRealms,
 			MaxRealmsPerIP:     options.MaxRealmsPerIP,
 			TrustedProxyHeader: options.TrustedProxyHeader,
+			TrustedProxies:     options.TrustedProxies,
 			RealmNamePattern:   options.RealmNamePattern,
 			Certificate:        options.Certificate,
 			PrivateKey:         options.PrivateKey,
+			AllowInsecure:      options.AllowInsecure,
 			ClientAuthType:     options.ClientAuthType,
 			ClientAuthCert:     options.ClientAuthCert,
 			EchKey:             options.EchKey,

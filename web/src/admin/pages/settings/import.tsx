@@ -1,13 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
-import { api, ApiError, errorText, unwrap, type Schemas } from "../../../api/client";
+import { useEffect, useState, type FormEvent } from "react";
+import { api, apiCodeText, errorText, unwrap, type Schemas } from "../../../api/client";
 import { useTariffs } from "../../../api/hooks";
-import { FormActions } from "../../../components/layout";
+import { CardHead, FormActions } from "../../../components/layout";
 import { useToast } from "../../../components/toast";
 import { Button, Field } from "../../../components/ui";
-import { t, tMaybe, type Key } from "../../../i18n";
+import { t, type Key } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
-import { fieldErrors } from "../../../lib/fields";
+import { fieldErrors, onFormError } from "../../../lib/fields";
 
 type Kind = "marzban" | "pasarguard" | "remnawave";
 const KINDS: Kind[] = ["marzban", "pasarguard", "remnawave"];
@@ -24,21 +24,19 @@ export function ImportCard() {
   const [tariff, setTariff] = useState<number | "">("");
   const job = useQuery({
     queryKey: ["import-status"],
-    queryFn: () => unwrap(api.GET("/api/v1/import/status", {})),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/import/status", { signal })),
     refetchInterval: (q) => (busy(q.state.data?.state) ? 1000 : false),
   });
   const st = job.data;
   const running = busy(st?.state);
   // Once an import is over the credentials are not kept, and lists of users are refreshed.
-  const [seen, setSeen] = useState<string | undefined>(undefined);
-  if (st?.finished && st.finished !== seen) {
-    setSeen(st.finished);
-    if (st.mode === "import") {
+  useEffect(() => {
+    if (st?.finished && st.mode === "import") {
       setSrc((s) => ({ ...s, password: "", token: "" }));
       void qc.invalidateQueries({ queryKey: ["users"] });
       void qc.invalidateQueries({ queryKey: ["legacy-links"] });
     }
-  }
+  }, [st?.finished, st?.mode, qc]);
   const body = () => ({ kind: src.kind, url: src.url.trim(), username: src.username.trim(), password: src.password, token: src.token.trim() });
   const started = (s: Schemas["JobState"]) => qc.setQueryData(["import-status"], s);
   const check = useMutation({ mutationFn: () => unwrap(api.POST("/api/v1/import/preview", { body: body() })), onSuccess: started, onError: (e) => toast.error(errorText(e)) });
@@ -50,7 +48,7 @@ export function ImportCard() {
     },
     onError: (e) => toast.error(errorText(e)),
   });
-  const cancel = useMutation({ mutationFn: () => unwrap(api.DELETE("/api/v1/import", {})), onSuccess: () => void job.refetch() });
+  const cancel = useMutation({ mutationFn: () => unwrap(api.DELETE("/api/v1/import", {})), onSuccess: () => void job.refetch(), onError: (e) => toast.error(errorText(e)) });
   const errors = fieldErrors(run.error);
   const set = (k: keyof typeof src) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setSrc((s) => ({ ...s, [k]: e.target.value }));
   const submit = (e: FormEvent) => {
@@ -63,12 +61,7 @@ export function ImportCard() {
   return (
     <section className="card glass reveal" style={{ "--i": 1 } as React.CSSProperties}>
       <form onSubmit={submit} noValidate>
-        <div className="card-head">
-          <div>
-            <h2 className="card-title">{t("settings.import.title")}</h2>
-            <div className="card-sub">{t("settings.import.sub")}</div>
-          </div>
-        </div>
+        <CardHead title={t("settings.import.title")} sub={t("settings.import.sub")} />
         <Field label={t("settings.import.kind")} htmlFor="imp-kind">
           <select id="imp-kind" className="input" value={src.kind} onChange={set("kind")} disabled={running}>
             {KINDS.map((k) => (
@@ -106,7 +99,7 @@ export function ImportCard() {
         ) : (
           <FormActions saving={check.isPending} disabled={!src.url.trim()} label={t("settings.import.check")} />
         )}
-        {st?.state === "failed" ? <div className="banner err mt-3">{t("settings.import.failed", { error: tMaybe(`errors.api.${st.error}`) ?? st.error ?? "" })}</div> : null}
+        {st?.state === "failed" ? <div className="banner err mt-3" role="alert">{t("settings.import.failed", { error: apiCodeText(st.error ?? "") })}</div> : null}
         {preview ? (
           <div className="panel-soft mt-3 p-3 text-[13px]">
             <div className="font-medium">{t("settings.import.found", { total: preview.total, n: preview.new })}</div>
@@ -165,7 +158,7 @@ function Names({ label, list, bad }: { label: Key; list: { names: string[]; coun
 export function LegacyLinksCard() {
   const qc = useQueryClient();
   const toast = useToast();
-  const q = useQuery({ queryKey: ["legacy-links"], queryFn: () => unwrap(api.GET("/api/v1/import/legacy", {})) });
+  const q = useQuery({ queryKey: ["legacy-links"], queryFn: ({ signal }) => unwrap(api.GET("/api/v1/import/legacy", { signal })) });
   const v = q.data;
   const { draft, setDraft, dirty, reset } = useDraft({ path: v?.path ?? "", kind: (v?.kind || "") as Kind | "" });
   const [secret, setSecret] = useState("");
@@ -177,7 +170,7 @@ export function LegacyLinksCard() {
       toast.ok(t("settings.import.legacySaved"));
     },
     onError: (e) => {
-      if (!(e instanceof ApiError && Object.keys(e.fields).length)) toast.error(errorText(e));
+      onFormError(e, toast);
     },
   });
   const errors = fieldErrors(save.error);
@@ -192,12 +185,7 @@ export function LegacyLinksCard() {
           save.mutate({ path: draft.path.trim(), kind: draft.kind, ...(signed && secret ? { secret } : {}) });
         }}
       >
-      <div className="card-head">
-        <div>
-          <h2 className="card-title">{t("settings.import.legacy")}</h2>
-          <div className="card-sub">{t("settings.import.legacySub")}</div>
-        </div>
-      </div>
+      <CardHead title={t("settings.import.legacy")} sub={t("settings.import.legacySub")} />
       <Field label={t("settings.import.legacyKind")} htmlFor="leg-kind">
         <select id="leg-kind" className="input" value={draft.kind} onChange={(e) => setDraft((d) => ({ ...d, kind: e.target.value as Kind | "", path: d.path || (e.target.value ? OLD_PATH[e.target.value as Kind] : "") }))}>
           <option value="">—</option>

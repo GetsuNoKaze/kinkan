@@ -1,18 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, Copy, KeyRound, LogOut, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../../api/client";
 import { meQuery, qk } from "../../../api/hooks";
-import { FormActions } from "../../../components/layout";
+import { CardHead, FormActions } from "../../../components/layout";
 import { Confirm } from "../../../components/overlay";
 import { QueryBoundary } from "../../../components/query";
 import { useToast } from "../../../components/toast";
-import { Button, Field, Pill, QR, Skeleton } from "../../../components/ui";
-import { getLocale, t, tMaybe } from "../../../i18n";
+import { Button, Field, QR, Segmented, Skeleton } from "../../../components/ui";
+import { caName, certLine, CertPill, CertStatusBlock } from "../../../components/acme";
+import { t } from "../../../i18n";
 import { useCopy } from "../../../lib/copy";
-import { CertDrawer, certUntil, type CertInfo } from "../../../components/cert-drawer";
-import { fieldErrors } from "../../../lib/fields";
+import { fieldErrors, onFormError } from "../../../lib/fields";
 import { ago } from "../../../lib/format";
 
 export function AccessCard({ s }: { s: Schemas["SettingsView"] }) {
@@ -30,12 +30,7 @@ export function AccessCard({ s }: { s: Schemas["SettingsView"] }) {
   const copy = () => copyText(s.admin_url, t("settings.adminLinkCopied"));
   return (
     <section className="card glass reveal" style={{ "--i": 1 } as React.CSSProperties}>
-      <div className="card-head">
-        <div>
-          <h2 className="card-title">{t("settings.adminLink")}</h2>
-          <div className="card-sub">{t("settings.adminLinkSub")}</div>
-        </div>
-      </div>
+      <CardHead title={t("settings.adminLink")} sub={t("settings.adminLinkSub")} />
       <div className="link-field">
         <span className="mono">{s.admin_url || t("settings.noHost")}</span>
         <button type="button" className="icon-btn" onClick={copy} aria-label={t("settings.copyAdminLink")}>
@@ -62,67 +57,118 @@ export function AccessCard({ s }: { s: Schemas["SettingsView"] }) {
   );
 }
 
+type CA = Schemas["SettingsView"]["acme_ca"];
+
 export function CertificateCard({ s }: { s: Schemas["SettingsView"] }) {
-  const qc = useQueryClient();
-  const toast = useToast();
   const c = s.certificate;
-  const renew = useMutation({
-    mutationFn: () => unwrap(api.POST("/api/v1/settings/certificate/renew")),
-    onSuccess: () => {
-      toast.ok(t("settings.certRequested"));
-      window.setTimeout(() => void qc.invalidateQueries({ queryKey: qk.settings }), 15_000);
-    },
-    onError: (e) => toast.error(errorText(e)),
-  });
-  const [own, setOwn] = useState(false);
+  const [caFocus, setCaFocus] = useState(0);
   const custom = c.kind === "custom";
-  const ok = c.kind === "letsencrypt" || custom;
-  const until = new Date(c.not_after).toLocaleString(getLocale(), { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
-  const sub = custom ? t("settings.certCustom", { names: (c.names ?? []).join(", "), until: certUntil(c.not_after) }) : ok ? t("settings.certLe", { id: c.identifier, until }) : t("settings.certSelf");
-  // The own certificate as the drawer shows it; a broken one is shown by its error.
-  const current: CertInfo | null = custom ? { names: c.names, issuer: c.issuer, not_after: c.not_after, trusted: c.trusted } : c.error?.startsWith("custom_") ? { error: c.error } : null;
+  const switching = c.kind === "acme" && !!c.ca && c.ca !== c.ca_wanted;
   return (
     <section className="card glass reveal" style={{ "--i": 2 } as React.CSSProperties}>
-      <div className="card-head">
-        <div>
-          <h2 className="card-title">{t("settings.cert")}</h2>
-          <div className="card-sub">{sub}</div>
-        </div>
-        {custom ? <Pill tone="ok">{t("settings.certOwn")}</Pill> : ok ? <Pill tone="ok">{t("settings.certValid")}</Pill> : <Pill tone="warn">{t("settings.certTemp")}</Pill>}
-      </div>
-      {c.error ? (
-        <p className="mb-3 text-[13px] text-[var(--berry-600)]" role="alert">
-          {tMaybe(`errors.acme.${c.error}`) ?? c.error}
-        </p>
-      ) : null}
-      <p className="mb-3 text-xs text-[var(--ink-500)]">{custom ? t("settings.certOwnNote") : t("settings.certNote")}</p>
-      <div className="flex flex-wrap gap-2">
-        {!custom ? (
-          <Button size="sm" loading={renew.isPending} onClick={() => renew.mutate()}>
-            {t("settings.certRenew")}
-          </Button>
-        ) : null}
-        <Button size="sm" onClick={() => setOwn(true)}>
-          <ShieldCheck size={16} aria-hidden /> {custom ? t("settings.certReplace") : t("settings.certOwnButton")}
-        </Button>
-      </div>
-      <CertDrawer
-        open={own}
-        onClose={() => setOwn(false)}
-        title={t("cert.panelTitle")}
-        lead={t("cert.panelLead")}
-        current={current}
-        save={(cert, key) => unwrap(api.PUT("/api/v1/settings/certificate", { body: { cert, key } })).then((v) => qc.setQueryData(qk.settings, v))}
-        clear={() =>
-          unwrap(api.DELETE("/api/v1/settings/certificate")).then(() => {
-            void qc.invalidateQueries({ queryKey: qk.settings });
-            window.setTimeout(() => void qc.invalidateQueries({ queryKey: qk.settings }), 15_000);
-          })
-        }
-        clearLabel={t("cert.panelClear")}
-        clearText={t("cert.panelClearText")}
+      <CardHead title={t("settings.cert")} sub={certLine(c, t("settings.certSelf"))} aside={<CertPill c={c} pending={t("settings.certTemp")} />} />
+      <CertStatusBlock
+        c={c}
+        field="certificate"
+        renew={() => unwrap(api.POST("/api/v1/settings/certificate/renew"))}
+        save={(cert, key) => unwrap(api.PUT("/api/v1/settings/certificate", { body: { cert, key } }))}
+        clear={() => unwrap(api.DELETE("/api/v1/settings/certificate"))}
+        drawer={{ title: t("cert.panelTitle"), lead: t("cert.panelLead"), clearLabel: t("cert.panelClear"), clearText: t("cert.panelClearText") }}
+        note={custom ? t("settings.certOwnNote") : t("settings.certNote")}
+        switching={switching ? t("certs.switching", { ca: caName(c.ca_wanted) }) : undefined}
+        // Without the panel's public address there is nothing to order a certificate for.
+        canRenew={c.error !== "no_public_host"}
+        onUseZeroSSL={() => setCaFocus((n) => n + 1)}
       />
+      <AuthorityForm s={s} focus={caFocus} />
     </section>
+  );
+}
+
+/**
+ * Who issues the panel's and the nodes' certificates. ZeroSSL takes an e-mail (its API gives
+ * the account's key for it), Google an EAB key made in Google Cloud. `focus` moves when the
+ * check's "Switch to ZeroSSL" is pressed: ZeroSSL is picked and the e-mail field focused.
+ */
+function AuthorityForm({ s, focus }: { s: Schemas["SettingsView"]; focus: number }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [ca, setCa] = useState<CA>(s.acme_ca);
+  const [email, setEmail] = useState(s.acme_email);
+  const [kid, setKid] = useState(s.acme_eab_kid);
+  const [hmac, setHmac] = useState("");
+  const emailRef = useRef<HTMLInputElement>(null);
+  const [seen, setSeen] = useState(focus);
+  if (focus !== seen) {
+    setSeen(focus);
+    setCa("zerossl");
+  }
+  useEffect(() => {
+    if (focus > 0) emailRef.current?.focus();
+  }, [focus]);
+  const save = useMutation({
+    mutationFn: () =>
+      unwrap(
+        api.PATCH("/api/v1/settings", {
+          body: { acme_ca: ca, acme_email: email.trim(), ...(ca === "google" ? { acme_eab_kid: kid.trim(), ...(hmac.trim() ? { acme_eab_hmac: hmac.trim() } : {}) } : {}) },
+        }),
+      ),
+    onSuccess: (v) => {
+      qc.setQueryData(qk.settings, v);
+      setHmac("");
+      toast.ok(t("certs.saved"));
+      // The panel's order runs in the background: the card follows it.
+      window.setTimeout(() => void qc.invalidateQueries({ queryKey: qk.settings }), 15_000);
+    },
+    onError: (e) => {
+      onFormError(e, toast);
+    },
+  });
+  const errors = fieldErrors(save.error);
+  const dirty = ca !== s.acme_ca || email.trim() !== s.acme_email || (ca === "google" && (kid.trim() !== s.acme_eab_kid || hmac.trim() !== ""));
+  const host = s.domain || s.public_host;
+  const ipOnly = !s.domain && !!s.public_host;
+  return (
+    <form
+      className="mt-5 border-t border-[var(--hairline)] pt-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (dirty) save.mutate();
+      }}
+      noValidate
+    >
+      <Field label={t("certs.ca")} hint={t("certs.caHint")}>
+        <Segmented<CA>
+          value={ca}
+          onChange={setCa}
+          label={t("certs.ca")}
+          options={[
+            { value: "letsencrypt", label: t("certs.caLetsencrypt") },
+            { value: "zerossl", label: t("certs.caZerossl") },
+            { value: "google", label: t("certs.caGoogle") },
+          ]}
+        />
+      </Field>
+      {ipOnly ? (
+        <p className="mb-4 text-xs text-[var(--ink-500)]">{t("certs.ipOnlyLe")}</p>
+      ) : ca === "letsencrypt" && host ? (
+        <p className="mb-4 text-xs text-[var(--ink-500)]">{t("certs.oldAndroid")}</p>
+      ) : null}
+      <Field label={t("certs.email")} htmlFor="acme-email" hint={ca === "zerossl" ? t("certs.emailHint") : t("certs.emailOptional")} error={errors.acme_email}>
+        <input id="acme-email" ref={emailRef} type="email" className="input max-w-[360px]" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required={ca === "zerossl"} />
+      </Field>
+      {ca === "google" ? (
+        <>
+          <Field label={t("certs.eabKid")} htmlFor="acme-kid" error={errors.acme_eab_kid}>
+            <input id="acme-kid" className="input mono max-w-[360px]" autoComplete="off" spellCheck={false} value={kid} onChange={(e) => setKid(e.target.value)} />
+          </Field>
+          <Field label={t("certs.eabHmac")} htmlFor="acme-hmac" hint={s.acme_eab_hmac_set ? t("certs.eabSaved") : t("certs.eabHint")} error={errors.acme_eab_hmac}>
+            <input id="acme-hmac" type="password" className="input mono max-w-[360px]" autoComplete="off" spellCheck={false} value={hmac} onChange={(e) => setHmac(e.target.value)} />
+          </Field>
+        </>
+      ) : null}
+      <FormActions saving={save.isPending} disabled={!dirty} label={t("certs.save")} />
+    </form>
   );
 }
 
@@ -137,6 +183,9 @@ export function PasswordCard() {
       setCurrent("");
       setNext("");
       toast.ok(t("settings.passwordChanged"));
+    },
+    onError: (e) => {
+      onFormError(e, toast);
     },
   });
   const errors = fieldErrors(change.error);
@@ -210,13 +259,7 @@ export function TwoFactorCard() {
 
   return (
     <section className="card glass reveal" style={{ "--i": 3 } as React.CSSProperties}>
-      <div className="card-head">
-        <div>
-          <h2 className="card-title">{t("settings.twoFactor")}</h2>
-          <div className="card-sub">{enabled ? t("settings.twoFactorOn") : t("settings.twoFactorOff")}</div>
-        </div>
-        <ShieldCheck size={20} className={enabled ? "text-[var(--leaf-500)]" : "text-[var(--ink-300)]"} aria-hidden />
-      </div>
+      <CardHead title={t("settings.twoFactor")} sub={enabled ? t("settings.twoFactorOn") : t("settings.twoFactorOff")} aside={<ShieldCheck size={20} className={enabled ? "text-[var(--leaf-500)]" : "text-[var(--ink-300)]"} aria-hidden />} />
       {codes ? (
         <div>
           <p className="mb-3 text-[13px] text-[var(--ink-600)]">{t("settings.recoveryText")}</p>
@@ -317,12 +360,7 @@ export function SessionsCard() {
   });
   return (
     <section className="card glass reveal" style={{ "--i": 4 } as React.CSSProperties}>
-      <div className="card-head">
-        <div>
-          <h2 className="card-title">{t("settings.sessions")}</h2>
-          <div className="card-sub">{t("settings.sessionsSub")}</div>
-        </div>
-      </div>
+      <CardHead title={t("settings.sessions")} sub={t("settings.sessionsSub")} />
       <QueryBoundary query={sessions} pending={<Skeleton style={{ height: 80 }} />}>
         {(list) => (
           <ul className="row-list">
@@ -358,15 +396,13 @@ function browserName(ua: string): string {
 export function ApiCard() {
   return (
     <section className="card glass reveal" style={{ "--i": 5 } as React.CSSProperties}>
-      <div className="card-head">
-        <div>
-          <h2 className="card-title">{t("settings.api")}</h2>
-          <div className="card-sub">{t("settings.apiSub")}</div>
-        </div>
-        <Link to="/settings/api" className="btn btn-glass btn-sm">
+      <CardHead
+        title={t("settings.api")}
+        sub={t("settings.apiSub")}
+        aside={<Link to="/settings/api" className="btn btn-glass btn-sm">
           {t("settings.apiOpen")} <ChevronRight size={16} aria-hidden />
-        </Link>
-      </div>
+        </Link>}
+      />
     </section>
   );
 }

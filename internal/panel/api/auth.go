@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +13,7 @@ import (
 
 	"mikan/internal/panel/auth"
 	"mikan/internal/panel/secure"
+	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 )
 
@@ -31,10 +31,7 @@ type MeBody struct {
 
 func viewAdmin(a db.Admin) AdminView {
 	v := AdminView{ID: a.ID, Username: a.Username, TOTPEnabled: a.TotpSecret.Valid}
-	if a.LastLoginAt.Valid {
-		t := time.Unix(a.LastLoginAt.Int64, 0).UTC()
-		v.LastLoginAt = &t
-	}
+	v.LastLoginAt = store.TimePtr(a.LastLoginAt)
 	return v
 }
 
@@ -61,7 +58,8 @@ type logoutOutput struct {
 
 type passwordInput struct {
 	Body struct {
-		Current    string `json:"current" minLength:"1" maxLength:"256"`
+		Current string `json:"current" minLength:"1" maxLength:"256"`
+		// A struct tag takes no constant: minLength repeats auth.MinPassword (TestPasswordTagIsMinPassword).
 		New        string `json:"new" minLength:"12" maxLength:"256" doc:"Не короче 12 символов"`
 		RevokeKeys *bool  `json:"revoke_keys,omitempty" doc:"Отозвать и ключи API (по умолчанию да): другие сессии завершаются при смене пароля, ключ, выпущенный из угнанной сессии, пережил бы это"`
 	}
@@ -152,21 +150,6 @@ func tooManyAttempts(wait time.Duration) error {
 	return huma.ErrorWithHeaders(huma.Error429TooManyRequests("rate_limited"), http.Header{"Retry-After": {strconv.Itoa(secs)}})
 }
 
-// limitIP is what the limiters count an address as: one client of IPv6 owns a whole /64,
-// so counting single addresses would give an attacker 2^64 fresh allowances.
-func limitIP(ip string) string {
-	a, err := netip.ParseAddr(ip)
-	if err != nil {
-		return ip
-	}
-	if a = a.Unmap(); a.Is6() {
-		if p, err := a.Prefix(64); err == nil {
-			return p.String()
-		}
-	}
-	return a.String()
-}
-
 // verifyPassword runs the password hash. Each run takes 64 MiB: only a few at a time, so
 // a burst of logins queues instead of exhausting the server's memory.
 func (h *handlers) verifyPassword(ctx context.Context, password, hash string) (bool, error) {
@@ -183,7 +166,7 @@ func (h *handlers) login(ctx context.Context, in *loginInput) (*loginOutput, err
 	c := clientOf(ctx)
 	now := h.d.Now()
 	username := strings.ToLower(strings.TrimSpace(in.Body.Username))
-	ipKey, userKey := "ip:"+limitIP(c.IP), "user:"+username
+	ipKey, userKey := "ip:"+auth.ClientKey(c.IP), "user:"+username
 	// The attempt is counted before the password is hashed: parallel requests all passed a
 	// check made first and counted after, each getting its own free guess.
 	okIP, waitIP, blockedIP := h.d.IPLimit.Reserve(ipKey, now)
@@ -274,20 +257,32 @@ func (h *handlers) spendRecoveryCode(ctx context.Context, admin db.Admin, code s
 // count against the admin's own allowance, so the password cannot be guessed through a
 // session.
 func (h *handlers) reauth(ctx context.Context, admin db.Admin, password, code string) error {
+	return h.guarded(admin, func(now time.Time) error {
+		ok, err := h.verifyPassword(ctx, password, admin.PasswordHash)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fieldErr("body.password", "wrong_password")
+		}
+		if admin.TotpSecret.Valid && !h.d.TOTP.Validate(admin.ID, admin.TotpSecret.String, code, now) {
+			return fieldErr("body.totp", "invalid_totp")
+		}
+		return nil
+	})
+}
+
+// guarded runs a check of the admin's password (and code) against the admin's own
+// allowance: every attempt counts, a right one clears it. Changing the password and
+// turning 2FA off ask for the password too, so they go through it as well.
+func (h *handlers) guarded(admin db.Admin, check func(now time.Time) error) error {
 	now := h.d.Now()
 	key := "reauth:" + strconv.FormatInt(admin.ID, 10)
 	if ok, wait, _ := h.d.UserLimit.Reserve(key, now); !ok {
 		return tooManyAttempts(wait)
 	}
-	ok, err := h.verifyPassword(ctx, password, admin.PasswordHash)
-	if err != nil {
+	if err := check(now); err != nil {
 		return err
-	}
-	if !ok {
-		return huma.Error422UnprocessableEntity("wrong_password", &huma.ErrorDetail{Location: "body.password", Message: "wrong_password"})
-	}
-	if admin.TotpSecret.Valid && !h.d.TOTP.Validate(admin.ID, admin.TotpSecret.String, code, now) {
-		return huma.Error422UnprocessableEntity("invalid_totp", &huma.ErrorDetail{Location: "body.totp", Message: "invalid_totp"})
 	}
 	h.d.UserLimit.Reset(key)
 	return nil
@@ -317,12 +312,14 @@ func (h *handlers) changePassword(ctx context.Context, in *passwordInput) (*stru
 	if err != nil {
 		return nil, err
 	}
-	ok, err := h.verifyPassword(ctx, in.Body.Current, admin.PasswordHash)
-	if err != nil {
+	if err := h.guarded(admin, func(time.Time) error {
+		ok, err := h.verifyPassword(ctx, in.Body.Current, admin.PasswordHash)
+		if err == nil && !ok {
+			err = fieldErr("body.current", "wrong_password")
+		}
+		return err
+	}); err != nil {
 		return nil, err
-	}
-	if !ok {
-		return nil, huma.Error422UnprocessableEntity("wrong_password", &huma.ErrorDetail{Location: "body.current", Message: "wrong_password"})
 	}
 	hash, err := auth.HashPassword(in.Body.New)
 	if err != nil {
@@ -387,7 +384,7 @@ func (h *handlers) totpEnable(ctx context.Context, in *totpCodeInput) (*recovery
 		return nil, huma.Error409Conflict("totp_setup_expired")
 	}
 	if !h.d.TOTP.Validate(sess.AdminID, p.secret, in.Body.Code, now) {
-		return nil, huma.Error422UnprocessableEntity("invalid_totp", &huma.ErrorDetail{Location: "body.code", Message: "invalid_totp"})
+		return nil, fieldErr("body.code", "invalid_totp")
 	}
 	plain, stored := auth.NewRecoveryCodes(10)
 	if err := h.d.Store.Q.SetAdminTOTP(ctx, db.SetAdminTOTPParams{
@@ -415,12 +412,17 @@ func (h *handlers) totpDisable(ctx context.Context, in *totpDisableInput) (*stru
 	if !admin.TotpSecret.Valid {
 		return nil, nil
 	}
-	ok, err := h.verifyPassword(ctx, in.Body.Password, admin.PasswordHash)
-	if err != nil {
+	if err := h.guarded(admin, func(now time.Time) error {
+		ok, err := h.verifyPassword(ctx, in.Body.Password, admin.PasswordHash)
+		if err != nil {
+			return err
+		}
+		if !ok || !h.d.TOTP.Validate(admin.ID, admin.TotpSecret.String, in.Body.Code, now) {
+			return fieldErr("body", "invalid_password_or_code")
+		}
+		return nil
+	}); err != nil {
 		return nil, err
-	}
-	if !ok || !h.d.TOTP.Validate(admin.ID, admin.TotpSecret.String, in.Body.Code, h.d.Now()) {
-		return nil, huma.Error422UnprocessableEntity("invalid_credentials", &huma.ErrorDetail{Location: "body", Message: "invalid_password_or_code"})
 	}
 	if err := h.d.Store.Q.SetAdminTOTP(ctx, db.SetAdminTOTPParams{ID: admin.ID}); err != nil {
 		return nil, err
@@ -439,7 +441,7 @@ func (h *handlers) listSessions(ctx context.Context, _ *struct{}) (*sessionsOutp
 	for _, s := range rows {
 		out.Body = append(out.Body, SessionView{
 			ID: s.IDHash, Current: s.IDHash == cur.IDHash, IP: s.Ip, UserAgent: s.UserAgent,
-			CreatedAt: time.Unix(s.CreatedAt, 0).UTC(), LastSeenAt: time.Unix(s.LastSeenAt, 0).UTC(),
+			CreatedAt: store.Time(s.CreatedAt), LastSeenAt: store.Time(s.LastSeenAt),
 		})
 	}
 	return out, nil

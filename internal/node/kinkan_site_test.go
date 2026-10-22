@@ -45,7 +45,7 @@ func packedSite(t *testing.T, title string) (*site.Site, []byte) {
 	return s, a
 }
 
-func freePort(t *testing.T) int {
+func kinkanFreePort(t *testing.T) int {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -84,7 +84,7 @@ func TestPutSiteChecksTheArchive(t *testing.T) {
 func TestSiteServing(t *testing.T) {
 	e := testEngine(t)
 	s, archive := packedSite(t, "Night")
-	port := freePort(t)
+	port := kinkanFreePort(t)
 	st := nodeapi.DesiredState{Site: &nodeapi.SiteState{Hash: s.Hash, HTTPPort: port}}
 
 	if !e.applySite(st) {
@@ -187,7 +187,7 @@ func TestSiteServingTLS(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := nodeapi.DesiredState{TLS: &nodeapi.TLSFiles{CertPEM: pair.CertPEM, KeyPEM: pair.KeyPEM},
-		Site: &nodeapi.SiteState{Hash: s.Hash, HTTPPort: freePort(t), HTTPSPort: freePort(t)}}
+		Site: &nodeapi.SiteState{Hash: s.Hash, HTTPPort: kinkanFreePort(t), HTTPSPort: kinkanFreePort(t)}}
 	if e.applySite(st) {
 		t.Fatal("missing")
 	}
@@ -246,7 +246,7 @@ func TestSiteHeaderLimitLikeCaddy(t *testing.T) {
 	if err := e.PutSite(s.Hash, archive); err != nil {
 		t.Fatal(err)
 	}
-	e.applySite(nodeapi.DesiredState{TLS: &nodeapi.TLSFiles{CertPEM: pair.CertPEM, KeyPEM: pair.KeyPEM}, Site: &nodeapi.SiteState{Hash: s.Hash, HTTPPort: freePort(t), HTTPSPort: freePort(t)}})
+	e.applySite(nodeapi.DesiredState{TLS: &nodeapi.TLSFiles{CertPEM: pair.CertPEM, KeyPEM: pair.KeyPEM}, Site: &nodeapi.SiteState{Hash: s.Hash, HTTPPort: kinkanFreePort(t), HTTPSPort: kinkanFreePort(t)}})
 	defer e.stopSite()
 	conn, err := tls.Dial("tcp", e.siteStatus().HTTPS, &tls.Config{InsecureSkipVerify: true, NextProtos: []string{"h2"}})
 	if err != nil {
@@ -275,4 +275,23 @@ func TestSiteHeaderLimitLikeCaddy(t *testing.T) {
 		}
 	}
 	t.Fatal("no MAX_HEADER_LIST_SIZE in SETTINGS")
+}
+
+// The node's check of a target dials its own site on loopback (Kinkan): before, the check
+// was allowed but could not connect, so autotune took a working site for a dead one and
+// moved REALITY to a neighbour.
+func TestTargetOptionsDialTheSite(t *testing.T) {
+	e := testEngine(t)
+	if o := e.TargetOptions(); o.SitePort != 0 {
+		t.Fatalf("no site: SitePort %d", o.SitePort)
+	}
+	e.mu.Lock()
+	e.applied.Site = &nodeapi.SiteState{HTTPSPort: 17443}
+	e.mu.Unlock()
+	if o := e.TargetOptions(); o.SitePort != 17443 {
+		t.Fatalf("SitePort %d, want 17443", o.SitePort)
+	}
+	if !e.TargetAllowed("127.0.0.1:17443") {
+		t.Fatal("the site is not an allowed target")
+	}
 }

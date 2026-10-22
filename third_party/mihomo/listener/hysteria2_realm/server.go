@@ -2,13 +2,16 @@ package hysteria2_realm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/metacubex/mihomo/adapter/inbound"
+	"github.com/metacubex/mihomo/common/httputils"
 	"github.com/metacubex/mihomo/component/ca"
 	"github.com/metacubex/mihomo/component/ech"
 	C "github.com/metacubex/mihomo/constant"
@@ -24,6 +27,7 @@ type Listener struct {
 	closed    bool
 	config    LC.Hysteria2RealmServer
 	listeners []net.Listener
+	servers   []*http.Server
 	server    *server
 	cancel    func()
 }
@@ -37,6 +41,27 @@ const (
 func DefaultALPN() []string { return []string{"h2", "http/1.1"} }
 
 func New(config LC.Hysteria2RealmServer, lc C.InboundListenConfig, tunnel C.Tunnel, additions ...inbound.Addition) (*Listener, error) {
+	hasCertificate := config.Certificate != ""
+	hasPrivateKey := config.PrivateKey != ""
+	if hasCertificate != hasPrivateKey {
+		return nil, errors.New("hysteria2-realm certificate and private-key must be configured together")
+	}
+	if !hasCertificate {
+		if !config.AllowInsecure {
+			return nil, errors.New("hysteria2-realm TLS is required; set allow-insecure: true only for an explicitly trusted loopback proxy")
+		}
+		for _, addr := range strings.Split(config.Listen, ",") {
+			host, _, err := net.SplitHostPort(strings.TrimSpace(addr))
+			if err != nil {
+				return nil, fmt.Errorf("invalid hysteria2-realm listen address %q: %w", addr, err)
+			}
+			ip, err := netip.ParseAddr(host)
+			if !strings.EqualFold(host, "localhost") && (err != nil || !ip.Unmap().IsLoopback()) {
+				return nil, fmt.Errorf("hysteria2-realm plaintext is restricted to loopback, got %q", addr)
+			}
+		}
+		log.Warnln("[RealmServer] %s: allow-insecure explicitly enables plaintext bearer tokens on loopback", config.Listen)
+	}
 	if len(additions) == 0 {
 		additions = []inbound.Addition{
 			inbound.WithInName("DEFAULT-HYSTERIA2-REALM"),
@@ -48,16 +73,26 @@ func New(config LC.Hysteria2RealmServer, lc C.InboundListenConfig, tunnel C.Tunn
 	if err != nil {
 		return nil, fmt.Errorf("invalid realm name pattern %q: %v", config.RealmNamePattern, err)
 	}
+	// The header is believed only from trusted-proxies, as on the vless and
+	// trojan listeners: from anybody else it is a free choice of the client
+	// and would let it dodge the per-IP realm limit.
+	realIP, err := httputils.NewRealIP(config.TrustedProxyHeader, config.TrustedProxies, false)
+	if err != nil {
+		return nil, err
+	}
+	if realIP.Header != "" && len(realIP.Trusted) == 0 {
+		log.Warnln("[RealmServer] %s: trusted-proxy-header %q is ignored without trusted-proxies; set them to the addresses of the reverse proxies", config.Listen, realIP.Header)
+	}
 	s := newServer(serverConfig{
 		realmToken:     config.Token,
 		maxRealms:      config.MaxRealms,
 		maxRealmsPerIP: config.MaxRealmsPerIP,
-		proxyHeader:    config.TrustedProxyHeader,
+		realIP:         realIP,
 		realmIDPattern: pat,
 	})
 
-	tlsConfig := &tls.Config{Time: ntp.Now}
-	if config.Certificate != "" && config.PrivateKey != "" {
+	tlsConfig := &tls.Config{Time: ntp.Now, MinVersion: tls.VersionTLS12}
+	if hasCertificate {
 		certLoader, err := ca.NewTLSKeyPairLoader(config.Certificate, config.PrivateKey)
 		if err != nil {
 			return nil, err
@@ -107,6 +142,7 @@ func New(config LC.Hysteria2RealmServer, lc C.InboundListenConfig, tunnel C.Tunn
 			ReadHeaderTimeout: 10 * time.Second,
 		}
 
+		sl.servers = append(sl.servers, srv)
 		go srv.Serve(l)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -119,9 +155,17 @@ func New(config LC.Hysteria2RealmServer, lc C.InboundListenConfig, tunnel C.Tunn
 func (l *Listener) Close() error {
 	l.closed = true
 	var retErr error
+	// Close the servers too: closing the listeners alone leaves the
+	// accepted connections (events streams, keep-alive) running.
+	for _, srv := range l.servers {
+		if err := srv.Close(); err != nil {
+			retErr = err
+		}
+	}
 	for _, lis := range l.listeners {
+		// srv.Close has closed the listeners it serves already.
 		err := lis.Close()
-		if err != nil {
+		if err != nil && !errors.Is(err, net.ErrClosed) {
 			retErr = err
 		}
 	}

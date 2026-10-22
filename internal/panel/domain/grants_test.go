@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"mikan/internal/panel/model"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 )
@@ -182,7 +184,7 @@ func TestGrantsPoolAndMainApart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := e.st.Q.SetUserPoolLimit(e.ctx, db.SetUserPoolLimitParams{UserID: e.u.ID, PoolID: p.ID, TrafficLimit: sql.NullInt64{Int64: 10, Valid: true}}); err != nil {
+	if err := e.st.Q.SetUserPool(e.ctx, db.SetUserPoolParams{UserID: e.u.ID, PoolID: p.ID, Mode: PoolOwn, TrafficLimit: sql.NullInt64{Int64: 10, Valid: true}}); err != nil {
 		t.Fatal(err)
 	}
 	main := e.grant(0, 50, LifetimeUsed, 0)
@@ -204,7 +206,7 @@ func TestGrantsPoolAndMainApart(t *testing.T) {
 		t.Fatal("a pool past its base is exhausted only without grants")
 	}
 	// A pool without a limit never touches its grants.
-	if err := e.st.Q.SetUserPoolLimit(e.ctx, db.SetUserPoolLimitParams{UserID: e.u.ID, PoolID: p.ID}); err != nil {
+	if err := e.st.Q.SetUserPool(e.ctx, db.SetUserPoolParams{UserID: e.u.ID, PoolID: p.ID, Mode: PoolUnlimited}); err != nil {
 		t.Fatal(err)
 	}
 	e.countPool(p.ID, 1000)
@@ -221,7 +223,7 @@ func TestGrantsUnlimitedBase(t *testing.T) {
 	if got := e.left(g); got[0] != 50 {
 		t.Fatalf("unlimited user spent a grant: %d", got[0])
 	}
-	if TrafficLeft(sql.NullInt64{}, 1<<40, 50) != -1 {
+	if model.TrafficLeft(sql.NullInt64{}, 1<<40, 50) != -1 {
 		t.Fatal("unlimited quota must stay unlimited")
 	}
 }
@@ -342,7 +344,7 @@ func TestAdminGrant(t *testing.T) {
 		t.Fatal("the nodes must hear about the grant")
 	}
 	left := e.grantsLeft().Main(u.ID)
-	if State(u, left, *e.now) != StateActive || TrafficLeft(u.TrafficLimit, u.UsedUp+u.UsedDown, left) != 2*GiB {
+	if State(u, left, *e.now) != StateActive || model.TrafficLeft(u.TrafficLimit, u.UsedUp+u.UsedDown, left) != 2*GiB {
 		t.Fatalf("after the grant: %s, left %d", State(u, left, *e.now), left)
 	}
 	bad := []struct {
@@ -364,5 +366,98 @@ func TestAdminGrant(t *testing.T) {
 	}
 	if _, err := e.users.Grant(e.ctx, 999, GrantInput{Bytes: GiB, Lifetime: LifetimeUsed}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unknown user: %v", err)
+	}
+}
+
+// The On variants work on the caller's transaction: what the caller rolls back is gone, and
+// the nodes are the caller's to tell.
+func TestExtendOnAndGrantOn(t *testing.T) {
+	e := newGrantsEnv(t, 100)
+	errBack := errors.New("roll back")
+	before := e.ch.policies
+	err := e.st.Tx(e.ctx, func(q *db.Queries) error {
+		u, err := e.users.ExtendOn(e.ctx, q, e.u.ID, 5)
+		if err != nil || u.ExpiresAt.Int64 != e.u.ExpiresAt.Int64+5*86400 {
+			t.Fatalf("extension: %+v %v", u.ExpiresAt, err)
+		}
+		if _, err := e.users.GrantOn(e.ctx, q, e.u.ID, GrantInput{Bytes: GiB, Lifetime: LifetimeUsed, Note: "x"}); err != nil {
+			t.Fatal(err)
+		}
+		return errBack
+	})
+	if !errors.Is(err, errBack) {
+		t.Fatalf("tx: %v", err)
+	}
+	if u, _ := e.st.Q.GetUser(e.ctx, e.u.ID); u.ExpiresAt != e.u.ExpiresAt {
+		t.Fatalf("a rolled back extension stayed: %v", u.ExpiresAt)
+	}
+	if gs, _ := e.st.Q.ListUserGrants(e.ctx, e.u.ID); len(gs) != 0 {
+		t.Fatalf("a rolled back grant stayed: %+v", gs)
+	}
+	if e.ch.policies != before {
+		t.Fatal("the On variants must leave telling the nodes to the caller")
+	}
+	_ = e.st.Tx(e.ctx, func(q *db.Queries) error {
+		for _, days := range []int64{0, -1, MaxExtendDays + 1} {
+			var fe *FieldError
+			if _, err := e.users.ExtendOn(e.ctx, q, e.u.ID, days); !errors.As(err, &fe) || fe.Field != "days" {
+				t.Errorf("%d days: %v", days, err)
+			}
+		}
+		if _, err := e.users.ExtendOn(e.ctx, q, e.u.ID+999, 1); !errors.Is(err, ErrNotFound) {
+			t.Errorf("unknown user: %v", err)
+		}
+		if _, err := e.users.GrantOn(e.ctx, q, e.u.ID+999, GrantInput{Bytes: GiB, Lifetime: LifetimeUsed}); !errors.Is(err, ErrNotFound) {
+			t.Errorf("unknown user: %v", err)
+		}
+		return nil
+	})
+}
+
+// A grant by an addon is the admin's grant with the giver named in the note, which the grants
+// list shows; the note's own limit is the reason's, not the prefix's.
+func TestGrantOnNamesTheGiver(t *testing.T) {
+	e := newGrantsEnv(t, 100)
+	reason := strings.Repeat("я", maxGrantNoteLn)
+	var g db.TrafficGrant
+	err := e.st.Tx(e.ctx, func(q *db.Queries) (err error) {
+		g, err = e.users.GrantOn(e.ctx, q, e.u.ID, GrantInput{Bytes: GiB, Lifetime: LifetimeUsed, Note: reason, By: "addon:x"})
+		return err
+	})
+	if err != nil || g.Note != "addon:x: "+reason || g.Source != SourceAdmin {
+		t.Fatalf("%q %q %v", g.Note, g.Source, err)
+	}
+	if g, err = e.users.Grant(e.ctx, e.u.ID, GrantInput{Bytes: GiB, Lifetime: LifetimeUsed, Note: " thanks "}); err != nil || g.Note != "thanks" {
+		t.Fatalf("the admin's: %q %v", g.Note, err)
+	}
+	err = e.st.Tx(e.ctx, func(q *db.Queries) error {
+		_, err := e.users.GrantOn(e.ctx, q, e.u.ID, GrantInput{Bytes: GiB, Lifetime: LifetimeUsed, Note: reason + "я", By: "addon:x"})
+		return err
+	})
+	var fe *FieldError
+	if !errors.As(err, &fe) || fe.Field != "note" {
+		t.Fatalf("a note too long: %v", err)
+	}
+}
+
+// The ten years of an extension are held by the domain, whoever extends.
+func TestExtendIsBoundedHere(t *testing.T) {
+	e := newGrantsEnv(t, 100)
+	var fe *FieldError
+	if _, err := e.users.Extend(e.ctx, e.u.ID, MaxExtendDays+1); !errors.As(err, &fe) || fe.Field != "days" {
+		t.Fatalf("extend: %v", err)
+	}
+	if _, err := e.users.Update(e.ctx, e.u.ID, Patch{Extend: &Extension{Days: -1}}); !errors.As(err, &fe) {
+		t.Fatalf("a negative extension: %v", err)
+	}
+	if _, err := e.users.Bulk(e.ctx, []int64{e.u.ID}, BulkExtend, BulkOpt{Days: MaxExtendDays + 1}); !errors.As(err, &fe) || fe.Field != "days" {
+		t.Fatalf("bulk: %v", err)
+	}
+	before, _ := e.st.Q.GetUser(e.ctx, e.u.ID)
+	if after, err := e.users.Extend(e.ctx, e.u.ID, MaxExtendDays); err != nil || after.ExpiresAt.Int64 <= before.ExpiresAt.Int64 {
+		t.Fatalf("the most: %v %v", after.ExpiresAt, err)
+	}
+	if n, err := e.users.Bulk(e.ctx, []int64{e.u.ID}, BulkExtend, BulkOpt{Days: MaxExtendDays}); err != nil || n != 1 {
+		t.Fatalf("bulk the most: %d %v", n, err)
 	}
 }

@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"mikan/internal/textutil"
 )
 
 // Routes is the admin's routing beyond the mode (Routing): where each service goes, the
@@ -68,9 +70,6 @@ const (
 	TargetBlock  = "block"
 	targetNode   = "node:"
 )
-
-// NodeTarget sends a service to one node.
-func NodeTarget(id int64) string { return targetNode + strconv.FormatInt(id, 10) }
 
 func nodeOf(target string) (int64, bool) {
 	s, ok := strings.CutPrefix(target, targetNode)
@@ -420,8 +419,8 @@ func (p Profile) route(g Groups, ps []proxy, taken map[string]bool, r Routing) r
 }
 
 // rejectTwins follows every rule into the tunnel with the same match to REJECT. mihomo
-// skips a rule whose group cannot carry UDP (XHTTP) and here the profile ends with
-// MATCH,DIRECT: QUIC to a blocked site would go out from the real address. The twin
+// skips a rule whose group cannot carry UDP (a proxy with udp off) and here the profile
+// ends with MATCH,DIRECT: QUIC to a blocked site would go out from the real address. The twin
 // stops it there, and the app falls back to TCP through the tunnel.
 func rejectTwins(rules []string) []string {
 	out := make([]string, 0, 2*len(rules))
@@ -461,7 +460,7 @@ func (p Profile) serviceTarget(s Service, t string, g Groups, ps []proxy, taken 
 		}
 	}
 	name := s.Icon + " " + s.Name
-	if p.Lang == "en" {
+	if textutil.Lang(p.Lang).En() {
 		name = s.Icon + " " + s.NameEN
 	}
 	// A rule is split on commas: "ChatGPT, Claude, Gemini" as a target breaks the profile.

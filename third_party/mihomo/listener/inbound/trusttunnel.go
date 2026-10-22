@@ -7,6 +7,7 @@ import (
 	LC "github.com/metacubex/mihomo/listener/config"
 	"github.com/metacubex/mihomo/listener/trusttunnel"
 	"github.com/metacubex/mihomo/log"
+	TT "github.com/metacubex/mihomo/transport/trusttunnel"
 )
 
 type TrustTunnelOption struct {
@@ -18,6 +19,7 @@ type TrustTunnelOption struct {
 	ClientAuthCert       string    `inbound:"client-auth-cert,omitempty"`
 	EchKey               string    `inbound:"ech-key,omitempty"`
 	Network              []string  `inbound:"network,omitempty"`
+	ZeroRTT              bool      `inbound:"zero-rtt,omitempty"`
 	CongestionController string    `inbound:"congestion-controller,omitempty"`
 	CWND                 int       `inbound:"cwnd,omitempty"`
 	BBRProfile           string    `inbound:"bbr-profile,omitempty"`
@@ -36,8 +38,14 @@ type TrustTunnel struct {
 }
 
 func NewTrustTunnel(options *TrustTunnelOption) (*TrustTunnel, error) {
-	base, err := NewBase(&options.BaseOption)
+	if err := TT.ValidateFallback(options.Fallback); err != nil {
+		return nil, err
+	}
+	base, err := newStreamBase(&options.BaseOption)
 	if err != nil {
+		return nil, err
+	}
+	if err := checkUnixNetworks(base, options.Network); err != nil {
 		return nil, err
 	}
 	users := make(map[string]string)
@@ -57,6 +65,7 @@ func NewTrustTunnel(options *TrustTunnelOption) (*TrustTunnel, error) {
 			ClientAuthCert:       options.ClientAuthCert,
 			EchKey:               options.EchKey,
 			Network:              options.Network,
+			ZeroRTT:              options.ZeroRTT,
 			CongestionController: options.CongestionController,
 			CWND:                 options.CWND,
 			BBRProfile:           options.BBRProfile,
@@ -98,3 +107,25 @@ func (v *TrustTunnel) Close() error {
 }
 
 var _ C.InboundListener = (*TrustTunnel)(nil)
+
+// Users implements constant.InboundUserUpdater
+func (v *TrustTunnel) Users() []C.InboundUser {
+	return listenerUsers(v.l, func() []C.InboundUser { return authUsers(v.config.Users) })
+}
+
+// SetUsers implements constant.InboundUserUpdater
+func (v *TrustTunnel) SetUsers(users []C.InboundUser) error {
+	return setListenerUsers(v.Name(), v.l, users)
+}
+
+// SameExceptUsers implements constant.InboundUserUpdater
+func (v *TrustTunnel) SameExceptUsers(config C.InboundConfig) bool {
+	return equalExceptUsers(v.config, config)
+}
+
+var _ C.InboundUserUpdater = (*TrustTunnel)(nil)
+
+// InboundUsers implements constant.InboundUserLister
+func (v *TrustTunnel) InboundUsers() []string { return userNames(v.Users()) }
+
+var _ C.InboundUserLister = (*TrustTunnel)(nil)

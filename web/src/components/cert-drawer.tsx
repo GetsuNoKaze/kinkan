@@ -3,10 +3,11 @@
 import { useMutation } from "@tanstack/react-query";
 import { FileKey2, FileText, ShieldCheck, Upload } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ApiError, errorText } from "../api/client";
-import { getLocale, t, tMaybe } from "../i18n";
-import { fieldErrors } from "../lib/fields";
-import { Confirm, Drawer } from "./overlay";
+import { errorText } from "../api/client";
+import { t, tMaybe } from "../i18n";
+import { fieldErrors, onFormError } from "../lib/fields";
+import { dateLong } from "../lib/format";
+import { Confirm, Drawer, DrawerFooter } from "./overlay";
 import { useToast } from "./toast";
 import { Button, Field, Pill } from "./ui";
 
@@ -15,7 +16,7 @@ export type CertInfo = { names?: string[]; issuer?: string; not_after?: string; 
 const MAX = 64 << 10;
 
 export function certUntil(iso?: string): string {
-  return iso ? new Date(iso).toLocaleDateString(getLocale(), { day: "numeric", month: "long", year: "numeric" }) : "";
+  return iso ? dateLong(iso) : "";
 }
 
 /** Days left, negative once expired. */
@@ -52,14 +53,6 @@ export function CertDrawer({
   const [keyFile, setKeyFile] = useState("");
   const [certFile, setCertFile] = useState("");
   const [clearing, setClearing] = useState(false);
-  useEffect(() => {
-    if (open) {
-      setCert("");
-      setKey("");
-      setKeyFile("");
-      setCertFile("");
-    }
-  }, [open]);
   const put = useMutation({
     mutationFn: () => save(cert, key),
     onSuccess: () => {
@@ -67,9 +60,19 @@ export function CertDrawer({
       onClose();
     },
     onError: (e) => {
-      if (!(e instanceof ApiError && Object.keys(e.fields).length)) toast.error(errorText(e));
+      onFormError(e, toast);
     },
   });
+  // Empty whenever the drawer opens or shuts: the private key does not stay in state past it,
+  // and the refusal of the last attempt is not shown again.
+  const { reset: resetPut } = put;
+  useEffect(() => {
+    setCert("");
+    setKey("");
+    setKeyFile("");
+    setCertFile("");
+    resetPut();
+  }, [open, resetPut]);
   const drop = useMutation({
     mutationFn: clear,
     onSuccess: () => {
@@ -93,14 +96,9 @@ export function CertDrawer({
       title={title}
       meta={meta}
       footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button variant="primary" type="submit" form="cert-form" loading={put.isPending} disabled={!cert.trim() || !key.trim()}>
-            <ShieldCheck size={16} aria-hidden /> {t("cert.install")}
-          </Button>
-        </>
+        <DrawerFooter form="cert-form" onCancel={onClose} loading={put.isPending} disabled={!cert.trim() || !key.trim()}>
+          <ShieldCheck size={16} aria-hidden /> {t("cert.install")}
+        </DrawerFooter>
       }
     >
       <p className="pt-5 text-[13px] text-[var(--ink-600)]">{lead}</p>
@@ -158,7 +156,7 @@ export function CertDrawer({
           secret
         />
         <p className="text-xs text-[var(--ink-500)]">{t("cert.cliHint")}</p>
-        <code className="mono mt-2 block overflow-x-auto whitespace-pre rounded-xl bg-[rgba(31,26,23,0.04)] p-3 text-[12px]">{t("cert.cliExample")}</code>
+        <code className="mono mt-2 block overflow-x-auto whitespace-pre rounded-xl bg-[var(--ink-50)] p-3 text-[12px]">{t("cert.cliExample")}</code>
       </form>
       {has ? (
         <div className="mt-5 border-t border-[var(--hairline)] pt-4">

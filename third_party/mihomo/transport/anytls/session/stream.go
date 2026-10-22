@@ -5,9 +5,13 @@ import (
 	"net"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/metacubex/mihomo/common/buf"
 	"github.com/metacubex/mihomo/transport/anytls/pipe"
+
+	N "github.com/metacubex/sing/common/network"
 )
 
 // Stream implements net.Conn
@@ -16,13 +20,22 @@ type Stream struct {
 
 	sess *Session
 
-	pipeR         *pipe.PipeReader
-	pipeW         *pipe.PipeWriter
+	// data frames received and not read yet (see recv.go)
+	recvLock     sync.Mutex
+	recvBufs     []*buf.Buffer // queued frames; recvBufs[recvHead] is the next one
+	recvHead     int
+	recvClosed   bool          // no more frames come: reads end after the queue
+	recvWaiting  bool          // the reader waits on readable for a frame
+	readable     chan struct{} // a frame was queued or the stream closed
+	readDeadline pipe.PipeDeadline
+	readOptions  N.ReadWaitOptions
+	readBatch    []*buf.Buffer // WaitReadBuffers' slice, reader only
+
 	writeDeadline pipe.PipeDeadline
 
 	dieOnce sync.Once
-	dieHook func()
-	dieErr  error
+	dieHook func()                // set before the stream is published, run once by whoever wins dieOnce
+	dieErr  atomic.Pointer[error] // set once in dieOnce, read by Read/Write from other goroutines
 
 	reportOnce sync.Once
 }
@@ -32,18 +45,18 @@ func newStream(id uint32, sess *Session) *Stream {
 	s := new(Stream)
 	s.id = id
 	s.sess = sess
-	s.pipeR, s.pipeW = pipe.Pipe()
+	s.readable = make(chan struct{}, 1)
+	s.readDeadline = pipe.MakePipeDeadline()
 	s.writeDeadline = pipe.MakePipeDeadline()
 	return s
 }
 
-// Read implements net.Conn
-func (s *Stream) Read(b []byte) (n int, err error) {
-	n, err = s.pipeR.Read(b)
-	if n == 0 && s.dieErr != nil {
-		err = s.dieErr
+// closeErr returns the error the Stream was closed with, or nil if it is open.
+func (s *Stream) closeErr() error {
+	if p := s.dieErr.Load(); p != nil {
+		return *p
 	}
-	return
+	return nil
 }
 
 // Write implements net.Conn
@@ -53,11 +66,32 @@ func (s *Stream) Write(b []byte) (n int, err error) {
 		return 0, os.ErrDeadlineExceeded
 	default:
 	}
-	if s.dieErr != nil {
-		return 0, s.dieErr
+	if dieErr := s.closeErr(); dieErr != nil {
+		return 0, dieErr
 	}
 	n, err = s.sess.writeDataFrame(s.id, b)
 	return
+}
+
+// WriteBuffer implements N.ExtendedWriter: a buffer read with
+// FrontHeadroom in front of its data becomes a frame without a copy.
+func (s *Stream) WriteBuffer(buffer *buf.Buffer) error {
+	select {
+	case <-s.writeDeadline.Wait():
+		buffer.Release()
+		return os.ErrDeadlineExceeded
+	default:
+	}
+	if dieErr := s.closeErr(); dieErr != nil {
+		buffer.Release()
+		return dieErr
+	}
+	return s.sess.writeDataBuffer(s.id, buffer)
+}
+
+// FrontHeadroom implements N.FrontHeadroom: the room for the frame header.
+func (s *Stream) FrontHeadroom() int {
+	return headerOverHeadSize
 }
 
 // Close implements net.Conn
@@ -69,8 +103,9 @@ func (s *Stream) Close() error {
 func (s *Stream) closeLocally() {
 	var once bool
 	s.dieOnce.Do(func() {
-		s.dieErr = net.ErrClosed
-		s.pipeR.Close()
+		dieErr := net.ErrClosed
+		s.dieErr.Store(&dieErr)
+		s.closeRecv(false) // the peer is done: what it sent is still read
 		once = true
 	})
 	if once {
@@ -84,8 +119,8 @@ func (s *Stream) closeLocally() {
 func (s *Stream) closeWithError(err error) error {
 	var once bool
 	s.dieOnce.Do(func() {
-		s.dieErr = err
-		s.pipeR.Close()
+		s.dieErr.Store(&err)
+		s.closeRecv(true)
 		once = true
 	})
 	if once {
@@ -96,12 +131,13 @@ func (s *Stream) closeWithError(err error) error {
 		}
 		return err
 	} else {
-		return s.dieErr
+		return s.closeErr()
 	}
 }
 
 func (s *Stream) SetReadDeadline(t time.Time) error {
-	return s.pipeR.SetReadDeadline(t)
+	s.readDeadline.Set(t)
+	return nil
 }
 
 func (s *Stream) SetWriteDeadline(t time.Time) error {
@@ -140,7 +176,7 @@ func (s *Stream) HandshakeFailure(err error) error {
 	s.reportOnce.Do(func() {
 		once = true
 	})
-	if once && err != nil && s.sess.peerVersion >= 2 {
+	if once && err != nil && s.sess.peerVersion.Load() >= 2 {
 		f := newFrame(cmdSYNACK, s.id)
 		f.data = []byte(err.Error())
 		if _, err := s.sess.writeControlFrame(f); err != nil {
@@ -156,7 +192,7 @@ func (s *Stream) HandshakeSuccess() error {
 	s.reportOnce.Do(func() {
 		once = true
 	})
-	if once && s.sess.peerVersion >= 2 {
+	if once && s.sess.peerVersion.Load() >= 2 {
 		if _, err := s.sess.writeControlFrame(newFrame(cmdSYNACK, s.id)); err != nil {
 			return err
 		}

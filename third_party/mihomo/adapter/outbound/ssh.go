@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -13,6 +14,7 @@ import (
 
 	N "github.com/metacubex/mihomo/common/net"
 	C "github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/log"
 
 	"github.com/metacubex/randv2"
 	"github.com/metacubex/ssh"
@@ -39,6 +41,9 @@ type SshOption struct {
 	PrivateKeyPassphrase string   `proxy:"private-key-passphrase,omitempty"`
 	HostKey              []string `proxy:"host-key,omitempty"`
 	HostKeyAlgorithms    []string `proxy:"host-key-algorithms,omitempty"`
+	// SkipHostKeyCheck explicitly permits an unauthenticated server identity
+	// when no host-key is pinned.
+	SkipHostKeyCheck bool `proxy:"skip-host-key-check,omitempty"`
 }
 
 func (s *Ssh) DialContext(ctx context.Context, metadata *C.Metadata) (_ C.Conn, err error) {
@@ -113,6 +118,12 @@ func (s *Ssh) Close() error {
 }
 
 func NewSsh(option SshOption) (*Ssh, error) {
+	if len(option.HostKey) == 0 && !option.SkipHostKeyCheck {
+		return nil, errors.New("ssh host-key is required unless skip-host-key-check is explicitly true")
+	}
+	if len(option.HostKey) != 0 && option.SkipHostKeyCheck {
+		return nil, errors.New("ssh host-key and skip-host-key-check cannot be used together")
+	}
 	addr := net.JoinHostPort(option.Server, strconv.Itoa(option.Port))
 
 	config := ssh.ClientConfig{
@@ -158,7 +169,7 @@ func NewSsh(option SshOption) (*Ssh, error) {
 		for i, hostKey := range option.HostKey {
 			key, _, _, _, err := ssh.ParseAuthorizedKey([]byte(hostKey))
 			if err != nil {
-				return nil, fmt.Errorf("parse host key :%s", key)
+				return nil, fmt.Errorf("parse host key %d: %w", i, err)
 			}
 			keys[i] = key
 		}
@@ -171,6 +182,8 @@ func NewSsh(option SshOption) (*Ssh, error) {
 			}
 			return fmt.Errorf("host key mismatch, server send :%s %s", key.Type(), base64.StdEncoding.EncodeToString(serverKey))
 		}
+	} else {
+		log.Warnln("[SSH] %s: skip-host-key-check explicitly disables server identity verification", option.Name)
 	}
 
 	version := "SSH-2.0-OpenSSH_"

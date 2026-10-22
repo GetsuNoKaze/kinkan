@@ -29,7 +29,7 @@ func (h *handlers) registerKinkan() {
 	h.registerTTProbe()
 	h.registerNodeProbe()
 	h.registerScanners()
-	h.registerSites()
+	h.registerKinkanSites()
 	h.registerHistory()
 	h.registerRollback()
 	h.registerLeaks()

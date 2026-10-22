@@ -110,7 +110,7 @@ func (h *handlers) listFolders(ctx context.Context, _ *struct{}) (*foldersOutput
 func folderName(s string) (string, error) {
 	name := strings.TrimSpace(s)
 	if name == "" {
-		return "", huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.name", Message: "name_blank"})
+		return "", fieldErr("body.name", "name_blank")
 	}
 	return name, nil
 }
@@ -120,7 +120,7 @@ func folderColor(s string) (string, error) {
 		return "gray", nil
 	}
 	if !slices.Contains(folderColors, s) {
-		return "", huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.color", Message: "bad_color", Value: s})
+		return "", fieldErrValue("body.color", "bad_color", s)
 	}
 	return s, nil
 }
@@ -225,26 +225,13 @@ func (h *handlers) orderFolders(ctx context.Context, in *orderFoldersInput) (*st
 		if err != nil {
 			return err
 		}
-		have := make(map[int64]bool, len(all))
-		for _, f := range all {
-			have[f.ID] = true
+		have := make([]int64, len(all))
+		for i, f := range all {
+			have[i] = f.ID
 		}
-		seen := make(map[int64]bool, len(ids))
-		for _, id := range ids {
-			if !have[id] || seen[id] {
-				return huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.ids", Message: "folder_order_mismatch", Value: id})
-			}
-			seen[id] = true
-		}
-		if len(ids) != len(all) {
-			return huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.ids", Message: "folder_order_mismatch"})
-		}
-		for i, id := range ids {
-			if err := q.SetFolderSort(ctx, db.SetFolderSortParams{Sort: int64(i + 1), ID: id}); err != nil {
-				return err
-			}
-		}
-		return nil
+		return setOrder(ids, have, "folder_order_mismatch", func(id, place int64) error {
+			return q.SetFolderSort(ctx, db.SetFolderSortParams{Sort: place, ID: id})
+		})
 	})
 	if err != nil {
 		return nil, err

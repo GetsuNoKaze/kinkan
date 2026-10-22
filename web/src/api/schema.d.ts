@@ -4,6 +4,76 @@
  */
 
 export interface paths {
+    "/api/v1/addon-sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Источники сторонних аддонов */
+        get: operations["list-addon-sources"];
+        put?: never;
+        /** Добавить источник: панель читает его, проверяет и закрепляет ключ подписи */
+        post: operations["add-addon-source"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/addon-sources/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Убрать источник: пока из него стоит аддон, нельзя */
+        delete: operations["delete-addon-source"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/addon-sources/{id}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Прочитать источник заново */
+        post: operations["refresh-addon-source"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/addon-storage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Сколько аддон может хранить в своём хранилище */
+        get: operations["get-addon-storage"];
+        /** Лимит хранилища аддона или без лимита */
+        put: operations["set-addon-storage"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/addons": {
         parameters: {
             query?: never;
@@ -66,6 +136,40 @@ export interface paths {
         put?: never;
         /** Удалить адаптер: заявка серверу */
         post: operations["remove-addon"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/addons/{id}/ui": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Подписанный адрес страницы аддона в админке */
+        get: operations["get-addon-page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/addons/{id}/ui/rpc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Вызов страницы аддона: панель передаёт его аддону */
+        post: operations["call-addon-page"];
         delete?: never;
         options?: never;
         head?: never;
@@ -277,6 +381,131 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Группы балансировки и загрузка их нод */
+        get: operations["list-balance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/balance/{group}/redistribute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Распределить клиентов группы заново: каждый попадёт на самую свободную ноду при следующем обновлении подписки */
+        post: operations["redistribute-balance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/balances/{tg_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Баланс Telegram-аккаунта и история */
+        get: operations["get-balance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/balances/{tg_id}/adjust": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Изменить баланс вручную */
+        post: operations["adjust-balance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/campaigns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Рекламные кампании и их статистика */
+        get: operations["list-campaigns"];
+        put?: never;
+        /** Создать кампанию: ссылку на бота с меткой */
+        post: operations["create-campaign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/campaigns/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Удалить кампанию: пришедшие по ней люди перестают к ней относиться */
+        delete: operations["delete-campaign"];
+        options?: never;
+        head?: never;
+        /** Переименовать кампанию или убрать в архив */
+        patch: operations["update-campaign"];
+        trace?: never;
+    };
+    "/api/v1/exit-dns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** DNS на выходе */
+        get: operations["get-exit-dns"];
+        /**
+         * Настроить DNS на выходе
+         * @description Ноды получают настройку со своим состоянием; ноды старше неё её не применяют.
+         */
+        put: operations["update-exit-dns"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/filters": {
         parameters: {
             query?: never;
@@ -465,6 +694,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inbounds/exit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Выход в интернет для нескольких подключений разом: напрямую, через WARP или через ноду */
+        post: operations["set-inbound-exits"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/inbounds/scan-targets": {
         parameters: {
             query?: never;
@@ -517,6 +763,23 @@ export interface paths {
         patch: operations["update-inbound"];
         trace?: never;
     };
+    "/api/v1/inbounds/{id}/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Скопировать подключение: те же настройки с новыми ключами, на ту же или другую ноду */
+        post: operations["copy-inbound"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/inbounds/{id}/tt-connections": {
         parameters: {
             query?: never;
@@ -547,6 +810,94 @@ export interface paths {
         /** Изменить настройки детектора подписок */
         put: operations["set-leak-policy"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Последние строки лога панели или ноды
+         * @description source=panel или node:<id>; до 2000 строк, самые новые последними. Токены, ключи, пароли, ссылки подписок и секретные пути вырезаны.
+         */
+        get: operations["get-logs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/marketplace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Маркетплейс аддонов: боты, страницы и прочее */
+        get: operations["list-marketplace"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/marketplace/external": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Режим разработчика: подключить свой процесс на 127.0.0.1, без проверки mikan */
+        post: operations["install-external-addon"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/marketplace/{id}/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Одобрить права и установить или обновить аддон каталога или источника: заявка серверу */
+        post: operations["install-marketplace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/marketplace/{id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Удалить аддон и отозвать его права: заявка серверу */
+        post: operations["remove-marketplace"];
         delete?: never;
         options?: never;
         head?: never;
@@ -660,6 +1011,23 @@ export interface paths {
         patch: operations["update-node"];
         trace?: never;
     };
+    "/api/v1/nodes/{id}/balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Группа балансировки ноды и сколько клиентов она принимает */
+        put: operations["set-node-balance"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/nodes/{id}/cascade": {
         parameters: {
             query?: never;
@@ -689,8 +1057,99 @@ export interface paths {
         /** Поставить ноде свой сертификат */
         put: operations["set-node-certificate"];
         post?: never;
-        /** Вернуть ноде самоподписанный сертификат */
+        /** Убрать свой сертификат ноды: вернётся публичный, полученный панелью, или самоподписанный */
         delete: operations["clear-node-certificate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/nodes/{id}/certificate/renew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Получить публичный сертификат ноды сейчас (ждёт до 90 с) */
+        post: operations["renew-node-certificate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/nodes/{id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Проверить ноду: связь, версия, часы, протоколы, порты, интернет, каскад */
+        post: operations["check-node"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/nodes/{id}/check-russia": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Проверить порты ноды из России через Globalping */
+        post: operations["check-node-russia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/nodes/{id}/doctor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * mikan doctor на сервере ноды
+         * @description То же для сервера удалённой ноды; для своей ноды панели это сервер панели. Оператору поддержки с доступом «просмотр» разрешён.
+         */
+        post: operations["doctor-node"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/nodes/{id}/geo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Страна IP ноды по геобазам
+         * @description Адрес ноды уходит в публичные геобазы (MaxMind, ipinfo.io, IP2Location и другие); каждая отвечает, в какой стране он для неё.
+         */
+        post: operations["check-node-geo"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -743,6 +1202,46 @@ export interface paths {
         post?: never;
         /** Очистить историю проверок ноды */
         delete: operations["delete-node-protocol-probes"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/nodes/{id}/regions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Регион ноды в сервисах
+         * @description Нода сама открывает Google, YouTube, Netflix, ChatGPT и другие сайты по IPv4 и IPv6 и читает, какую страну они ей дают или пускают ли её. Около 10 секунд; на ноде одна проверка за раз (409 regions_busy).
+         */
+        post: operations["check-node-regions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/nodes/{id}/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Перезапустить контейнеры сервера ноды
+         * @description Для своей ноды панели используйте /system/restart: она живёт в одних контейнерах с панелью.
+         */
+        post: operations["restart-node"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1008,8 +1507,28 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Вернуть Stars покупателю */
+        /** Вернуть деньги покупателю: Stars, на баланс или через способ оплаты, если он умеет */
         post: operations["refund-payment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/{id}/refunded-by-hand": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Отметить, что деньги возвращены вручную
+         * @description Оплата через способ оплаты из маркетплейса: админ вернул деньги в кабинете платёжной системы (или прошёл чарджбэк). Платёж становится возвращённым, выданное им снимается, покупателю приходит сообщение. Stars и баланс возвращаются через refund.
+         */
+        post: operations["mark-payment-refunded"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1023,10 +1542,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Пулы трафика */
+        /** Группы серверов */
         get: operations["list-pools"];
         put?: never;
-        /** Создать пул трафика */
+        /** Создать группу серверов */
         post: operations["create-pool"];
         delete?: never;
         options?: never;
@@ -1044,12 +1563,46 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Удалить пул: его подключения вернутся в основной трафик; пока в нём есть оплаченный трафик, пул остаётся */
+        /** Удалить группу серверов: её подключения вернутся к основным серверам; пока в ней есть оплаченный трафик, группа остаётся */
         delete: operations["delete-pool"];
         options?: never;
         head?: never;
-        /** Переименовать пул */
+        /** Переименовать группу серверов */
         patch: operations["rename-pool"];
+        trace?: never;
+    };
+    "/api/v1/pools/{id}/inbounds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Подключения группы серверов */
+        put: operations["set-pool-inbounds"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pools/{id}/tariffs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Как тарифы держат группу серверов */
+        put: operations["set-pool-tariffs"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/presets": {
@@ -1203,8 +1756,25 @@ export interface paths {
         /** Поставить свой сертификат панели */
         put: operations["set-certificate"];
         post?: never;
-        /** Вернуть сертификат Let's Encrypt */
+        /** Убрать свой сертификат панели: вернётся автоматический */
         delete: operations["clear-certificate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/certificate/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Проверить сертификаты панели и нод снаружи: что отдают порты, DNS, порт 80, заказы */
+        post: operations["check-certificate"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1219,7 +1789,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Запросить сертификат Let's Encrypt сейчас */
+        /** Получить сертификат панели сейчас: ждёт до 90 с и отвечает тем, что вышло (ordering — заказ ещё идёт) */
         post: operations["renew-certificate"];
         delete?: never;
         options?: never;
@@ -1272,6 +1842,41 @@ export interface paths {
         put?: never;
         /** Профиль Clash с этой маршрутизацией, без сохранения */
         post: operations["routes-preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/sub-certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Поставить свой сертификат домену подписки */
+        put: operations["set-sub-certificate"];
+        post?: never;
+        /** Убрать свой сертификат домена подписки: вернётся автоматический */
+        delete: operations["clear-sub-certificate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/sub-certificate/renew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Получить сертификат домена подписки сейчас: ждёт до 90 с и отвечает тем, что вышло */
+        post: operations["renew-sub-certificate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1457,6 +2062,244 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/support/enter": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Вход оператора по ссылке доступа
+         * @description Одна ссылка пускает в браузер один раз; повторный вход требует новой ссылки. Ключ ms_… в заголовке Authorization работает, пока доступ жив.
+         */
+        post: operations["support-enter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/support/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Доступ для поддержки и действия оператора */
+        get: operations["list-support-grants"];
+        put?: never;
+        /**
+         * Открыть доступ для поддержки
+         * @description Только для официальной поддержки: панель проверяет код из обращения у бота поддержки, открывает доступ и сама передаёт ссылку боту, админу она не показывается. Одновременно активен один доступ: новый отзывает прежний. Уровень terminal и расширенный режим требуют пароль и код 2FA.
+         */
+        post: operations["create-support-grant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/support/grants/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Отозвать доступ для поддержки
+         * @description Оператор теряет доступ сразу: его сессии удаляются, ключ ms_… перестаёт работать.
+         */
+        delete: operations["revoke-support-grant"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/support/leave": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Закончить работу и выйти
+         * @description Оператор сам закрывает свой доступ: как отзыв админом, сессии и терминалы закрываются, ключ ms_… перестаёт работать. На любом уровне. Другим отвечает 403 support_only.
+         */
+        post: operations["support-leave"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/support/recordings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Записи сеансов терминала поддержки
+         * @description Каждый сеанс терминала записывается на сервере целиком (ввод и вывод, формат asciicast v2) и хранится 30 дней. source=panel или node:<id>. Только админ из сессии: оператору поддержки и ключам закрыто.
+         */
+        get: operations["list-support-recordings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/support/recordings/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Запись сеанса терминала
+         * @description Файл asciicast v2 (application/x-asciicast), до 8 МиБ. source=panel или node:<id>. Только админ из сессии.
+         */
+        get: operations["get-support-recording"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/support/whoami": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Чей доступ и до какого времени
+         * @description Для оператора: сессия или ключ ms_…. Другим отвечает 403 support_only.
+         */
+        get: operations["support-whoami"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Проверить сервер панели */
+        post: operations["check-server"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/doctor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * mikan doctor на сервере панели
+         * @description Хост запускает mikan doctor и отдаёт отчёт (Docker, контейнеры, порты, файрвол, часы, DNS, GitHub, диск, память); ждём до минуты. Нужна команда mikan 0.5.1.1 или новее на сервере: mikan update. Оператору поддержки с доступом «просмотр» разрешён: отчёт ничего не меняет.
+         */
+        post: operations["doctor-server"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/geo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Страна IP любого сервера по геобазам
+         * @description Адрес сервера уходит в публичные геобазы.
+         */
+        post: operations["check-geo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/reach": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Проверить, открываются ли порты сервера из России
+         * @description Зонды Globalping в домашних и мобильных сетях России и в дата-центрах подключаются к портам, контроль из Европы. Адрес сервера уходит в Globalping.
+         */
+        post: operations["check-reach"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Перезапустить контейнеры сервера панели
+         * @description Хост перезапускает контейнеры через секунду-две: панель на это время недоступна.
+         */
+        post: operations["restart-server"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tariffs": {
         parameters: {
             query?: never;
@@ -1488,6 +2331,23 @@ export interface paths {
         post?: never;
         /** Убрать тариф в архив */
         delete: operations["archive-tariff"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tariffs/{id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Применить тариф к уже выданным подпискам: выбранные части тарифа заменят свои значения клиентов, срок и израсходованное останутся */
+        post: operations["apply-tariff"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1549,6 +2409,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/telegram/bot-addon": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Кто отвечает в боте подписчиков */
+        get: operations["get-bot-addon"];
+        /** Отдать бота аддону */
+        put: operations["set-bot-addon"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/telegram/broadcast": {
         parameters: {
             query?: never;
@@ -1579,6 +2457,74 @@ export interface paths {
         post: operations["telegram-infrastructure-connect"];
         /** Отключить чат администратора для уведомлений */
         delete: operations["telegram-infrastructure-disconnect"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telegram/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Как бот отправит текст с Markdown */
+        post: operations["telegram-preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/topups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Заявки на пополнение баланса */
+        get: operations["list-topups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/topups/{id}/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Одобрить или отклонить пополнение */
+        post: operations["decide-topup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/topups/{id}/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Скриншот перевода */
+        get: operations["get-topup-photo"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1615,6 +2561,27 @@ export interface paths {
          */
         get: operations["list-torrent-hits"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/traffic-detail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Детализация трафика по сайтам */
+        get: operations["get-traffic-detail"];
+        /**
+         * Включить или выключить детализацию по сайтам
+         * @description Ноды получают её со своим состоянием; ноды старше неё не считают.
+         */
+        put: operations["put-traffic-detail"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1793,6 +2760,58 @@ export interface paths {
         delete: operations["unbind-device"];
         options?: never;
         head?: never;
+        /** Переименовать привязанное устройство */
+        patch: operations["rename-device"];
+        trace?: never;
+    };
+    "/api/v1/users/{id}/bound-devices/{device}/ban": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Заблокировать устройство: отвязать и не давать привязаться снова по его ID */
+        post: operations["ban-device"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/device-bans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Заблокированные устройства пользователя */
+        get: operations["device-bans"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/device-bans/{ban}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Разблокировать устройство: оно снова сможет привязаться */
+        delete: operations["unban-device"];
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -1889,9 +2908,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Пулы трафика пользователя */
+        /** Группы серверов пользователя */
         get: operations["user-pools"];
-        /** Лимиты пулов пользователя */
+        /** Как подписка пользователя держит группы серверов */
         put: operations["set-user-pools"];
         post?: never;
         delete?: never;
@@ -1928,6 +2947,23 @@ export interface paths {
         put?: never;
         /** Сбросить трафик */
         post: operations["reset-user-traffic"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/sites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Куда ходит подписка: трафик по сайтам */
+        get: operations["user-sites"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2005,6 +3041,12 @@ export interface components {
             /** @enum {string} */
             scope: "read" | "full";
         };
+        AddSourceInputBody: {
+            /** @description Публичный ключ автора, ed25519 в base64, если админ знает его заранее: источник принимается, только если подписан им */
+            key?: string;
+            /** @description https://…/mikan-addon.json, https://…/index.json или github.com/<владелец>/<репозиторий> (последний релиз) */
+            url: string;
+        };
         AddonCatalogEntry: {
             description: {
                 [key: string]: string;
@@ -2021,20 +3063,87 @@ export interface components {
             version: string;
         };
         AddonField: {
+            /** @description Подсказка в пустом поле; панель его не сохраняет, адаптер применяет сам */
+            default?: unknown;
+            help?: {
+                [key: string]: string;
+            };
             key: string;
             label: {
                 [key: string]: string;
             };
+            /**
+             * Format: int64
+             * @description Только для number
+             */
+            max?: number;
+            /**
+             * Format: int64
+             * @description Только для number
+             */
+            min?: number;
+            /** @description Только для select */
+            options?: components["schemas"]["AddonOption"][];
+            /** @description Только для string */
             pattern?: string;
             required: boolean;
             /** @description Значение API не отдаёт; пусто при сохранении — оставить прежнее */
             secret: boolean;
             /** @description Значение сохранено */
             set: boolean;
-            /** @enum {string} */
-            type: "string" | "bool";
+            /**
+             * @description Другой тип панель не знает: см. unsupported
+             * @enum {string}
+             */
+            type: "string" | "bool" | "select" | "number" | "text" | "code";
+            /** @description Панель не знает этот тип: поле не заполнить и не сохранить */
+            unsupported?: boolean;
             /** @description Текущее значение, кроме секретов */
             value?: unknown;
+        };
+        AddonOption: {
+            label: {
+                [key: string]: string;
+            };
+            value: string;
+        };
+        AddonPageView: {
+            /**
+             * Format: int64
+             * @description Unix-время, после которого адрес не откроет файлы страницы
+             */
+            expires_at: number;
+            /** @description Название страницы по языкам */
+            title: {
+                [key: string]: string;
+            };
+            /** @description Адрес страницы относительно адреса админки (addons-ui/<id>/<подпись>/…); подпись действует 10 минут */
+            url: string;
+        };
+        AddonRPCInputBody: {
+            /** @description Любой JSON для аддона */
+            body?: unknown;
+            /**
+             * @description Язык админки; пусто — язык панели
+             * @enum {string}
+             */
+            lang?: "ru" | "en";
+            /**
+             * @description Метод для аддона; GET не пишется в журнал
+             * @enum {string}
+             */
+            method: "GET" | "POST" | "PUT" | "DELETE";
+            /** @description Путь для аддона, начинается с / */
+            path: string;
+        };
+        AddonRPCResult: {
+            /** @description JSON аддона как есть, до 1 МиБ */
+            body: unknown;
+            /**
+             * Format: int64
+             * @description Код ответа аддона: ошибки аддона тоже приходят сюда
+             */
+            status: number;
         };
         AddonRequest: {
             /** @enum {string} */
@@ -2053,12 +3162,32 @@ export interface components {
             /** @enum {string} */
             state: "done" | "failed";
         };
+        AddonStorageInputBody: {
+            /**
+             * Format: int64
+             * @description 1 МиБ … 1 ТиБ; при unlimited не нужен
+             */
+            limit_mib?: number;
+            unlimited?: boolean;
+        };
+        AddonStorageView: {
+            /**
+             * Format: int64
+             * @description Лимит по умолчанию
+             */
+            default_mib: number;
+            /**
+             * Format: int64
+             * @description Сколько МиБ один аддон может хранить; при unlimited не действует
+             */
+            limit_mib: number;
+            /** @description Без лимита: аддон может занять весь диск сервера */
+            unlimited: boolean;
+        };
         AddonView: {
             /** @description Принимает оплату прямо сейчас: включён, настроен, работает */
             available: boolean;
             enabled: boolean;
-            /** @description Почему контейнер не работает */
-            error?: string;
             help: {
                 [key: string]: string;
             };
@@ -2070,7 +3199,7 @@ export interface components {
             };
             settings: components["schemas"]["AddonField"][];
             /** @enum {string} */
-            status: "running" | "failed";
+            status: "running";
             version: string;
             /** @description Адрес для уведомлений в кабинете провайдера */
             webhook_url: string;
@@ -2082,10 +3211,19 @@ export interface components {
             installed: components["schemas"]["AddonView"][];
             /** @description Как сервер выполнил последнюю заявку */
             last?: components["schemas"]["AddonResult"];
-            /** @description Заявка, которую сервер ещё не взял */
-            pending?: components["schemas"]["AddonRequest"];
+            /** @description Все заявки, которые сервер ещё не взял, по порядку */
+            queue?: components["schemas"]["AddonRequest"][];
             /** @description Панель видит каталог данных сервера; иначе ставить адаптеры нельзя */
             supported: boolean;
+        };
+        AdjustBalanceInputBody: {
+            /**
+             * Format: int64
+             * @description На сколько изменить, в копейках (сотых) валюты; минус — списать
+             */
+            delta: number;
+            /** @description За что: видит клиент в истории баланса */
+            note: string;
         };
         AdminView: {
             /** Format: int64 */
@@ -2110,6 +3248,35 @@ export interface components {
             public_channel?: string;
             public_enabled?: boolean;
             public_summary?: boolean;
+        };
+        ApplyTariffInputBody: {
+            /** @description Лимит устройств (докупленные остаются сверху) и как он считается */
+            devices?: boolean;
+            /** @description Группы серверов: режимы и лимиты */
+            groups?: boolean;
+            /** @description Скорость */
+            speed?: boolean;
+            /** @description Трафик за период и когда он обнуляется */
+            traffic?: boolean;
+        };
+        ApplyTariffOutputBody: {
+            /**
+             * Format: int64
+             * @description Скольким подпискам тарифа применены его части
+             */
+            applied: number;
+        };
+        Attempt: {
+            /** Format: date-time */
+            at: string;
+            /** @enum {string} */
+            ca: "letsencrypt" | "zerossl" | "google";
+            /** @description Слова центра сертификации или системы как есть */
+            detail?: string;
+            /** @description Код errors.acme; пусто — сертификат получен */
+            error?: string;
+            /** @description Кто держал порт 80 (port80_busy), если это видно */
+            holder?: string;
         };
         AuditEntry: {
             /** @description Например user.create, settings.update, auth.login_failed */
@@ -2214,6 +3381,94 @@ export interface components {
             /** @description Бэкап делается прямо сейчас */
             sending: boolean;
         };
+        BalanceGroupView: {
+            group: string;
+            nodes: components["schemas"]["BalanceNodeView"][];
+        };
+        BalanceNodeView: {
+            /**
+             * Format: int64
+             * @description Мест для клиентов; null — без ограничения
+             */
+            capacity: number | null;
+            /**
+             * Format: int64
+             * @description Сколько действующих клиентов закреплено за нодой
+             */
+            clients: number;
+            /** @description Мест не осталось: новые клиенты группы идут на наименее загруженную ноду */
+            full: boolean;
+            /** Format: int64 */
+            node_id: number;
+        };
+        BalanceOpView: {
+            /**
+             * Format: int64
+             * @description + пришло, − ушло
+             */
+            amount: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            id: number;
+            /** @enum {string} */
+            kind: "topup" | "spend" | "refund" | "adjust";
+            note?: string;
+            /** Format: int64 */
+            payment_id?: number;
+        };
+        BalanceSettings: {
+            /** @enum {string} */
+            currency: "RUB" | "USD" | "EUR" | "UAH" | "BYN" | "KZT" | "UZS" | "USDT";
+            /** @description Как перевести деньги: показывается клиенту перед скриншотом */
+            details: string;
+            enabled: boolean;
+            /**
+             * Format: int64
+             * @description Наибольшее пополнение в копейках (сотых); 0 — без границы
+             */
+            max: number;
+            /**
+             * Format: int64
+             * @description Наименьшее пополнение в копейках (сотых); 0 — без границы
+             */
+            min: number;
+            /**
+             * Format: double
+             * @description Сколько рублей стоит единица валюты баланса; для RUB — 1
+             */
+            rate: number;
+        };
+        BalanceSettingsBody: {
+            /** @enum {string} */
+            currency?: "RUB" | "USD" | "EUR" | "UAH" | "BYN" | "KZT" | "UZS" | "USDT";
+            details?: string;
+            enabled?: boolean;
+            /** Format: int64 */
+            max?: number;
+            /** Format: int64 */
+            min?: number;
+            /** Format: double */
+            rate?: number;
+        };
+        BalanceView: {
+            /** Format: int64 */
+            balance: number;
+            currency: string;
+            ops: components["schemas"]["BalanceOpView"][];
+            /** Format: int64 */
+            tg_id: number;
+        };
+        BotSlotInputBody: {
+            /** @description id аддона с правом bot или пусто */
+            addon: string;
+        };
+        BotSlotView: {
+            /** @description Аддон, который отвечает в боте; пусто — никто, обновления ждут в буфере панели */
+            addon: string;
+            /** @description Панель сама ставит официального бота, пока бот включён и никто не отвечает; false — админ удалил бота */
+            auto: boolean;
+        };
         BoundDeviceView: {
             app: string;
             /** Format: date-time */
@@ -2226,12 +3481,24 @@ export interface components {
             /** Format: date-time */
             last_seen: string;
             model: string;
+            /** @description Своё имя устройства от админа или подписчика; пусто — имя от приложения (модель, система) */
+            name: string;
             online: boolean;
             os: string;
             os_version: string;
+            /**
+             * Format: int64
+             * @description Байты к устройству с тех пор, как оно привязано
+             */
+            traffic_down: number;
+            /**
+             * Format: int64
+             * @description Байты от устройства с тех пор, как оно привязано (до 0.5.0.5 не считались)
+             */
+            traffic_up: number;
         };
         BroadcastInputBody: {
-            /** @description Обычный текст; {brand} — название сервиса */
+            /** @description Текст с Markdown, как тексты бота; {brand} — название сервиса */
             text: string;
         };
         BroadcastOutputBody: {
@@ -2259,6 +3526,46 @@ export interface components {
         BulkOutputBody: {
             /** Format: int64 */
             affected: number;
+        };
+        CampaignView: {
+            /** @description В архиве: ссылка больше не метит новых людей, статистика остаётся */
+            archived: boolean;
+            /**
+             * Format: int64
+             * @description Сколько из них купили тариф или платный пробный период
+             */
+            bought: number;
+            /**
+             * Format: int64
+             * @description Сколько человек пришло по ссылке за период
+             */
+            came: number;
+            code: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            id: number;
+            /** @description Ссылка на бота с меткой; пусто, пока бот не запущен */
+            link: string;
+            name: string;
+            /**
+             * Format: int64
+             * @description Сколько из них продлили
+             */
+            renewed: number;
+            /**
+             * Format: int64
+             * @description Копейки
+             */
+            revenue_rub: number;
+            /** Format: int64 */
+            revenue_stars: number;
+        };
+        CascadeConns: {
+            /** Format: int64 */
+            conns: number;
+            /** Format: int64 */
+            node_id: number;
         };
         CascadeExit: {
             /** @description Подключения этой ноды, которые выходят через ту ноду */
@@ -2310,11 +3617,68 @@ export interface components {
             /** @description Служебный вход для других нод; есть, когда кто-то выходит через эту ноду */
             relay?: components["schemas"]["CascadeRelay"];
         };
+        CertCheck: {
+            /** @description Что именно, текст — certCheck.<code> в языке панели */
+            code: string;
+            /** @description Подробности как есть: ошибка соединения или ответ центра сертификации */
+            detail?: string;
+            fix?: components["schemas"]["CertFix"];
+            /** @description Что проверено: served, compat, dns, port80, acme, sub_served, sub_dns, sub_acme, node_cert, node_port */
+            id: string;
+            /** @description Имя ноды, если проверка про ноду */
+            node?: string;
+            /** Format: int64 */
+            node_id?: number;
+            params?: {
+                [key: string]: string;
+            };
+            /** @enum {string} */
+            status: "ok" | "info" | "warn" | "fail";
+        };
+        CertFix: {
+            /** @enum {string} */
+            action: "renew" | "renew_node" | "renew_sub" | "use_zerossl" | "update_node" | "copy";
+            /** @description Команда для сервера (action copy) */
+            command?: string;
+            /** Format: int64 */
+            node_id?: number;
+        };
         CertInputBody: {
             /** @description Цепочка в PEM: сначала сертификат, за ним промежуточные (fullchain.pem) */
             cert: string;
             /** @description Закрытый ключ в PEM (privkey.pem): RSA от 2048 бит, ECDSA P-256/384/521 или Ed25519 */
             key: string;
+        };
+        CertReport: {
+            /** Format: date-time */
+            checked_at: string;
+            checks: components["schemas"]["CertCheck"][];
+        };
+        Channel: {
+            /** @description Публичный @username канала или его числовой ID (-100…); бот должен быть администратором канала */
+            chat: string;
+            /** @description Обязательная подписка: без неё бот показывает вместо меню экран с кнопкой канала */
+            required: boolean;
+            /** @description Ссылка, по которой вступают (https://t.me/…); пусто: t.me/<username>. Для канала по числовому ID обязательна */
+            url?: string;
+        };
+        CheckItem: {
+            /** @description Почему не ok: timeout, refused, pin_mismatch, behind, skew, busy и другие */
+            code?: string;
+            /** @description Слова ошибки как есть, для «подробнее» */
+            detail?: string;
+            /**
+             * @description Что исправит: кнопка в панели или команда на сервере
+             * @enum {string}
+             */
+            fix?: "rekey" | "update_node" | "old_node" | "open_port" | "start_node" | "check_host" | "check_dns" | "free_port" | "sync_time" | "update_panel" | "free_disk" | "check_outbound" | "restart_panel" | "exit_node";
+            /** @description Что проверено: link, hello, version, update, skew, listeners, listener, port, relay, cascade, node_dns, node_internet, node_github, node_ghcr, node_disk, node_memory, diagnose, local_node, dns, internet, github, ghcr, disk, memory, clock, updates */
+            id: string;
+            params?: {
+                [key: string]: string;
+            };
+            /** @enum {string} */
+            status: "ok" | "warn" | "fail" | "skip";
         };
         CheckTargetInputBody: {
             /** @description host:port */
@@ -2322,11 +3686,28 @@ export interface components {
             /** @description Имя для клиентов; по умолчанию — хост из dest */
             sni?: string;
         };
+        CheckView: {
+            /** Format: date-time */
+            at: string;
+            items: components["schemas"]["CheckItem"][];
+            /** @description Отчёт для чата: адреса, домены, порт API и ключи скрыты */
+            report: string;
+        };
         ClearedOutputBody: {
             /** Format: int64 */
             deleted: number;
         };
+        ClientCDN: {
+            /** @description Заголовок с настоящим адресом клиента: CF-Connecting-IP, X-Forwarded-For, X-Real-IP; пусто — нода видит адреса CDN */
+            header?: string;
+            /** @description Сети CDN, чьему заголовку нода верит: CIDR, адреса, cloudflare, private, loopback */
+            trusted?: string[];
+        };
         ClientEndpoint: {
+            /** @description Клиенты ходят через CDN; нет — напрямую или через TCP-прокси */
+            cdn?: components["schemas"]["ClientCDN"];
+            /** @description HTTP Host у клиентов (WebSocket, XHTTP); пусто — как на сервере */
+            host?: string;
             /**
              * Format: int64
              * @description Порт для клиентов; 0 — порт подключения
@@ -2340,6 +3721,7 @@ export interface components {
         Config: {
             /** @description Кнопки главного меню по порядку */
             buttons: components["schemas"]["MenuButton"][];
+            channel: components["schemas"]["Channel"];
             /** @description Удалять сообщения пользователя, чтобы в чате было одно меню */
             clean_chat: boolean;
             /**
@@ -2350,9 +3732,24 @@ export interface components {
             /** @description Кнопка Mini App со страницей подписки */
             mini_app: boolean;
             notify: components["schemas"]["Notify"];
+            /** @description Кнопка «Промокоды» в главном меню (нужен Mini App) */
+            promo_button: boolean;
             /** @description Уведомления с 22:00 до 9:00 МСК приходят без звука */
             quiet_night: boolean;
             texts: components["schemas"]["Texts"];
+        };
+        CopyInboundInputBody: {
+            /** @description REALITY: другой сайт маскировки, host:port; пусто — тот же */
+            dest?: string;
+            /**
+             * Format: int64
+             * @description Нода копии; по умолчанию — та же
+             */
+            node_id?: number;
+            /** @description Порт копии; пусто — тот же, а если он занят — первый свободный */
+            port?: string;
+            /** @description SNI для dest, если это IP */
+            server_name?: string;
         };
         CreateAPIKeyInputBody: {
             /**
@@ -2389,6 +3786,11 @@ export interface components {
             /** @enum {string} */
             scope: "read" | "full";
         };
+        CreateCampaignInputBody: {
+            /** @description Метка в ссылке: латиница, цифры, _ и -; пусто — случайная */
+            code?: string;
+            name: string;
+        };
         CreateFolderInputBody: {
             /**
              * @description Не задан — gray
@@ -2410,7 +3812,7 @@ export interface components {
             node_id?: number;
             port?: string;
             /** @enum {string} */
-            preset: "vless_reality_xhttp" | "hysteria2" | "hysteria2_gecko" | "tuic_v5" | "vless_reality_vision" | "vless_reality_grpc" | "trojan_reality" | "vless_tls_xhttp" | "vless_tls_vision" | "anytls" | "vless_reality_xhttp_pq" | "trusttunnel" | "shadowquic" | "mieru" | "shadowsocks_2022" | "sudoku" | "snell" | "custom";
+            preset: "vless_reality_xhttp" | "hysteria2" | "hysteria2_gecko" | "tuic_v5" | "vless_reality_vision" | "vless_reality_grpc" | "trojan_reality" | "vless_tls_xhttp" | "vless_tls_vision" | "vless_tls_ws" | "vless_cdn_xhttp" | "vless_cdn_xhttp_get" | "anytls" | "vless_reality_xhttp_pq" | "trusttunnel" | "shadowquic" | "mieru" | "shadowsocks_2022" | "sudoku" | "snell" | "custom";
         };
         CreateNodeInputBody: {
             /**
@@ -2423,6 +3825,38 @@ export interface components {
             /** @description IP или имя сервера ноды */
             host: string;
             name: string;
+        };
+        CreateSupportGrantInputBody: {
+            /** @description Одноразовый код из обращения в боте поддержки: без него доступ не открывается */
+            code: string;
+            /** @description Расширенный режим, уровни change и terminal: ещё и ключи нод, адрес и домен ноды, свои сертификаты и WireGuard, оплата и балансы, бот, аддоны не из каталога mikan. Нужен пароль */
+            extended?: boolean;
+            /**
+             * Format: int64
+             * @description Срок доступа в часах
+             * @enum {integer}
+             */
+            hours: 2 | 6 | 24;
+            /** @enum {string} */
+            level: "view" | "change" | "terminal";
+            /** @description Пометка для себя, например номер обращения */
+            note?: string;
+            /** @description Пароль админа: нужен для уровня terminal и для расширенного режима */
+            password?: string;
+            /** @description Показывать оператору имена, Telegram и ссылки подписчиков */
+            show_people?: boolean;
+            /** @description Уровень terminal: где разрешён терминал, panel и/или node:<id>. Полный доступ к этим серверам */
+            terminal_targets?: string[];
+            /** @description Код из приложения, если включена 2FA: нужен для уровня terminal и для расширенного режима */
+            totp?: string;
+        };
+        CreateSupportGrantOutputBody: {
+            grant: components["schemas"]["SupportGrantView"];
+            /**
+             * Format: int64
+             * @description Обращение в боте поддержки, которому передан доступ
+             */
+            ticket: number;
         };
         CreateUserInputBody: {
             contact?: string;
@@ -2441,6 +3875,30 @@ export interface components {
         DNSPolicy: {
             match: string;
             servers: string[];
+        };
+        DecideTopupInputBody: {
+            approve: boolean;
+            /** @description Почему отклонено: увидит клиент */
+            reason?: string;
+        };
+        DeviceBanView: {
+            /** @description Кто заблокировал; пусто — ключ API или удалённый админ */
+            admin: string;
+            /** Format: date-time */
+            banned_at: string;
+            /** @description Подписчик отвязал устройство, а вернуть его может только админ (until не показывается) */
+            forever?: boolean;
+            /** @description ID устройства, которому закрыта привязка */
+            hwid: string;
+            /** Format: int64 */
+            id: number;
+            /** @description Как устройство называлось, когда его заблокировали; пусто — приложение ничего о себе не сообщило */
+            label: string;
+            /**
+             * Format: date-time
+             * @description Подписчик сам отвязал устройство: оно сможет привязаться снова с этого момента; пусто — заблокировано админом навсегда
+             */
+            until?: string;
         };
         DeviceView: {
             /** Format: date-time */
@@ -2528,6 +3986,32 @@ export interface components {
             update?: boolean;
             warp?: boolean;
         };
+        ExitDNSInfo: {
+            /** @description Серверы готовых вариантов */
+            presets: {
+                [key: string]: string[];
+            };
+            /**
+             * @description DNS-сервер ноды: host — DNS самого сервера, cloudflare, google, quad9 — их DoH, custom — свой список
+             * @enum {string}
+             */
+            resolver: "host" | "cloudflare" | "google" | "quad9" | "custom";
+            /** @description Свои серверы для custom: 1.1.1.1, tls://dns.google, https://1.1.1.1/dns-query, quic://dns.adguard-dns.com; хранятся и при другом выборе */
+            servers: string[];
+            /** @description Нода сама узнаёт, на какой сайт идёт пользователь (TLS, HTTP, QUIC на портах 443, 8443, 80, 8080–8880), и подключается к нему из своей страны: сайты видят страну ноды, а не пользователя */
+            sniff: boolean;
+        };
+        ExitDNSView: {
+            /**
+             * @description DNS-сервер ноды: host — DNS самого сервера, cloudflare, google, quad9 — их DoH, custom — свой список
+             * @enum {string}
+             */
+            resolver: "host" | "cloudflare" | "google" | "quad9" | "custom";
+            /** @description Свои серверы для custom: 1.1.1.1, tls://dns.google, https://1.1.1.1/dns-query, quic://dns.adguard-dns.com; хранятся и при другом выборе */
+            servers: string[];
+            /** @description Нода сама узнаёт, на какой сайт идёт пользователь (TLS, HTTP, QUIC на портах 443, 8443, 80, 8080–8880), и подключается к нему из своей страны: сайты видят страну ноды, а не пользователя */
+            sniff: boolean;
+        };
         ExtendInputBody: {
             /** Format: int64 */
             days?: number;
@@ -2536,6 +4020,23 @@ export interface components {
              * @description Месяцами: до дня оплаты или того же числа
              */
             months?: number;
+        };
+        ExtraDevices: {
+            /**
+             * Format: int64
+             * @description Сколько устройств подписка может докупить; 0 — докупки нет
+             */
+            max: number;
+            /**
+             * Format: int64
+             * @description Цена одного устройства в копейках; null — не за рубли
+             */
+            price_rub: number | null;
+            /**
+             * Format: int64
+             * @description Цена одного устройства в Stars; null — не за Stars
+             */
+            price_stars: number | null;
         };
         FiltersView: {
             egress: components["schemas"]["EgressFilter"];
@@ -2562,6 +4063,28 @@ export interface components {
              * @description Сколько пользователей в папке, скрытые тоже
              */
             users: number;
+        };
+        GeoAnswer: {
+            /** @description ISO 3166-1 alpha-2 */
+            country?: string;
+            /** @enum {string} */
+            error?: "timeout" | "limited" | "failed";
+            service: string;
+        };
+        GeoCheck: {
+            /** @description Все ответившие базы согласны */
+            agree: boolean;
+            answers: components["schemas"]["GeoAnswer"][];
+            /** Format: date-time */
+            at: string;
+            cached: boolean;
+            /** @description Что говорит большинство баз */
+            country?: string;
+            ip?: string;
+        };
+        GeoInputBody: {
+            /** @description IP или домен сервера */
+            host: string;
         };
         Goal: {
             about?: {
@@ -2594,7 +4117,7 @@ export interface components {
             note?: string;
             /**
              * Format: int64
-             * @description Пул трафика; не передан — основной трафик
+             * @description Группа серверов; не передана — основной трафик
              */
             pool_id?: number;
         };
@@ -2618,13 +4141,35 @@ export interface components {
             payment_id: number | null;
             /**
              * Format: int64
-             * @description Пул трафика; null — основной трафик
+             * @description Группа серверов; null — основной трафик
              */
             pool_id: number | null;
             /** Format: int64 */
             remaining: number;
+            /**
+             * @description purchase — куплен, admin — начислен вручную, gift — подарок тарифа к оплате
+             * @enum {string}
+             */
+            source: "purchase" | "admin" | "gift";
+        };
+        GroupInTariff: {
             /** @enum {string} */
-            source: "purchase" | "admin";
+            mode: "main" | "own" | "unlimited" | "closed";
+            /** Format: int64 */
+            tariff_id: number;
+            /**
+             * Format: int64
+             * @description Байты за период; только с mode=own
+             */
+            traffic_limit?: number;
+        };
+        GroupInboundsInputBody: {
+            /** @description Все подключения группы: перечисленные переходят в неё из других групп, остальные её подключения возвращаются к основным серверам */
+            inbound_ids: number[];
+        };
+        GroupTariffsInputBody: {
+            /** @description Тарифы, в которых группа меняется; остальные тарифы держат её как раньше. Закрытие и открытие группы действует сразу на клиентов тарифа */
+            tariffs: components["schemas"]["GroupInTariff"][];
         };
         H2Comparison: {
             reference: components["schemas"]["H2Fingerprint"];
@@ -2651,6 +4196,28 @@ export interface components {
             /** @description happ://crypt5/…: Happ открывает подписку, не показывая её адрес; пусто — шифрованная ссылка выключена */
             link: string;
         };
+        HostItem: {
+            detail: string;
+            /** @description Что сделать; пусто, если всё хорошо */
+            fix?: string;
+            label: string;
+            /** @enum {string} */
+            level: "ok" | "warn" | "error";
+        };
+        HostReport: {
+            /** @description RFC 3339 */
+            at: string;
+            /** Format: int64 */
+            errors: number;
+            /** @description Заявка, на которую это ответ */
+            id: string;
+            items: components["schemas"]["HostItem"][];
+            /** @enum {string} */
+            kind: "panel" | "node";
+            version: string;
+            /** Format: int64 */
+            warnings: number;
+        };
         HostStatus: {
             /** @description RFC 3339 */
             at: string;
@@ -2666,7 +4233,7 @@ export interface components {
             password?: string;
             /**
              * Format: int64
-             * @description Тариф, на котором появятся пользователи; лимит, срок и устройства берутся из старой панели, сброс трафика, протоколы и пулы — из тарифа
+             * @description Тариф, на котором появятся пользователи; лимит, срок и устройства берутся из старой панели, сброс трафика, протоколы и группы серверов — из тарифа
              */
             tariff_id: number;
             token?: string;
@@ -2700,8 +4267,12 @@ export interface components {
             auto_port: boolean;
             /** @description Панель сама меняет сайт маскировки REALITY, если он перестал подходить (и включено в настройках) */
             auto_sni: boolean;
+            /** @description Можно ли поставить подключение за CDN: VLESS или Trojan на сертификате ноды по XHTTP, WebSocket или gRPC */
+            cdn_possible: boolean;
             /** @description Куда подключаются клиенты, если не к ноде напрямую (mikan.client в шаблоне) */
             client: components["schemas"]["ClientEndpoint"];
+            /** @description Можно ли задать клиентам свой HTTP Host: VLESS и Trojan по WebSocket и XHTTP */
+            client_host: boolean;
             /** @description Можно ли задать клиентам свой SNI: у REALITY имя задаёт сайт маскировки */
             client_sni: boolean;
             /** @description Шаблон листенера (YAML) */
@@ -2725,6 +4296,8 @@ export interface components {
             listen: string;
             name: string;
             network: string;
+            /** @description Работает на сертификате ноды (Hysteria2, TUIC, AnyTLS, TrustTunnel, VLESS TLS): с самоподписанным в sing-box приложениях не появится */
+            node_cert?: boolean;
             /** Format: int64 */
             node_id: number;
             /** @description Hysteria2: salamander, gecko или пусто (без обфускации); у других типов поля нет */
@@ -2736,7 +4309,7 @@ export interface components {
             outbound: "direct" | "warp" | "node";
             /**
              * Format: int64
-             * @description Пул трафика, в который считается подключение; нет — основной трафик
+             * @description Группа серверов подключения: какой трафик оно тратит; нет — основной трафик
              */
             pool_id?: number;
             port: string;
@@ -2744,6 +4317,10 @@ export interface components {
             server_names?: string[];
             /** @description Один ключ на всех: учёт, лимиты и отключение по пользователям не работают */
             shared?: boolean;
+            /** @description Подключение делит порт 443 ноды с другими по имени TLS (SNI-роутер ноды); клиенты подключаются на 443 */
+            sni443: boolean;
+            /** @description Можно ли поставить за SNI-роутер: VLESS, Trojan или AnyTLS по TCP с TLS или REALITY */
+            sni443_possible: boolean;
             /** @enum {string} */
             status: "ok" | "error" | "unknown";
             /** @description Имя, которое увидит клиент */
@@ -2763,6 +4340,7 @@ export interface components {
             default_port: string;
             domain_cert?: boolean;
             id: string;
+            nested_tls?: boolean;
             network: string;
             shared?: boolean;
             sub_name: string;
@@ -2906,11 +4484,170 @@ export interface components {
             name: string;
             ok: boolean;
         };
+        LogLine: {
+            /** Format: date-time */
+            at: string;
+            /** @description DEBUG, INFO, WARN или ERROR */
+            level: string;
+            /** @description Строка целиком, как её пишет slog, без секретов */
+            text: string;
+        };
         LoginInputBody: {
             password: string;
             /** @description Код из приложения или резервный код */
             totp?: string;
             username: string;
+        };
+        LogsView: {
+            lines: components["schemas"]["LogLine"][];
+            source: string;
+        };
+        MarketEntry: {
+            description: {
+                [key: string]: string;
+            };
+            /** @description Дайджест образа неофициальной записи */
+            digest?: string;
+            /**
+             * Format: int64
+             * @description Сколько раз скачан образ, по странице пакета на GitHub, с точностью до двух знаков (community)
+             */
+            downloads?: number;
+            /** @description Отпечаток ключа автора, которым подписан релиз (community) */
+            fingerprint?: string;
+            homepage: string;
+            id: string;
+            /** @description Образ неофициальной записи: админ видит, что именно будет запущено на сервере; у записи подписанного каталога пусто */
+            image?: string;
+            installed: boolean;
+            /** @description Дайджест установленного неофициального аддона */
+            installed_digest?: string;
+            /** @description Одобренная версия установленного неофициального аддона */
+            installed_version?: string;
+            /** @description Релиз подписан не тем ключом, что при установке: обновление ждёт, пока админ сверит и примет новый ключ */
+            key_changed?: boolean;
+            /** @enum {string} */
+            kind: "bot" | "ui" | "generic";
+            /** @enum {string} */
+            mode: "http" | "client";
+            /** @description Название по языкам */
+            name: {
+                [key: string]: string;
+            };
+            /** @description Откуда неофициальный аддон; нет у аддона подписанного каталога */
+            origin?: components["schemas"]["MarketOrigin"];
+            /** @description Что аддон просит: это и одобряет админ при установке */
+            permissions: string[];
+            /**
+             * Format: int64
+             * @description Звёзды репозитория автора (community)
+             */
+            stars?: number;
+            /** @description Установлен, а в каталоге или источнике другая сборка */
+            update: boolean;
+            /**
+             * Format: int64
+             * @description Когда реестр увидел эту сборку, unix (community)
+             */
+            updated_at?: number;
+            version: string;
+            /** @description Сборка просит больше прав, чем одобрено: обновление ждёт нового одобрения */
+            wider: boolean;
+        };
+        MarketExternalInputBody: {
+            /** @description Админ подтвердил, что доверяет этому коду: mikan его не проверял */
+            confirm: boolean;
+            /** @description Имя аддона: a-z, 0-9 и дефис, не из каталога и не из источника */
+            id: string;
+            /** @enum {string} */
+            kind: "bot" | "ui" | "generic";
+            /**
+             * @description http — аддон отвечает панели на /v2/*; client — только сам ходит в панель
+             * @enum {string}
+             */
+            mode: "http" | "client";
+            /** @description Права, которые админ даёт аддону */
+            permissions: string[];
+            /** @description http://127.0.0.1:<порт>; клиенту панели (mode client) можно не указывать */
+            url?: string;
+        };
+        MarketInstallInputBody: {
+            /** @description Отпечаток нового ключа автора, который админ сверил (после author_key_changed) */
+            accept_key?: string;
+            /** @description Админ подтвердил, что ставит или обновляет неофициальный аддон на свой риск: без этого такая установка и обновление не проходят */
+            ack?: boolean;
+            /** @description Права, которые админ видел и одобрил: ровно те, что просит сборка */
+            permissions: string[];
+        };
+        MarketInstalled: {
+            /** @description Дайджест образа неофициального аддона (custom) */
+            digest?: string;
+            /** @description Одобренные права */
+            granted: string[];
+            id: string;
+            /** @description Образ неофициального аддона (custom) */
+            image?: string;
+            /** @enum {string} */
+            kind: "bot" | "ui" | "generic";
+            /**
+             * Format: int64
+             * @description Память контейнера, МБ; 0 — по умолчанию 128
+             */
+            mem_mb?: number;
+            /** @enum {string} */
+            mode: "http" | "client";
+            /** @description Откуда поставлен аддон (custom): источник или реестр сообщества */
+            origin?: components["schemas"]["MarketOrigin"];
+            /**
+             * @description official — из подписанного каталога; custom — образ из источника или, у старых установок, свой образ админа; external — свой процесс админа; mikan неофициальные не проверял
+             * @enum {string}
+             */
+            source: "official" | "custom" | "external";
+            /** @enum {string} */
+            status: "running";
+            /** @description Адрес внешнего аддона (external); пусто у клиента панели */
+            url?: string;
+            /** @description Одобренная версия у аддона из источника; пусто у аддона админа без источника: версию знает только каталог */
+            version: string;
+        };
+        MarketOrigin: {
+            /**
+             * Format: int64
+             * @description Источник (source); 0 у реестра
+             */
+            id: number;
+            /**
+             * @description source — источник, который добавил админ; community — реестр аддонов сообщества
+             * @enum {string}
+             */
+            kind: "source" | "community";
+            /** @description Репозиторий автора (community) */
+            repo?: string;
+            /** @description mikan убрал аддон из реестра, причина: ставить и обновлять нельзя, установленный лучше удалить */
+            revoked?: string;
+            /** @description Подписан закреплённым ключом автора; без подписи тот, кто управляет адресом, управляет и обновлениями */
+            signed: boolean;
+            /** @description Название источника или владелец/репозиторий автора */
+            title: string;
+        };
+        MarketView: {
+            /** @description Подписанный каталог и записи источников, которые админ добавил */
+            catalog: components["schemas"]["MarketEntry"][];
+            /** @description catalog_unavailable — каталог не загрузился */
+            catalog_error?: string;
+            /** @description Реестр аддонов сообщества: сторонние авторы, mikan их код не проверял */
+            community: components["schemas"]["MarketEntry"][];
+            /** @description community_unavailable — реестр не загрузился */
+            community_error?: string;
+            /** @description mikan на сервере умеет аддоны протокола 2; иначе сначала обновить сервер */
+            host_ready: boolean;
+            installed: components["schemas"]["MarketInstalled"][];
+            /** @description Как сервер выполнил последнюю заявку */
+            last?: components["schemas"]["AddonResult"];
+            /** @description Все заявки, которые сервер ещё не взял, по порядку */
+            queue?: components["schemas"]["AddonRequest"][];
+            /** @description Панель видит каталог данных сервера; иначе ставить аддоны нельзя */
+            supported: boolean;
         };
         MeBody: {
             admin: components["schemas"]["AdminView"];
@@ -2947,16 +4684,62 @@ export interface components {
             /** @description Публично доверенный для адреса: приложения принимают его без пина */
             trusted: boolean;
         };
+        NodeHello: {
+            /** Format: date-time */
+            at: string;
+            code?: string;
+            /** @description Адрес ноды в панели */
+            host?: string;
+            /** @description Hello пришёл не с того IP, что указан в панели */
+            ip_differs: boolean;
+            /** @description Панель достучалась до ноды в ответ на её hello */
+            ok: boolean;
+            params?: {
+                [key: string]: string;
+            };
+            /** @description Адрес, с которого пришёл hello */
+            seen_ip?: string;
+        };
         NodeInfo: {
             /** @description host:port API ноды; пусто у своей ноды */
             address: string;
+            /** @description Сети и адреса, которые админ добавил к адресам панели */
+            api_allow: string[];
+            /** @description Почему на сервере ноды нет правила файрвола для API */
+            api_lock_error?: string;
+            /** @description API ноды отвечает только адресам панели */
+            api_lockdown: boolean;
+            /** @description Группа балансировки; пусто — вне групп */
+            balance_group: string;
             /** @description Нода старее панели */
             behind: boolean;
             /** @description Панель может обновить ноду сама: удалённая, отвечает, версия 0.5.0.2 или новее; старую обновляют один раз вручную командой mikan update на её сервере */
             can_update: boolean;
+            /**
+             * Format: int64
+             * @description Мест для клиентов в группе; null — без ограничения
+             */
+            capacity: number | null;
+            /** @description Открытые сейчас подключения каскада других нод через эту, по ноде-источнику; пусто без каскада и у нод до 0.5.1.1-rc.14 */
+            cascade: components["schemas"]["CascadeConns"][];
+            /**
+             * Format: int64
+             * @description Сколько нода унесла за сутки для каскада других нод (вверх и вниз вместе), байты; в traffic_24h не входит: этих пользователей считает нода-источник
+             */
+            cascade_24h: number;
             certificate?: components["schemas"]["NodeCertView"];
+            /**
+             * Format: int64
+             * @description Ширина канала ноды, Мбит/с в каждую сторону; null — не задана
+             */
+            channel_mbps: number | null;
             /** Format: date-time */
             checked_at?: string;
+            /**
+             * Format: int64
+             * @description Часы ноды минус часы панели, секунды; нет у старых нод
+             */
+            clock_skew?: number;
             /** Format: int64 */
             conns: number;
             /**
@@ -2966,13 +4749,44 @@ export interface components {
             cpu_percent: number;
             domain: string;
             enabled: boolean;
+            /** @description Слова ошибки связи как есть, для «подробнее» */
             error?: string;
-            /** @description Адрес для клиентов */
+            /**
+             * @description Почему панель не достучалась до ноды
+             * @enum {string}
+             */
+            error_code?: "timeout" | "refused" | "unreachable" | "dns" | "pin_mismatch" | "tls" | "http_status" | "unknown";
+            /** @description host и port адреса API ноды, status ответа */
+            error_params?: {
+                [key: string]: string;
+            };
+            /**
+             * Format: date-time
+             * @description С какого момента нет связи
+             */
+            error_since?: string;
+            /** @description Канал ноды делится поровну между теми, кто сейчас качает */
+            fair_share: boolean;
+            /**
+             * @description Заглушка для посторонних: её отдают протоколы VLESS и Trojan с XHTTP, WebSocket или gRPC на чужие запросы вместо пустого 404, а с общим портом 443 и домен ноды; пусто — нет, maintenance — технические работы, cats — котики-кликер
+             * @enum {string}
+             */
+            front_page: "" | "maintenance" | "cats";
+            /** @description Последний hello ноды после запуска: достучалась ли панель в ответ */
+            hello?: components["schemas"]["NodeHello"];
+            /** @description Адрес для клиентов: домен ноды, без него server_host */
             host: string;
+            /** @description HTTP на порту 80 получает 301 на https */
+            http_redirect: boolean;
             /** Format: int64 */
             id: number;
             /** Format: int64 */
             inbounds: number;
+            /**
+             * Format: date-time
+             * @description Когда нода последний раз отвечала (с запуска панели)
+             */
+            last_ok_at?: string;
             /** Format: int64 */
             listeners: number;
             /** Format: int64 */
@@ -2992,8 +4806,17 @@ export interface components {
             proc_cpu_percent?: number;
             /** @description Публичное имя для канала состояния; пустое — нода скрыта из списка */
             public_name: string;
+            /** @description Почему нода не смогла занять порт 80 */
+            redirect_error?: string;
+            /** @description Почему нода не смогла занять порт 443 */
+            router_error?: string;
+            /** @description IP или имя сервера, как его задали: по нему панель ходит в API ноды; пусто у своей ноды */
+            server_host: string;
+            /** @description Порт 443 ноды делят подключения по имени TLS (SNI-роутер) */
+            sni_router: boolean;
             /** @enum {string} */
             status: "ok" | "error" | "unknown";
+            tls?: components["schemas"]["NodeTLSView"];
             /**
              * Format: int64
              * @description Сколько унесла нода за последние сутки (вверх и вниз вместе), байты; у только что добавленной ноды 0
@@ -3040,6 +4863,11 @@ export interface components {
              * @description up + down
              */
             bytes: number;
+            /**
+             * Format: int64
+             * @description Сколько нода унесла для каскада других нод (вверх и вниз вместе): их пользователей считает нода-источник, поэтому в bytes и total не входит
+             */
+            cascade: number;
             /** Format: int64 */
             down: number;
             /** Format: int64 */
@@ -3054,6 +4882,11 @@ export interface components {
         NodeSharesOutputBody: {
             /** @description Все ноды, больше всех сверху */
             items: components["schemas"]["NodeShare"][];
+            /**
+             * Format: date-time
+             * @description Учёт по нодам начался позже начала периода: день, с которого он идёт
+             */
+            since?: string;
             /**
              * Format: int64
              * @description Сколько унесли все ноды вместе
@@ -3076,6 +4909,68 @@ export interface components {
         NodeSiteServedOutputBody: {
             /** @description Сайт, который отдаёт нода: хеш, адреса на 127.0.0.1 и ошибка (например, порт занят); нет поля — ничего */
             served?: components["schemas"]["SiteStatus"];
+        };
+        NodeStatus: {
+            /** @description Последние попытки получить сертификат, свежие первыми */
+            attempts?: components["schemas"]["Attempt"][];
+            /**
+             * @description Кто выдал сертификат, который у ноды сейчас
+             * @enum {string}
+             */
+            ca?: "letsencrypt" | "zerossl" | "google";
+            /** @enum {string} */
+            ca_wanted?: "letsencrypt" | "zerossl" | "google";
+            /** Format: date-time */
+            checked_at?: string;
+            /** @description Код errors.acme: node_outdated — нода старее панели и не умеет получать сертификат */
+            error?: string;
+            error_detail?: string;
+            holder?: string;
+            identifier: string;
+            issuer?: string;
+            names?: string[];
+            /** Format: date-time */
+            not_after?: string;
+            ordering?: boolean;
+            /** Format: date-time */
+            retry_at?: string;
+        };
+        NodeTLSView: {
+            acme?: components["schemas"]["NodeStatus"];
+            /** @enum {string} */
+            ca?: "letsencrypt" | "zerossl" | "google";
+            issuer?: string;
+            /**
+             * @description custom — свой, acme — публичный, полученный панелью для ноды, panel — публичный сертификат панели (своя нода), self-signed — самоподписанный
+             * @enum {string}
+             */
+            kind: "custom" | "acme" | "panel" | "self-signed";
+            names?: string[];
+            /** Format: date-time */
+            not_after?: string;
+            /** @description Ссылки закрепляют самоподписанный сертификат: в sing-box приложениях (SFA, SFI) протоколы ноды на TLS не появятся, TUIC без проверки сертификата */
+            pinned: boolean;
+        };
+        NodeTrafficOutputBody: {
+            points: components["schemas"]["NodeTrafficPoint"][];
+        };
+        NodeTrafficPoint: {
+            /**
+             * Format: int64
+             * @description Скачано для каскада других нод: в down не входит
+             */
+            cascade_down: number;
+            /**
+             * Format: int64
+             * @description Отдано для каскада других нод: в up не входит
+             */
+            cascade_up: number;
+            /** Format: int64 */
+            down: number;
+            /** Format: date-time */
+            t: string;
+            /** Format: int64 */
+            up: number;
         };
         NodeView: {
             /** Format: date-time */
@@ -3149,7 +5044,7 @@ export interface components {
             on_sale?: boolean;
             /**
              * Format: int64
-             * @description Пул трафика; не передан — основной трафик
+             * @description Группа серверов; не передана — основной трафик
              */
             pool_id?: number;
             /**
@@ -3161,6 +5056,8 @@ export interface components {
             price_stars?: number;
             /** Format: int64 */
             sort?: number;
+            /** @description Тарифы, которым продаётся пакет; не переданы или пусто — всем, к квоте которых он подходит */
+            tariffs?: number[];
         };
         PackageView: {
             /** Format: int64 */
@@ -3181,7 +5078,7 @@ export interface components {
             on_sale: boolean;
             /**
              * Format: int64
-             * @description Пул трафика; null — основной трафик
+             * @description Группа серверов; null — основной трафик
              */
             pool_id: number | null;
             /**
@@ -3196,6 +5093,8 @@ export interface components {
             price_stars: number | null;
             /** Format: int64 */
             sort: number;
+            /** @description Тарифы, которым продаётся пакет; пусто — всем, к квоте которых он подходит */
+            tariffs: number[];
         };
         Page: {
             apps: components["schemas"]["PageApps"];
@@ -3265,7 +5164,7 @@ export interface components {
             /** @description Свой заголовок (у кнопок — текст кнопки); пусто — обычный */
             title: string;
             /** @enum {string} */
-            type: "announce" | "status" | "promo" | "shop" | "traffic" | "devices" | "apps" | "guide" | "instructions" | "link" | "locations" | "telegram" | "support" | "text" | "links";
+            type: "announce" | "status" | "promo" | "shop" | "traffic" | "devices" | "apps" | "guide" | "instructions" | "link" | "reissue" | "locations" | "telegram" | "support" | "text" | "links";
         };
         PageBrand: {
             emoji: string;
@@ -3306,10 +5205,10 @@ export interface components {
              */
             mode: "light" | "dark" | "system";
             /**
-             * @description Палитра темы, как темы панели
+             * @description Тема, как темы панели. mikan, ocean, sakura и forest следуют mode; остальные светлые или тёмные сами
              * @enum {string}
              */
-            palette: "mikan" | "ocean" | "sakura" | "forest";
+            palette: "mikan" | "ocean" | "sakura" | "forest" | "latte" | "snow" | "dawn" | "dune" | "graphite" | "abyss" | "ember" | "plum" | "moss" | "terminal" | "nord" | "mocha" | "tokyo" | "dracula" | "aurora" | "cosmos";
             /** @enum {string} */
             radius: "small" | "medium" | "large";
         };
@@ -3341,6 +5240,10 @@ export interface components {
             /** @description Пароль, которым шифруется файл: от 20 символов. Файл остаётся в истории чата навсегда; без пароля его не открыть */
             password?: string;
         };
+        PatchCampaignInputBody: {
+            archived?: boolean;
+            name?: string;
+        };
         PatchFiltersInputBody: {
             /** @description Весь исходящий фильтр */
             egress?: components["schemas"]["EgressFilter"];
@@ -3359,7 +5262,7 @@ export interface components {
             auto_port?: boolean;
             /** @description Нельзя включить, пока у подключения свой адрес (listen) */
             auto_sni?: boolean;
-            /** @description Куда подключаются клиенты: адрес, порт и SNI прокси перед нодой; заменяет все три */
+            /** @description Куда подключаются клиенты: адрес, порт, SNI и Host прокси или CDN перед нодой; заменяет всё сразу */
             client?: components["schemas"]["ClientEndpoint"];
             /** @description Шаблон листенера (YAML) */
             config?: string;
@@ -3388,12 +5291,14 @@ export interface components {
             outbound?: "direct" | "warp" | "node";
             /**
              * Format: int64
-             * @description Пул трафика; 0 — основной трафик
+             * @description Группа серверов; 0 — без группы, основной трафик
              */
             pool_id?: number;
             port?: string;
             /** @description SNI для клиентов, если dest — IP (цель из подбора соседей) */
             server_name?: string;
+            /** @description Поставить за SNI-роутер ноды на 443 (true) или вернуть на свой порт (false) */
+            sni443?: boolean;
             /** @description Тонкая настройка XHTTP целиком: пустое поле — значение ядра по умолчанию */
             xhttp?: components["schemas"]["XHTTPTuning"];
         };
@@ -3405,18 +5310,61 @@ export interface components {
             secret?: string;
         };
         PatchNodeInputBody: {
+            /** @description Ещё сети или адреса (203.0.113.5, 198.51.100.0/24), с которых панель ходит к ноде */
+            api_allow?: string[];
+            /** @description API ноды только с адресов панели; не для ноды панели */
+            api_lockdown?: boolean;
+            /**
+             * Format: int64
+             * @description Ширина канала ноды, Мбит/с в каждую сторону
+             */
+            channel_mbps?: number;
             domain?: string;
             enabled?: boolean;
+            /** @description Делить канал ноды поровну между теми, кто сейчас качает; нужен channel_mbps */
+            fair_share?: boolean;
+            /**
+             * @description Заглушка для посторонних: протоколы с XHTTP, WebSocket или gRPC отдают её на чужие запросы вместо пустого 404, общий порт 443 — на домене ноды и на запросах без имени (сертификат ноды, TLS 1.2+, HSTS); пусто — нет
+             * @enum {string}
+             */
+            front_page?: "" | "maintenance" | "cats";
             host?: string;
+            /** @description Отвечать на HTTP (порт 80) редиректом 301 на https; не для ноды панели */
+            http_redirect?: boolean;
             name?: string;
             /** @description Публичное имя ноды; пустое — не публиковать её в канале */
             public_name?: string;
+            /** @description SNI-роутер на 443: подключения с отметкой «через общий 443» слушают на loopback за ним */
+            sni_router?: boolean;
         };
         PatchPaymentSettingsInputBody: {
             allow_new?: boolean;
+            balance?: components["schemas"]["BalanceSettingsBody"];
             enabled?: boolean;
+            /** @description Докупленные устройства остаются при продлении (true) или до конца срока (false) */
+            extra_devices_keep?: boolean;
+            /**
+             * @description none: без условий; channel: только подписчикам канала бота, канал должен быть указан на странице Telegram
+             * @enum {string}
+             */
+            free_condition?: "none" | "channel";
+            /**
+             * Format: int64
+             * @description Тариф бесплатного тарифа, нужен срок; 0: выключить
+             */
+            free_tariff_id?: number;
             renew_resets_traffic?: boolean;
             stars?: boolean;
+            /**
+             * Format: int64
+             * @description Цена пробного периода в копейках, от 100 (1 ₽); 0 — не за рубли. Обе 0 — пробный период бесплатный
+             */
+            trial_rub?: number;
+            /**
+             * Format: int64
+             * @description Цена пробного периода в Stars; 0 — не за Stars. Без пробного периода (trial_tariff_id 0) обе цены сбрасываются
+             */
+            trial_stars?: number;
             /**
              * Format: int64
              * @description Тариф пробного периода; 0 — выключить
@@ -3424,6 +5372,16 @@ export interface components {
             trial_tariff_id?: number;
         };
         PatchSettingsInputBody: {
+            /**
+             * @description Смена центра выпускает сертификаты панели и нод заново
+             * @enum {string}
+             */
+            acme_ca?: "letsencrypt" | "zerossl" | "google";
+            /** @description Ключ HMAC (base64url); пусто — убрать. Обратно не показывается */
+            acme_eab_hmac?: string;
+            acme_eab_kid?: string;
+            acme_email?: string;
+            any_port?: boolean;
             app_branding?: boolean;
             auto_port?: boolean;
             auto_sni?: boolean;
@@ -3438,6 +5396,7 @@ export interface components {
             default_lang?: "auto" | "ru" | "en";
             device_binding?: boolean;
             device_require_hwid?: boolean;
+            device_unbind?: components["schemas"]["UnbindRules"];
             domain?: string;
             /** @enum {string} */
             happ_crypt?: "off" | "api" | "local";
@@ -3445,14 +5404,24 @@ export interface components {
             happ_provider_id?: string;
             /** @description happ://routing/…, auto — собрать из маршрутизации; пусто — не отдавать */
             happ_routing?: string;
+            link_reissue?: components["schemas"]["ReissueRules"];
+            /** @description Пусто — по бренду */
+            panel_app_name?: string;
             public_host?: string;
             /** Format: int64 */
             quiet_hour_utc?: number;
+            /** @enum {string} */
+            site_template?: "" | "maintenance" | "cats";
+            /** @description До 10 строк: страница подписки и Mini App показывают их с переносами, приложения получают одну строку до 200 символов */
             sub_announce?: string;
             /** @description https://… или tg://… */
             sub_announce_url?: string;
+            /** @description Домен для ссылок подписки, отдельный от домена панели; пусто — убрать. Старые ссылки продолжают работать */
+            sub_domain?: string;
             sub_group_auto?: string;
             sub_group_main?: string;
+            sub_inactive_server?: boolean;
+            sub_inactive_text?: string;
             /**
              * Format: int64
              * @description Отдельный порт подписок на сервере панели; 0 — убрать. Ссылки переезжают на него, старые продолжают работать
@@ -3467,8 +5436,10 @@ export interface components {
             sub_template?: string;
             /** @description Переменные — см. SettingsView.sub_title */
             sub_title?: string;
+            support_access?: boolean;
             /** @description https://… или tg://… */
             support_url?: string;
+            wide_sni_scan?: boolean;
         };
         PatchTelegramInputBody: {
             config?: components["schemas"]["Config"];
@@ -3502,6 +5473,11 @@ export interface components {
             contact?: string;
             /** Format: int64 */
             device_limit?: number;
+            /**
+             * @description Как считается лимит устройств: bound: привязанные устройства, online: любое число, считаются только одновременно онлайн
+             * @enum {string}
+             */
+            device_mode?: "bound" | "online";
             devices_unlimited?: boolean;
             disabled?: boolean;
             /** Format: date-time */
@@ -3517,6 +5493,13 @@ export interface components {
             name?: string;
             never_expires?: boolean;
             note?: string;
+            /**
+             * Format: int64
+             * @description Скорость, Мбит/с в каждую сторону
+             */
+            speed_limit?: number;
+            /** @description Снять ограничение скорости */
+            speed_unlimited?: boolean;
             tags?: string[];
             /**
              * Format: int64
@@ -3532,10 +5515,27 @@ export interface components {
             allow_new: boolean;
             /** @description Что принимает оплату прямо сейчас: включено, настроено, для Stars — бот запущен */
             available: components["schemas"]["PaymentSettingsViewAvailableStruct"];
+            /** @description Внутренний баланс клиентов с пополнением по скриншоту */
+            balance: components["schemas"]["BalanceSettings"];
             /** @description Продажа подписок: выключено — бот и Mini App ничего не продают, новые счета не создаются, уже открытые засчитываются */
             enabled: boolean;
-            /** @description Встроенные ЮKassa и CryptoBot переехали в маркетплейс: адаптеры, которые сервер ещё ставит */
-            moving: string[];
+            /** @description Докупленные устройства остаются при продлении, и продление стоит дороже на их цену; иначе они действуют до конца срока */
+            extra_devices_keep: boolean;
+            /**
+             * @description Условие бесплатного тарифа: none: без условий, channel: подписка на канал бота (Telegram → Меню и тексты)
+             * @enum {string}
+             */
+            free_condition: "none" | "channel";
+            /**
+             * Format: int64
+             * @description Сколько бесплатных подписок выдано
+             */
+            free_plans: number;
+            /**
+             * Format: int64
+             * @description Тариф бесплатного тарифа: кнопка в боте и Mini App, снова взять можно, когда прошлая бесплатная подписка аккаунта закончилась, и не пока идёт его пробный период; null: бесплатного тарифа нет. Работает и при выключенной продаже
+             */
+            free_tariff_id: number | null;
             /**
              * Format: int64
              * @description Сколько тарифов бот может продать прямо сейчас: «В продаже» и с ценой для способа, который принимает оплату
@@ -3545,6 +5545,16 @@ export interface components {
             renew_resets_traffic: boolean;
             /** @description Telegram Stars: нужен только запущенный бот */
             stars: boolean;
+            /**
+             * Format: int64
+             * @description Цена пробного периода в копейках; с ценой пробный период покупают один раз в боте и Mini App, нужна включённая продажа
+             */
+            trial_rub: number;
+            /**
+             * Format: int64
+             * @description Цена пробного периода в Stars; 0 вместе с trial_rub — бесплатно
+             */
+            trial_stars: number;
             /**
              * Format: int64
              * @description Тариф пробного периода: один раз на Telegram-аккаунт без подписки и оплат, кнопка в приветствии бота; null — пробного периода нет. Работает и при выключенной продаже
@@ -3559,28 +5569,29 @@ export interface components {
         PaymentSettingsViewAvailableStruct: {
             /** @description Адаптеры маркетплейса, которые принимают оплату прямо сейчас */
             addons: string[];
+            /** @description Баланс включён и настроен */
+            balance: boolean;
             stars: boolean;
         };
         PaymentTotal: {
             /** Format: int64 */
             count: number;
-            /** @enum {string} */
-            currency: "XTR" | "RUB";
+            currency: string;
             /** Format: int64 */
             total: number;
         };
         PaymentView: {
             /**
              * Format: int64
-             * @description Stars или копейки
+             * @description Stars или копейки (сотые) валюты
              */
             amount: number;
             /** Format: date-time */
             applied_at?: string;
             /** Format: date-time */
             created_at: string;
-            /** @enum {string} */
-            currency: "XTR" | "RUB";
+            /** @description XTR, RUB или валюта баланса */
+            currency: string;
             /** @description Почему оплаченный платёж ещё не применён */
             error?: string;
             /** @description Номер платежа у провайдера */
@@ -3588,13 +5599,13 @@ export interface components {
             /** Format: int64 */
             id: number;
             /**
-             * @description package — пакет трафика: tariff_name — название пакета
+             * @description package — пакет трафика: tariff_name — название пакета; trial — платный пробный период; device — докупленное устройство
              * @enum {string}
              */
-            kind: "new" | "renew" | "package";
+            kind: "new" | "renew" | "package" | "trial" | "device";
             /** Format: date-time */
             paid_at?: string;
-            /** @description stars или addon:<id> — адаптер маркетплейса */
+            /** @description stars, balance (с баланса клиента) или addon:<id> — адаптер маркетплейса */
             provider: string;
             /** Format: date-time */
             refunded_at?: string;
@@ -3621,24 +5632,29 @@ export interface components {
         PoolInputBody: {
             name: string;
         };
-        PoolLimit: {
-            /** @description Пул закрыт: его подключений нет в подписке, ноды их не пускают, пакеты трафика пула не продаются; traffic_limit тогда не важен */
-            excluded?: boolean;
+        PoolPatchInputBody: {
+            name: string;
+        };
+        PoolSetting: {
+            /**
+             * @description main — входит, трафик считается в основной; own — входит со своим лимитом traffic_limit; unlimited — входит без лимита, отдельно от основного; closed — не входит: подключений группы нет в подписке, ноды их не пускают, пакеты группы не продаются
+             * @enum {string}
+             */
+            mode: "main" | "own" | "unlimited" | "closed";
             /** Format: int64 */
             pool_id: number;
             /**
              * Format: int64
-             * @description Байты; null — без лимита
+             * @description Байты за период; только с mode=own
              */
-            traffic_limit: number | null;
-        };
-        PoolPatchInputBody: {
-            name: string;
+            traffic_limit?: number;
         };
         PoolView: {
             /** Format: int64 */
             id: number;
-            /** @description Подключения, которые считаются в этот пул */
+            /** @description Подключения группы */
+            inbound_ids: number[];
+            /** @description Имена подключений группы */
             inbounds: string[];
             name: string;
         };
@@ -3727,7 +5743,7 @@ export interface components {
             per_user_limit: number;
             /**
              * Format: int64
-             * @description Пул для бонусного трафика; без значения — основной трафик
+             * @description Группа серверов для бонусного трафика; без значения — основной трафик
              */
             pool_id?: number;
             /**
@@ -3858,6 +5874,11 @@ export interface components {
             brand_accent?: string;
             config: components["schemas"]["Page"];
         };
+        PutTrafficDetailInputBody: {
+            /** Format: int64 */
+            days: number;
+            enabled: boolean;
+        };
         QuietAdvice: {
             /**
              * @description Что предложить: выключить подключение, дать ноде сайт, повторить с эталоном или ничего
@@ -3886,9 +5907,115 @@ export interface components {
              */
             verdict: "quiet" | "noticeable" | "exposed" | "inconclusive";
         };
+        ReachCheck: {
+            /** Format: date-time */
+            at: string;
+            cached: boolean;
+            host: string;
+            ports: number[];
+            probes: components["schemas"]["ReachProbe"][];
+            /** @enum {string} */
+            verdict: "ok" | "partial" | "blocked" | "down";
+        };
+        ReachInputBody: {
+            /** @description IP или домен сервера */
+            host: string;
+            /** @description TCP-порты: 22 у любого сервера с SSH, 443 у ноды */
+            ports: number[];
+        };
+        ReachPort: {
+            /** Format: int64 */
+            got: number;
+            /** Format: int64 */
+            ms?: number;
+            ok: boolean;
+            pending?: boolean;
+            /** Format: int64 */
+            port: number;
+            /** Format: int64 */
+            sent: number;
+        };
+        ReachProbe: {
+            /** Format: int64 */
+            asn: number;
+            city: string;
+            control: boolean;
+            country: string;
+            home: boolean;
+            network: string;
+            ports: components["schemas"]["ReachPort"][];
+        };
+        RecordingInfo: {
+            /**
+             * Format: date-time
+             * @description Когда сессия началась
+             */
+            at: string;
+            /**
+             * Format: int64
+             * @description Доступ, под которым шла сессия
+             */
+            grant_id: number;
+            /** @description <доступ>-<время>.cast */
+            name: string;
+            /**
+             * Format: int64
+             * @description Байт
+             */
+            size: number;
+        };
+        RecordingsView: {
+            /** @description От новых к старым */
+            recordings: components["schemas"]["RecordingInfo"][];
+            source: string;
+        };
         RecoveryOutputBody: {
             /** @description Показываются один раз */
             recovery_codes: string[];
+        };
+        RedistributeOutputBody: {
+            /**
+             * Format: int64
+             * @description Сколько клиентов распределится заново при следующем обновлении подписки
+             */
+            moved: number;
+        };
+        Refused: {
+            /** Format: int64 */
+            at: number;
+            error: string;
+            target: string;
+        };
+        RegionAnswer: {
+            country?: string;
+            /**
+             * @description unreachable — сайт не ответил, unknown — ответ не разобрать, no_ip — у ноды нет адреса этого семейства
+             * @enum {string}
+             */
+            error?: "unreachable" | "unknown" | "no_ip";
+            open?: boolean;
+        };
+        ReissueRules: {
+            /**
+             * Format: int64
+             * @description За сколько дней считается лимит (скользящее окно)
+             */
+            days: number;
+            /**
+             * Format: int64
+             * @description Сколько раз подписчик может сменить ссылку за days; 0: без ограничения
+             */
+            limit: number;
+            /** @description Подписчик не меняет ссылку сам, только админ */
+            off?: boolean;
+        };
+        RenameDeviceInputBody: {
+            /** @description Своё имя устройства, до 40 символов одной строкой; пустое — вернуть имя от приложения */
+            name: string;
+        };
+        RenameDeviceOutputBody: {
+            /** @description Имя, как оно сохранено: без пробелов по краям */
+            name: string;
         };
         Report: {
             /** Format: int64 */
@@ -3907,6 +6034,9 @@ export interface components {
         };
         ResetPathOutputBody: {
             admin_url: string;
+        };
+        RestartAccepted: {
+            id: string;
         };
         Result: {
             cert_valid: boolean;
@@ -4004,6 +6134,24 @@ export interface components {
             /** @description Профиль Clash (YAML) пользователя со всеми подключениями; ключи — заглушки */
             profile: string;
         };
+        RussiaPort: {
+            /** @description api или имя подключения */
+            name: string;
+            /** Format: int64 */
+            port: number;
+        };
+        RussiaView: {
+            /** Format: date-time */
+            at: string;
+            cached: boolean;
+            host: string;
+            /** @description Что за порты ноды проверены */
+            names: components["schemas"]["RussiaPort"][];
+            ports: number[];
+            probes: components["schemas"]["ReachProbe"][];
+            /** @enum {string} */
+            verdict: "ok" | "partial" | "blocked" | "down";
+        };
         ScanTargetsOutputBody: {
             /** @description Адрес сервера, вокруг которого искали */
             ip: string;
@@ -4081,6 +6229,38 @@ export interface components {
             interval?: number;
             no_countries?: boolean;
         };
+        ServersBody: {
+            /** @description Все серверы; false — только выбранные, хотя бы одна нода или протокол */
+            all: boolean;
+            /** @description Отдельные протоколы */
+            inbounds?: number[];
+            /** @description Ноды целиком, с протоколами, которые на них появятся потом */
+            nodes?: number[];
+        };
+        ServersView: {
+            /** @description Все серверы; false — только выбранные ноды и протоколы */
+            all: boolean;
+            /** @description Отдельные протоколы */
+            inbounds: number[];
+            /** @description Ноды целиком, с протоколами, которые на них появятся потом */
+            nodes: number[];
+        };
+        ServiceRegion: {
+            /** @description Ответ — пускает ли сайт адрес (open), а не страна */
+            access: boolean;
+            /** @description google, google_search, youtube, youtube_premium, youtube_music, netflix, chatgpt, cloudflare, prime_video, deezer, apple, steam, playstation, tiktok, ookla, jetbrains, bing, reddit */
+            service: string;
+            v4: components["schemas"]["RegionAnswer"];
+            v6: components["schemas"]["RegionAnswer"];
+        };
+        ServiceRegions: {
+            /** Format: date-time */
+            at: string;
+            /** @description Адрес ноды, как его видит Cloudflare */
+            ipv4?: string;
+            ipv6?: string;
+            services: components["schemas"]["ServiceRegion"][];
+        };
         SessionView: {
             /** Format: date-time */
             created_at: string;
@@ -4091,6 +6271,29 @@ export interface components {
             last_seen_at: string;
             user_agent: string;
         };
+        SetExitsInputBody: {
+            /**
+             * Format: int64
+             * @description Для outbound=node: через какую ноду
+             */
+            exit_node_id?: number;
+            /** @description Подключения */
+            ids: number[];
+            /**
+             * @description Выход в интернет: напрямую, через WARP своей ноды или через другую ноду
+             * @enum {string}
+             */
+            outbound: "direct" | "warp" | "node";
+        };
+        SetNodeBalanceInputBody: {
+            /**
+             * Format: int64
+             * @description Мест для клиентов; не передано — без ограничения
+             */
+            capacity?: number;
+            /** @description Группа балансировки; пусто — нода вне групп, её получают все */
+            group: string;
+        };
         SetTTConnectionsInputBody: {
             /**
              * Format: int64
@@ -4099,7 +6302,20 @@ export interface components {
             value: number;
         };
         SettingsView: {
+            /**
+             * @description Центр сертификации панели и нод: letsencrypt, zerossl (нужен e-mail) или google (нужен ключ EAB). IP-адреса всегда получают сертификат Let's Encrypt
+             * @enum {string}
+             */
+            acme_ca: "letsencrypt" | "zerossl" | "google";
+            /** @description Google Trust Services: ключ HMAC сохранён (сам ключ не показывается) */
+            acme_eab_hmac_set: boolean;
+            /** @description Google Trust Services: keyId ключа EAB */
+            acme_eab_kid: string;
+            /** @description E-mail для центра сертификации; ZeroSSL привязывает к нему аккаунт */
+            acme_email: string;
             admin_url: string;
+            /** @description Когда запасные порты (2053, 2083…) заняты, панель сама берёт любой свободный из 20000-32767: для нового подключения без порта и при автопереносе. Эти порты установщик в файрволе не открывает */
+            any_port: boolean;
             /** @description Брендинг в приложениях, читающих операторские заголовки (ClashFest, SlothClash): название, логотип, цвет, ссылки */
             app_branding: boolean;
             /** @description Переносить подключение на другой порт, если клиенты перестали до него доходить */
@@ -4123,6 +6339,8 @@ export interface components {
             device_binding: boolean;
             /** @description Не выдавать подписку приложениям без ID устройства (иначе они вместе занимают одно место) */
             device_require_hwid: boolean;
+            /** @description Сколько устройств подписчик может отвязать сам и через сколько отвязанное может вернуться */
+            device_unbind: components["schemas"]["UnbindRules"];
             domain: string;
             /**
              * @description Шифрованная ссылка для кнопки Happ: off — обычная happ://add/, api — через сервис Happ (адрес подписки уходит на crypto.happ.su), local — панель шифрует сама
@@ -4135,6 +6353,10 @@ export interface components {
             happ_provider_id: string;
             /** @description Профиль маршрутизации Happ: ссылка happ://routing/onadd/… (добавить и включить), happ://routing/add/… или happ://routing/off; auto — панель собирает его сама из маршрутизации Clash-профиля (Настройки → Маршрутизация); уходит только в Happ заголовком routing */
             happ_routing: string;
+            /** @description Как часто подписчик может сменить свою ссылку подписки сам (бот и Mini App) */
+            link_reissue: components["schemas"]["ReissueRules"];
+            /** @description Название панели, установленной как приложение (ярлык на рабочем столе, в меню, на главном экране); пусто — бренд, без бренда — mikan */
+            panel_app_name: string;
             /** Format: int64 */
             panel_port: number;
             public_host: string;
@@ -4145,15 +6367,30 @@ export interface components {
             quiet_hour_utc: number;
             /** @description Куда правило может направить трафик: DIRECT, REJECT, REJECT-DROP, PROXY и группы */
             rule_targets: string[];
+            /** @description В data/panel/www есть своя страница: шаблон не действует */
+            site_own: boolean;
+            /**
+             * @description Первая страница по адресу панели для посторонних: пусто — ответ 404, maintenance — технические работы, cats — котики-кликер
+             * @enum {string}
+             */
+            site_template: "" | "maintenance" | "cats";
             /** @description Объявление над профилем в приложениях (заголовок announce): Happ и v2RayTun показывают его под названием подписки; пусто — нет. Те же переменные, что в sub_title */
             sub_announce: string;
             /** @description Куда ведёт нажатие на объявление */
             sub_announce_url: string;
             sub_base_url: string;
+            /** @description Сертификат домена подписки: kind off — домен не задан */
+            sub_certificate?: components["schemas"]["Status"];
+            /** @description Свой домен для ссылок подписки; пусто — адрес панели */
+            sub_domain: string;
             /** @description Группа автовыбора самого быстрого подключения */
             sub_group_auto: string;
             /** @description Главная группа в Clash-приложениях */
             sub_group_main: string;
+            /** @description Подписка, которая не может подключиться (кончился срок или трафик, отключена), получает вместо серверов одну запись с объяснением */
+            sub_inactive_server: boolean;
+            /** @description Свой текст этой записи; пусто — свой по причине. Переменные как в названии подписки */
+            sub_inactive_text: string;
             /**
              * Format: int64
              * @description Отдельный порт подписок; 0 — порт панели. Порт панели отдаёт подписки в любом случае
@@ -4172,9 +6409,21 @@ export interface components {
             sub_rules: string;
             /** @description Свой профиль Clash (YAML) вместо встроенного для приложений на mihomo; пусто — встроенный. Серверы панель подставляет сама: в proxies и в группы с include-all-proxies или mikan: {nodes, types} */
             sub_template: string;
-            /** @description Название подписки в приложениях (заголовок profile-title); пусто — бренд. Переменные: {brand} — бренд, {name} — имя пользователя, {date} — дата окончания (ДД.ММ.ГГГГ, МСК), {days} — дней осталось, {used} — израсходовано, {left} — осталось трафика, {total} — всего; без срока или лимита — ∞ */
+            /** @description Название подписки в приложениях (заголовок profile-title); пусто — бренд. Переменные: {brand} — бренд, {name} — имя пользователя, {date} — дата окончания (ДД.ММ.ГГГГ, МСК), {days} — дней осталось, {used} — израсходовано, {left} — осталось трафика, {total} — всего, {devices} — привязанные устройства (2/3); без срока или лимита — ∞ */
             sub_title: string;
+            /** @description Разрешить доступ для поддержки (Настройки → Безопасность). Выключено: новый доступ не выдать, действующий закрывается. MIKAN_SUPPORT_ACCESS=off в .env сервера выключает его независимо от этой настройки */
+            support_access: boolean;
             support_url: string;
+            /** @description Искать сайты маскировки REALITY не только в /24 ноды, но и в соседних /24 её /16, до 20 найденных сайтов или 2 минут. Много подключений: хостер может принять это за сканирование сети */
+            wide_sni_scan: boolean;
+        };
+        SiteBytes: {
+            /** Format: int64 */
+            down: number;
+            /** @description Домен второго уровня или адрес; * — остальные сайты */
+            site: string;
+            /** Format: int64 */
+            up: number;
         };
         SiteOutputBody: {
             /** Format: int64 */
@@ -4215,6 +6464,48 @@ export interface components {
             size: number;
             title: string;
         };
+        SourceSkipView: {
+            /** @description Идентификатор записи, как его написал источник */
+            id: string;
+            /** @description id_taken — идентификатор из подписанного каталога или другого источника; payment — платёжный адаптер из источника не ставится; invalid, image_invalid, digest_invalid, version_invalid, id_invalid — запись не по правилам; min_panel — нужна более новая панель; duplicate, too_many */
+            reason: string;
+        };
+        SourceView: {
+            /** Format: date-time */
+            added_at: string;
+            /**
+             * Format: int64
+             * @description Сколько записей источник предлагает: сами записи в /marketplace
+             */
+            entries: number;
+            /** @description Код ошибки последнего чтения: source_unreachable, source_key_changed, source_signature_invalid… */
+            error?: string;
+            /** Format: date-time */
+            fetched_at?: string;
+            /** @description Отпечаток закреплённого ключа, для сверки с автором */
+            fingerprint?: string;
+            /** Format: int64 */
+            id: number;
+            /** @description Аддоны, поставленные из этого источника: пока они есть, источник не удалить */
+            installed: string[];
+            /** @description Источник подписан уже другим ключом (error source_key_changed): отпечаток нового, который админ может принять */
+            new_fingerprint?: string;
+            /** @description Ключ источника закреплён: подпись с другим ключом или без подписи панель не принимает */
+            signed: boolean;
+            skipped: components["schemas"]["SourceSkipView"][];
+            title: string;
+            url: string;
+        };
+        SourcesView: {
+            /** @description catalog_unavailable — без подписанного каталога записи источников не сверить, их не показываем */
+            catalog_error?: string;
+            /**
+             * Format: int64
+             * @description Сколько источников можно добавить
+             */
+            limit: number;
+            sources: components["schemas"]["SourceView"][];
+        };
         SpeedTestView: {
             /** Format: date-time */
             at: string;
@@ -4249,17 +6540,40 @@ export interface components {
             up_bps: number;
         };
         Status: {
+            /** @description Последние попытки получить сертификат, свежие первыми */
+            attempts?: components["schemas"]["Attempt"][];
+            /** @enum {string} */
+            ca?: "letsencrypt" | "zerossl" | "google";
+            /**
+             * @description Куда уйдёт следующий заказ: выбранный центр, для IP всегда Let's Encrypt
+             * @enum {string}
+             */
+            ca_wanted: "letsencrypt" | "zerossl" | "google";
             /** Format: date-time */
             checked_at: string;
             error?: string;
+            /** @description Подробности ошибки как есть, для «подробнее» */
+            error_detail?: string;
+            /** @description Кто держит порт 80 (port80_busy), если это видно */
+            holder?: string;
             identifier: string;
             issuer?: string;
-            /** @enum {string} */
-            kind: "self-signed" | "letsencrypt" | "custom";
+            /**
+             * @description acme — выдан центром сертификации автоматически (ca), custom — свой, self-signed — временный самоподписанный, off — домен подписки не задан
+             * @enum {string}
+             */
+            kind: "self-signed" | "acme" | "custom" | "off";
             names?: string[];
             /** Format: date-time */
             not_after: string;
-            /** @description Свой сертификат публично доверенный для адреса панели */
+            /** @description Заказ идёт прямо сейчас */
+            ordering?: boolean;
+            /**
+             * Format: date-time
+             * @description rate_limited: когда центр снова примет заказ
+             */
+            retry_at?: string;
+            /** @description Сертификат публично доверенный для адреса панели */
             trusted?: boolean;
         };
         SubDocBody: {
@@ -4298,6 +6612,78 @@ export interface components {
             /** @description Страница по умолчанию — к ней ведёт «Сбросить» */
             defaults: components["schemas"]["Page"];
             logo?: components["schemas"]["PageAsset"];
+        };
+        SupportEnterInputBody: {
+            /** @description Токен из ссылки доступа (после #) */
+            token: string;
+        };
+        SupportGrantView: {
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Когда оператор вошёл по ссылке в браузере; null: ещё нет
+             */
+            entered_at: string | null;
+            /** Format: date-time */
+            expires_at: string;
+            /** @description Расширенный режим: ещё и то, что иначе может только сессия админа: ключи нод, адрес и домен ноды, свои сертификаты и WireGuard, оплата и балансы, бот, аддоны не из каталога mikan */
+            extended: boolean;
+            /** Format: int64 */
+            id: number;
+            /** @description Адрес, с которого оператор был в последний раз */
+            last_ip: string;
+            /**
+             * Format: date-time
+             * @description Последнее обращение оператора (браузер или ключ); null: ещё не было
+             */
+            last_used_at: string | null;
+            /**
+             * @description view: только чтение; change: ещё и изменения; terminal: ещё и терминал на серверах из terminal_targets
+             * @enum {string}
+             */
+            level: "view" | "change" | "terminal";
+            note: string;
+            /** Format: date-time */
+            revoked_at: string | null;
+            /** @description Оператор видит имена, Telegram и ссылки подписок; иначе они скрыты */
+            show_people: boolean;
+            /** @enum {string} */
+            status: "active" | "expired" | "revoked";
+            /** @description Где разрешён терминал: panel или node:<id>; пусто вне уровня terminal */
+            terminal_targets: string[];
+        };
+        SupportGrantsOutputBody: {
+            /** @description Что делал оператор и что было с доступом, от новых к старым */
+            actions: components["schemas"]["AuditEntry"][];
+            /** @description Последний выданный доступ, активный или нет; null: ещё не выдавался */
+            grant: components["schemas"]["SupportGrantView"];
+            /**
+             * @description Выключен ли доступ для поддержки: пусто — включён, env — MIKAN_SUPPORT_ACCESS=off в .env сервера, setting — настройкой support_access
+             * @enum {string}
+             */
+            off: "" | "env" | "setting";
+        };
+        SupportNode: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+        };
+        SupportWhoami: {
+            /** @description Для изменяющих запросов сессии оператора; у ключа ms_… нет */
+            csrf_token?: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** @description Расширенный режим: ещё и то, что иначе может только сессия админа */
+            extended: boolean;
+            /** @enum {string} */
+            level: "view" | "change" | "terminal";
+            nodes: components["schemas"]["SupportNode"][];
+            panel_version: string;
+            /** @description Отпечаток ключа подписи релизов, которому верит эта сборка: у официального mikan он один, у форка свой */
+            release_key: string;
+            show_people: boolean;
+            terminal_targets: string[];
         };
         System: {
             /** Format: double */
@@ -4344,15 +6730,26 @@ export interface components {
              * @description Срок до этого числа месяца: месяц = от дня оплаты до дня оплаты
              */
             billing_day?: number;
+            /** @description Текст для покупателей, виден в боте и Mini App рядом со строкой из лимитов: чем тариф отличается, когда лимиты этого не показывают («с белыми списками»). Простой текст до 300 символов и до 5 строк; не передан или пустой — только строка из лимитов */
+            description?: string;
             /** Format: int64 */
             device_limit?: number;
+            /**
+             * @description bound: лимит это число привязанных устройств; online: привязывать можно любое число, считаются устройства, одновременно подключённые к серверам. Не передан: у нового тарифа bound, у существующего без изменений
+             * @enum {string}
+             */
+            device_mode?: "bound" | "online";
             /** Format: int64 */
             duration_days: number;
+            /** @description Докупка устройств; не передана — без изменений (у нового тарифа — нет). Нужен лимит устройств */
+            extra_devices?: components["schemas"]["ExtraDevices"];
+            /** @description Пакеты трафика в подарок при каждой оплате тарифа; каждый должен добавлять к квоте, которую тариф даёт: к основному трафику с лимитом или к группе со своим лимитом. Не передан — без изменений */
+            gifts?: number[];
             name: string;
             /** @description Продавать в боте и Mini App; нужна хотя бы одна цена */
             on_sale?: boolean;
-            /** @description Лимиты пулов трафика; не передан — без изменений */
-            pools?: components["schemas"]["PoolLimit"][];
+            /** @description Как тариф держит группы серверов; не названная группа — в основном трафике. Не передан — без изменений */
+            pools?: components["schemas"]["PoolSetting"][];
             price_label?: string;
             /**
              * Format: int64
@@ -4369,8 +6766,15 @@ export interface components {
              * @enum {string}
              */
             reset_strategy: "none" | "month_start" | "period";
+            /** @description Какие серверы входят в тариф: все или выбранные ноды и протоколы. Не передан — без изменений (у нового тарифа — все) */
+            servers?: components["schemas"]["ServersBody"];
             /** Format: int64 */
             sort?: number;
+            /**
+             * Format: int64
+             * @description Скорость, Мбит/с в каждую сторону; не передана — без ограничения
+             */
+            speed_limit?: number;
             /** @description Все сроки по порядку, когда тариф продаётся на несколько; тогда duration_days, price_stars и price_rub берутся из первого. Не передан — первый срок из duration_days, price_stars и price_rub, остальные без изменений */
             terms?: components["schemas"]["TermBody"][];
             /** Format: int64 */
@@ -4382,20 +6786,31 @@ export interface components {
              * @description День месяца, в который заканчивается срок; null — срок в днях
              */
             billing_day: number | null;
+            /** @description Текст для покупателей: чем тариф отличается, когда лимиты этого не показывают; до 300 символов, до 5 строк, пустой — только строка из лимитов */
+            description: string;
             /** Format: int64 */
             device_limit: number | null;
+            /**
+             * @description Как считается лимит устройств: bound: привязанные устройства (места), online: любое число устройств, считаются только одновременно онлайн
+             * @enum {string}
+             */
+            device_mode: "bound" | "online";
             /**
              * Format: int64
              * @description 0 — бессрочно
              */
             duration_days: number;
+            /** @description Докупка устройств в боте и Mini App: цена одного и сколько можно докупить */
+            extra_devices: components["schemas"]["ExtraDevices"];
+            /** @description Пакеты трафика в подарок при каждой оплате тарифа: покупке и продлении */
+            gifts: number[];
             /** Format: int64 */
             id: number;
             name: string;
             /** @description Продаётся в боте и Mini App */
             on_sale: boolean;
-            /** @description Лимиты пулов трафика и закрытые пулы; пул не в списке — без лимита. Лимиты действуют на новых пользователей и при продлении или смене тарифа; закрытие и открытие пула действуют сразу на всех пользователей тарифа: при открытии на них ставится лимит тарифа, ручной лимит пользователя затирается */
-            pools: components["schemas"]["PoolLimit"][];
+            /** @description Как тариф держит каждую группу серверов; группа без настройки тарифа — в основном трафике. Режим и лимит действуют на новых клиентов, при продлении, смене тарифа и по «Применить к выданным подпискам»; закрытие и открытие группы действует сразу на всех клиентов тарифа */
+            pools: components["schemas"]["PoolSetting"][];
             price_label: string;
             /**
              * Format: int64
@@ -4409,8 +6824,20 @@ export interface components {
             price_stars: number | null;
             /** @enum {string} */
             reset_strategy: "none" | "month_start" | "period";
+            /** @description Какие серверы входят в тариф: все или выбранные. Действует сразу на всех клиентов тарифа; клиент со своим списком протоколов в карточке остаётся при нём */
+            servers: components["schemas"]["ServersView"];
             /** Format: int64 */
             sort: number;
+            /**
+             * Format: int64
+             * @description Мбит/с в каждую сторону; null — без ограничения
+             */
+            speed_limit: number | null;
+            /**
+             * Format: int64
+             * @description Сколько подписок выдано на этом тарифе
+             */
+            subscribers: number;
             /** @description Сроки, на которые продаётся тариф, по порядку; первый — тот же, что duration_days, price_stars и price_rub */
             terms: components["schemas"]["TermView"][];
             /**
@@ -4447,6 +6874,18 @@ export interface components {
             name: string;
             username: string;
         };
+        TelegramPreviewInputBody: {
+            /** @description Текст бота с Markdown */
+            text: string;
+            /** @description Значения переменных {name}; без них переменные остаются как написаны */
+            vars?: {
+                [key: string]: string;
+            };
+        };
+        TelegramPreviewOutputBody: {
+            /** @description Сообщение, как его отправит бот: HTML Telegram */
+            html: string;
+        };
         TelegramRoute: {
             /**
              * @description Напрямую с сервера панели, через её ноду или через прокси — когда Telegram на сервере заблокирован
@@ -4468,14 +6907,18 @@ export interface components {
              */
             accounts: number;
             admin_chat_set: boolean;
+            /** @description Последнее уведомление, которое Telegram отверг насовсем (бот заблокирован, чат или канал недоступен): оно не доставлено и не повторяется */
+            alerts_refused?: components["schemas"]["Refused"];
             bot?: components["schemas"]["TelegramBot"];
             /** @description Последняя рассылка с запуска панели */
             broadcast?: components["schemas"]["TelegramBroadcast"];
+            /** @description Почему бот не может проверить подписку на канал: channel_not_admin (бот не администратор канала), channel_not_found, unreachable или ответ Telegram. Пока ошибка есть, обязательная подписка никого не останавливает */
+            channel_error?: string;
             config: components["schemas"]["Config"];
             /** @description Встроенные тексты на языке бота: пустое поле берёт их */
             defaults: components["schemas"]["Texts"];
             enabled: boolean;
-            /** @description token_invalid, token_revoked, unreachable или ответ Telegram */
+            /** @description token_invalid, token_revoked, token_conflict (токен опрашивает ещё одна программа), unreachable или ответ Telegram */
             error?: string;
             infrastructure: components["schemas"]["AlertsConfig"];
             /**
@@ -4528,10 +6971,14 @@ export interface components {
             price_stars: number | null;
         };
         Texts: {
+            /** @description Экран обязательной подписки на канал, вместо меню; {brand}: название сервиса */
+            channel: string;
             /** @description Уведомление: подписка закончилась */
             expired: string;
             /** @description Уведомление: подписка скоро закончится */
             expiring: string;
+            /** @description Надпись кнопки бесплатного тарифа, до 40 символов */
+            free_button: string;
             /** @description Шапка главного меню */
             main: string;
             /** @description Экран «Продлить» */
@@ -4549,6 +6996,38 @@ export interface components {
             /** Format: int64 */
             id: number;
             name: string;
+        };
+        TopupView: {
+            /**
+             * Format: int64
+             * @description В копейках (сотых) валюты
+             */
+            amount: number;
+            /**
+             * Format: int64
+             * @description Баланс аккаунта сейчас
+             */
+            balance: number;
+            /** Format: date-time */
+            created_at: string;
+            currency: string;
+            /** Format: date-time */
+            decided_at?: string;
+            /** Format: int64 */
+            id: number;
+            /** @description Есть скриншот: GET /api/v1/topups/{id}/photo */
+            photo: boolean;
+            reason?: string;
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected";
+            /** Format: int64 */
+            tg_id: number;
+            tg_username?: string;
+        };
+        TopupsOutputBody: {
+            items: components["schemas"]["TopupView"][];
+            /** Format: int64 */
+            pending: number;
         };
         TorrentHitView: {
             /** Format: date-time */
@@ -4623,6 +7102,15 @@ export interface components {
             secret: string;
             uri: string;
         };
+        TrafficDetailView: {
+            /**
+             * Format: int64
+             * @description Сколько дней хранить
+             */
+            days: number;
+            /** @description Ноды считают трафик подписок по сайтам */
+            enabled: boolean;
+        };
         TrafficOutputBody: {
             points: components["schemas"]["TrafficPoint"][];
         };
@@ -4658,6 +7146,25 @@ export interface components {
             block_quic?: boolean;
             real_ip?: boolean;
             sniffer?: boolean;
+        };
+        UnbindRules: {
+            /**
+             * Format: int64
+             * @description За сколько дней считается лимит (скользящее окно)
+             */
+            days: number;
+            /**
+             * Format: int64
+             * @description Сколько устройств подписчик может отвязать за days; 0 — без ограничения
+             */
+            limit: number;
+            /** @description Подписчик не отвязывает устройства сам, только админ */
+            off?: boolean;
+            /**
+             * Format: int64
+             * @description Сколько часов отвязанное подписчиком устройство не может привязаться снова; 0 — сразу, -1 — пока админ не разрешит
+             */
+            return_hours: number;
         };
         UpdateStatus: {
             /** @description RFC 3339 */
@@ -4729,21 +7236,21 @@ export interface components {
             limited: number;
         };
         UserPoolView: {
-            /** @description Пул закрыт для пользователя: его подключений нет в подписке, ноды их не пускают */
-            excluded: boolean;
-            /** @description Лимит пула и его пакеты исчерпаны: подключения пула не работают до сброса */
+            /** @description Свой лимит группы и её пакеты исчерпаны: подключения группы не работают до сброса */
             exhausted: boolean;
             /**
              * Format: int64
-             * @description Байты, оставшиеся в пакетах трафика пула: тратятся после лимита
+             * @description Байты, оставшиеся в пакетах трафика группы: тратятся после лимита
              */
             extra: number;
+            /** @enum {string} */
+            mode: "main" | "own" | "unlimited" | "closed";
             name: string;
             /** Format: int64 */
             pool_id: number;
             /**
              * Format: int64
-             * @description Байты за период; null — без лимита
+             * @description Байты за период с mode=own; иначе null
              */
             traffic_limit: number | null;
             /** Format: int64 */
@@ -4752,7 +7259,14 @@ export interface components {
             used_up: number;
         };
         UserPoolsInputBody: {
-            pools: components["schemas"]["PoolLimit"][];
+            /** @description Группы, которые меняются; остальные остаются как есть */
+            pools: components["schemas"]["PoolSetting"][];
+        };
+        UserSitesOutputBody: {
+            enabled: boolean;
+            items: components["schemas"]["SiteBytes"][];
+            /** Format: int64 */
+            keep_days: number;
         };
         UserView: {
             /**
@@ -4770,6 +7284,11 @@ export interface components {
             created_at: string;
             /** Format: int64 */
             device_limit: number | null;
+            /**
+             * @description Как считается лимит устройств: bound: привязанные устройства, online: любое число устройств, считаются только одновременно онлайн
+             * @enum {string}
+             */
+            device_mode: "bound" | "online";
             /** Format: date-time */
             expires_at: string | null;
             /**
@@ -4799,10 +7318,15 @@ export interface components {
             /** Format: date-time */
             resets_at: string | null;
             /**
-             * @description Откуда пользователь: admin — создан в панели или по ключу API, bot — куплен в боте, trial — пробный период бота, import — перенесён из другой панели. Заполняется при создании, не меняется
+             * @description Откуда пользователь: admin — создан в панели или по ключу API, bot — куплен в боте, trial — пробный период бота, free — бесплатный тариф из бота или Mini App, import — перенесён из другой панели. Заполняется при создании, не меняется
              * @enum {string}
              */
-            source: "admin" | "bot" | "trial" | "import";
+            source: "admin" | "bot" | "trial" | "free" | "import";
+            /**
+             * Format: int64
+             * @description Мбит/с в каждую сторону; null — без ограничения
+             */
+            speed_limit: number | null;
             /** @enum {string} */
             state: "active" | "expiring" | "limited" | "expired" | "disabled";
             sub_url: string;
@@ -4837,6 +7361,11 @@ export interface components {
         };
         ValidateInboundInputBody: {
             config: string;
+            /**
+             * Format: int64
+             * @description Подключение, чей шаблон проверяется: скрытые от читателя секреты (<hidden>) берутся из него
+             */
+            inbound_id?: number;
             /** Format: int64 */
             node_id?: number;
             port?: string;
@@ -4901,19 +7430,67 @@ export interface components {
             verdict: "site" | "different" | "exposed" | "inconclusive";
         };
         XHTTPTuning: {
+            /** @description Размер куска отправки у приложений, байт: число или диапазон */
+            client_uplink_chunk_size?: string;
+            /** @description Имя заголовка или cookie с данными у приложений; должно совпасть с серверным */
+            client_uplink_data_key?: string;
+            /**
+             * @description Где приложения везут данные отправки вместо серверного; сервер должен принимать их там же (его auto принимает всё)
+             * @enum {string}
+             */
+            client_uplink_data_placement?: "" | "body" | "header" | "cookie";
+            /**
+             * @description Метод отправки у приложений вместо серверного; GET — только packet-up
+             * @enum {string}
+             */
+            client_uplink_http_method?: "" | "POST" | "PUT" | "PATCH" | "GET";
             /**
              * @description Режим XHTTP; пусто — по умолчанию
              * @enum {string}
              */
             mode?: "" | "stream-one" | "stream-up" | "packet-up";
+            /** @description Не слать Content-Type: text/event-stream в ответах */
+            no_sse_header?: boolean;
+            /** @description Сколько запросов отправки сервер держит в очереди (packet-up): число от 1 */
+            sc_max_buffered_posts?: string;
             /** @description Наибольший запрос отправки (packet-up), байт: число или диапазон */
             sc_max_each_post_bytes?: string;
             /** @description Пауза между запросами отправки (packet-up), мс */
             sc_min_posts_interval_ms?: string;
+            /** @description Как часто сервер шлёт паддинг в stream-up, секунд: число или диапазон; 0 — не слать */
+            sc_stream_up_server_secs?: string;
+            /** @description Имя параметра номера запроса (не для path) */
+            seq_key?: string;
+            /**
+             * @description Где едет номер запроса (packet-up); пусто — path
+             * @enum {string}
+             */
+            seq_placement?: "" | "path" | "query" | "header" | "cookie";
+            /** @description Имя параметра сессии (не для path) */
+            session_key?: string;
+            /** @description Длина номера сессии: число или диапазон; с набором по умолчанию 16-32 */
+            session_length?: string;
+            /**
+             * @description Где едет номер сессии; пусто — path
+             * @enum {string}
+             */
+            session_placement?: "" | "path" | "query" | "header" | "cookie";
+            /** @description Из каких ASCII-символов приложение составляет номер сессии: свой набор или имя hex, base36, Base62, number, alphabet, Alphabet */
+            session_table?: string;
             /** @description Размер куска отправки, байт: число или диапазон */
             uplink_chunk_size?: string;
-            /** @enum {string} */
-            uplink_http_method?: "" | "POST" | "PUT" | "PATCH";
+            /** @description Имя заголовка или cookie с данными: нужно для header и cookie */
+            uplink_data_key?: string;
+            /**
+             * @description Где едут данные отправки (packet-up); header и cookie только в режиме packet-up
+             * @enum {string}
+             */
+            uplink_data_placement?: "" | "body" | "header" | "cookie" | "auto";
+            /**
+             * @description Метод отправки; GET — для CDN, которые не пропускают POST: только packet-up. Нода принимает отправку любым методом
+             * @enum {string}
+             */
+            uplink_http_method?: "" | "POST" | "PUT" | "PATCH" | "GET";
             /** @description Размер паддинга, байт: число или диапазон «100-1000» */
             x_padding_bytes?: string;
             x_padding_header?: string;
@@ -4944,6 +7521,195 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    "list-addon-sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourcesView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "add-addon-source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddSourceInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourcesView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-addon-source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourcesView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "refresh-addon-source": {
+        parameters: {
+            query?: {
+                /** @description Отпечаток нового ключа, который админ сверил с автором (после source_key_changed) */
+                accept?: string;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourcesView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-addon-storage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddonStorageView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "set-addon-storage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddonStorageInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddonStorageView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "list-addons": {
         parameters: {
             query?: never;
@@ -5057,6 +7823,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AddonsView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-addon-page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddonPageView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "call-addon-page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddonRPCInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddonRPCResult"];
                 };
             };
             /** @description Error */
@@ -5458,6 +8290,323 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TotpSetupOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BalanceGroupView"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "redistribute-balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RedistributeOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tg_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BalanceView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "adjust-balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tg_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdjustBalanceInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BalanceView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-campaigns": {
+        parameters: {
+            query?: {
+                /** @description За сколько дней статистика; 0 — за всё время */
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignView"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-campaign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCampaignInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-campaign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-campaign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchCampaignInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-exit-dns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExitDNSInfo"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-exit-dns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExitDNSView"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExitDNSInfo"];
                 };
             };
             /** @description Error */
@@ -5938,7 +9087,10 @@ export interface operations {
     };
     "check-target": {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Kinkan: нода, чей собственный сайт (127.0.0.1:17443) проверить её же силами; 0 — без ноды */
+                node_id?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5956,6 +9108,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Result"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "set-inbound-exits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetExitsInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundView"][];
                 };
             };
             /** @description Error */
@@ -6098,6 +9283,41 @@ export interface operations {
             };
         };
     };
+    "copy-inbound": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CopyInboundInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "get-tt-connections": {
         parameters: {
             query?: never;
@@ -6213,6 +9433,168 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LeakPolicy"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-logs": {
+        parameters: {
+            query?: {
+                /** @description Чей лог: panel или node:<id> ноды */
+                source?: string;
+                /** @description Сколько последних строк */
+                tail?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogsView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-marketplace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "install-external-addon": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketExternalInputBody"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "install-marketplace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketInstallInputBody"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "remove-marketplace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketView"];
                 };
             };
             /** @description Error */
@@ -6474,6 +9856,41 @@ export interface operations {
             };
         };
     };
+    "set-node-balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetNodeBalanceInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeInfo"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "get-node-cascade": {
         parameters: {
             query?: never;
@@ -6604,6 +10021,161 @@ export interface operations {
             };
         };
     };
+    "renew-node-certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeTLSView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "check-node": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "check-node-russia": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RussiaView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "doctor-node": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostReport"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "check-node-geo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeoCheck"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "rekey-node": {
         parameters: {
             query?: never;
@@ -6719,6 +10291,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ClearedOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "check-node-regions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceRegions"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "restart-node": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestartAccepted"];
                 };
             };
             /** @description Error */
@@ -6941,7 +10575,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TrafficOutputBody"];
+                    "application/json": components["schemas"]["NodeTrafficOutputBody"];
                 };
             };
             /** @description Error */
@@ -7444,6 +11078,37 @@ export interface operations {
             };
         };
     };
+    "mark-payment-refunded": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "list-pools": {
         parameters: {
             query?: never;
@@ -7570,6 +11235,76 @@ export interface operations {
             };
         };
     };
+    "set-pool-inbounds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupInboundsInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PoolView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "set-pool-tariffs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupTariffsInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PoolView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "list-presets": {
         parameters: {
             query?: never;
@@ -7669,6 +11404,8 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                /** @description Часть кода (без учёта регистра) или ID клиента либо его Telegram ID целиком */
+                q?: string;
             };
             header?: never;
             path?: never;
@@ -8006,6 +11743,35 @@ export interface operations {
             };
         };
     };
+    "check-certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CertReport"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "renew-certificate": {
         parameters: {
             query?: never;
@@ -8015,12 +11781,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Accepted */
-            202: {
+            /** @description OK */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["Status"];
+                };
             };
             /** @description Error */
             default: {
@@ -8111,6 +11879,95 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RoutesPreviewOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "set-sub-certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CertInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "clear-sub-certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "renew-sub-certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Status"];
                 };
             };
             /** @description Error */
@@ -8630,6 +12487,408 @@ export interface operations {
             };
         };
     };
+    "support-enter": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportEnterInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportWhoami"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-support-grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportGrantsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-support-grant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSupportGrantInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateSupportGrantOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "revoke-support-grant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "support-leave": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-support-recordings": {
+        parameters: {
+            query?: {
+                /** @description Чьи записи: panel или node:<id> ноды */
+                source?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingsView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-support-recording": {
+        parameters: {
+            query?: {
+                /** @description Чья запись: panel или node:<id> ноды */
+                source?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Имя записи из списка */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "support-whoami": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportWhoami"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "check-server": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "doctor-server": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostReport"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "check-geo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GeoInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeoCheck"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "check-reach": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReachInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReachCheck"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "restart-server": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestartAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "list-tariffs": {
         parameters: {
             query?: never;
@@ -8744,6 +13003,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "apply-tariff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplyTariffInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplyTariffOutputBody"];
+                };
             };
             /** @description Error */
             default: {
@@ -8909,6 +13203,68 @@ export interface operations {
             };
         };
     };
+    "get-bot-addon": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotSlotView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "set-bot-addon": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BotSlotInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotSlotView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "telegram-broadcast": {
         parameters: {
             query?: never;
@@ -8986,6 +13342,142 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "telegram-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TelegramPreviewInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TelegramPreviewOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-topups": {
+        parameters: {
+            query?: {
+                status?: "pending" | "approved" | "rejected" | "";
+                /** @description Следующая страница: заявки старше этой (id последней показанной) */
+                before?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopupsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "decide-topup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideTopupInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopupView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-topup-photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Картинка */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    "Content-Type"?: string;
+                    "X-Content-Type-Options"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/*": unknown;
+                };
             };
             /** @description Error */
             default: {
@@ -9082,6 +13574,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TorrentHitView"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-traffic-detail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrafficDetailView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "put-traffic-detail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutTrafficDetailInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrafficDetailView"];
                 };
             };
             /** @description Error */
@@ -9282,11 +13836,12 @@ export interface operations {
             query?: {
                 /** @description attention — исчерпан лимит, истекают и истекли, в этом порядке: одним запросом для обзора */
                 state?: "all" | "active" | "expiring" | "limited" | "expired" | "disabled" | "attention";
+                /** @description Поиск по имени, контакту, заметке и меткам. Оператору поддержки без показа подписчиков закрыт: 403 support_denied */
                 q?: string;
                 /** @description all — любая; none — вне папок; число — id папки */
                 folder?: string;
                 /** @description Откуда пользователь, см. source у пользователя */
-                source?: "all" | "admin" | "bot" | "trial" | "import";
+                source?: "all" | "admin" | "bot" | "trial" | "free" | "import";
                 /** @description show — вместе со скрытыми (по умолчанию: скрытие касается только списка в панели); hide — без скрытых; only — только скрытые */
                 hidden?: "hide" | "show" | "only";
                 limit?: number;
@@ -9517,6 +14072,135 @@ export interface operations {
             path: {
                 id: number;
                 device: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "rename-device": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                device: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameDeviceInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenameDeviceOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "ban-device": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                device: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceBanView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "device-bans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceBanView"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "unban-device": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                ban: number;
             };
             cookie?: never;
         };
@@ -9849,6 +14533,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "user-sites": {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserSitesOutputBody"];
                 };
             };
             /** @description Error */

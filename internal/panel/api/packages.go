@@ -2,8 +2,6 @@ package api
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -11,46 +9,53 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"mikan/internal/panel/domain"
+	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 )
 
-// Traffic packages (GitHub issue #12): extra traffic for the main quota or a pool, sold in
+// Traffic packages (GitHub issue #12): extra traffic for the main quota or a server group, sold in
 // the bot and the Mini App or given by the admin. The rules are in domain (grants.go,
 // packages.go); here are the catalog and a user's grants.
 
 type PackageView struct {
-	ID         int64  `json:"id"`
-	Name       string `json:"name"`
-	Bytes      int64  `json:"bytes"`
-	PoolID     *int64 `json:"pool_id" doc:"Пул трафика; null — основной трафик"`
-	Lifetime   string `json:"lifetime" enum:"used,period,days" doc:"used — пока не израсходован, period — до конца периода, days — N дней с покупки"`
-	Days       int64  `json:"days" doc:"Срок в днях для lifetime=days"`
-	PriceStars *int64 `json:"price_stars" doc:"Цена в Telegram Stars; null — не продаётся за Stars"`
-	PriceRub   *int64 `json:"price_rub" doc:"Цена в копейках; null — не продаётся за рубли"`
-	OnSale     bool   `json:"on_sale"`
-	Sort       int64  `json:"sort"`
+	ID         int64   `json:"id"`
+	Name       string  `json:"name"`
+	Bytes      int64   `json:"bytes"`
+	PoolID     *int64  `json:"pool_id" doc:"Группа серверов; null — основной трафик"`
+	Lifetime   string  `json:"lifetime" enum:"used,period,days" doc:"used — пока не израсходован, period — до конца периода, days — N дней с покупки"`
+	Days       int64   `json:"days" doc:"Срок в днях для lifetime=days"`
+	PriceStars *int64  `json:"price_stars" doc:"Цена в Telegram Stars; null — не продаётся за Stars"`
+	PriceRub   *int64  `json:"price_rub" doc:"Цена в копейках; null — не продаётся за рубли"`
+	OnSale     bool    `json:"on_sale"`
+	Sort       int64   `json:"sort"`
+	Tariffs    []int64 `json:"tariffs" doc:"Тарифы, которым продаётся пакет; пусто — всем, к квоте которых он подходит"`
 }
 
-func viewPackage(p db.TrafficPackage) PackageView {
-	return PackageView{ID: p.ID, Name: p.Name, Bytes: p.Bytes, PoolID: ptrInt(p.PoolID.Int64, p.PoolID.Valid), Lifetime: p.Lifetime, Days: p.Days,
-		PriceStars: ptrInt(p.PriceStars.Int64, p.PriceStars.Valid), PriceRub: ptrInt(p.PriceRub.Int64, p.PriceRub.Valid), OnSale: p.OnSale != 0, Sort: p.Sort}
+func viewPackage(p db.TrafficPackage, tariffs []int64) PackageView {
+	if tariffs == nil {
+		tariffs = []int64{}
+	}
+	return PackageView{ID: p.ID, Name: p.Name, Bytes: p.Bytes, PoolID: store.Int64Ptr(p.PoolID), Lifetime: p.Lifetime, Days: p.Days,
+		PriceStars: store.Int64Ptr(p.PriceStars), PriceRub: store.Int64Ptr(p.PriceRub), OnSale: p.OnSale != 0, Sort: p.Sort, Tariffs: tariffs}
 }
 
 type PackageBody struct {
 	Name       string `json:"name" minLength:"1" maxLength:"60"`
 	Bytes      int64  `json:"bytes" minimum:"1073741824" maximum:"109951162777600" doc:"От 1 ГБ до 100 ТБ"`
-	PoolID     *int64 `json:"pool_id,omitempty" minimum:"1" doc:"Пул трафика; не передан — основной трафик"`
+	PoolID     *int64 `json:"pool_id,omitempty" minimum:"1" doc:"Группа серверов; не передана — основной трафик"`
 	Lifetime   string `json:"lifetime" enum:"used,period,days"`
 	Days       int64  `json:"days,omitempty" minimum:"0" maximum:"3650" doc:"Для lifetime=days: 1–3650"`
 	PriceStars *int64 `json:"price_stars,omitempty" minimum:"1" maximum:"10000"`
 	PriceRub   *int64 `json:"price_rub,omitempty" minimum:"100" maximum:"100000000" doc:"Цена в копейках: 7900 — 79 ₽"`
 	OnSale     bool   `json:"on_sale,omitempty" doc:"Продавать в боте и Mini App; нужна хотя бы одна цена"`
 	Sort       int64  `json:"sort,omitempty"`
+	// Tariffs: the tariffs the package is sold to.
+	Tariffs []int64 `json:"tariffs,omitempty" maxItems:"100" doc:"Тарифы, которым продаётся пакет; не переданы или пусто — всем, к квоте которых он подходит"`
 }
 
 func (b PackageBody) input() domain.PackageInput {
-	in := domain.PackageInput{Name: b.Name, Bytes: b.Bytes, Lifetime: b.Lifetime, Days: b.Days, PriceStars: nullable(b.PriceStars),
-		PriceRub: nullable(b.PriceRub), OnSale: b.OnSale, Sort: b.Sort}
+	in := domain.PackageInput{Name: b.Name, Bytes: b.Bytes, Lifetime: b.Lifetime, Days: b.Days, PriceStars: domain.NullInt(b.PriceStars),
+		PriceRub: domain.NullInt(b.PriceRub), OnSale: b.OnSale, Sort: b.Sort, Tariffs: b.Tariffs}
 	if b.PoolID != nil {
 		in.PoolID = *b.PoolID
 	}
@@ -68,13 +73,13 @@ type packagesOutput struct{ Body []PackageView }
 // GrantView is traffic a user got: the history of packages and the admin's gifts.
 type GrantView struct {
 	ID          int64      `json:"id"`
-	PoolID      *int64     `json:"pool_id" doc:"Пул трафика; null — основной трафик"`
+	PoolID      *int64     `json:"pool_id" doc:"Группа серверов; null — основной трафик"`
 	Bytes       int64      `json:"bytes"`
 	Remaining   int64      `json:"remaining"`
 	Lifetime    string     `json:"lifetime" enum:"used,period,days"`
 	ExpiresAt   *time.Time `json:"expires_at"`
 	Active      bool       `json:"active" doc:"Ещё считается: не израсходован и не истёк"`
-	Source      string     `json:"source" enum:"purchase,admin"`
+	Source      string     `json:"source" enum:"purchase,admin,gift" doc:"purchase — куплен, admin — начислен вручную, gift — подарок тарифа к оплате"`
 	PaymentID   *int64     `json:"payment_id"`
 	PackageName string     `json:"package_name" doc:"Название пакета; пусто — начислено вручную"`
 	Note        string     `json:"note"`
@@ -87,7 +92,7 @@ type grantOutput struct{ Body GrantView }
 type grantInput struct {
 	ID   int64 `path:"id" minimum:"1"`
 	Body struct {
-		PoolID   *int64 `json:"pool_id,omitempty" minimum:"1" doc:"Пул трафика; не передан — основной трафик"`
+		PoolID   *int64 `json:"pool_id,omitempty" minimum:"1" doc:"Группа серверов; не передана — основной трафик"`
 		Bytes    int64  `json:"bytes" minimum:"1073741824" maximum:"109951162777600" doc:"От 1 ГБ до 100 ТБ"`
 		Lifetime string `json:"lifetime" enum:"used,period,days"`
 		Days     int64  `json:"days,omitempty" minimum:"0" maximum:"3650"`
@@ -110,9 +115,13 @@ func (h *handlers) listPackages(ctx context.Context, _ *struct{}) (*packagesOutp
 	if err != nil {
 		return nil, err
 	}
+	sold, err := domain.PackageTariffs(ctx, h.d.Store.Q)
+	if err != nil {
+		return nil, err
+	}
 	out := &packagesOutput{Body: make([]PackageView, 0, len(ps))}
 	for _, p := range ps {
-		out.Body = append(out.Body, viewPackage(p))
+		out.Body = append(out.Body, viewPackage(p, sold[p.ID]))
 	}
 	return out, nil
 }
@@ -123,7 +132,7 @@ func (h *handlers) createPackage(ctx context.Context, in *packageInput) (*packag
 		return nil, mapDomainErr(err)
 	}
 	h.audit(ctx, sessionOf(ctx).AdminID, "package.create", "package", strconv.FormatInt(p.ID, 10), nil)
-	return &packageOutput{Body: viewPackage(p)}, nil
+	return h.packageOut(ctx, p)
 }
 
 func (h *handlers) updatePackage(ctx context.Context, in *packageUpdateInput) (*packageOutput, error) {
@@ -132,7 +141,16 @@ func (h *handlers) updatePackage(ctx context.Context, in *packageUpdateInput) (*
 		return nil, mapDomainErr(err)
 	}
 	h.audit(ctx, sessionOf(ctx).AdminID, "package.update", "package", strconv.FormatInt(p.ID, 10), nil)
-	return &packageOutput{Body: viewPackage(p)}, nil
+	return h.packageOut(ctx, p)
+}
+
+// packageOut is a package with the tariffs it is sold to, as written.
+func (h *handlers) packageOut(ctx context.Context, p db.TrafficPackage) (*packageOutput, error) {
+	sold, err := domain.PackageTariffs(ctx, h.d.Store.Q)
+	if err != nil {
+		return nil, err
+	}
+	return &packageOutput{Body: viewPackage(p, sold[p.ID])}, nil
 }
 
 func (h *handlers) archivePackage(ctx context.Context, in *userIDInput) (*struct{}, error) {
@@ -145,9 +163,7 @@ func (h *handlers) archivePackage(ctx context.Context, in *userIDInput) (*struct
 
 func (h *handlers) userGrants(ctx context.Context, in *userIDInput) (*grantsOutput, error) {
 	q := h.d.Store.Q
-	if _, err := q.GetUser(ctx, in.ID); errors.Is(err, sql.ErrNoRows) {
-		return nil, huma.Error404NotFound("not_found")
-	} else if err != nil {
+	if err := requireUser(ctx, q, in.ID); err != nil {
 		return nil, err
 	}
 	gs, err := q.ListUserGrants(ctx, in.ID)
@@ -193,8 +209,8 @@ func (h *handlers) packageNames(ctx context.Context) (map[int64]string, error) {
 }
 
 func (h *handlers) viewGrant(g db.TrafficGrant, packages map[int64]string) GrantView {
-	return GrantView{ID: g.ID, PoolID: ptrInt(g.PoolID.Int64, g.PoolID.Valid), Bytes: g.Bytes, Remaining: g.Remaining, Lifetime: g.Lifetime,
-		ExpiresAt: ptrTime(g.ExpiresAt.Int64, g.ExpiresAt.Valid), Active: domain.GrantActive(g, h.d.Now()), Source: g.Source,
-		PaymentID: ptrInt(g.PaymentID.Int64, g.PaymentID.Valid), PackageName: packages[g.PackageID.Int64], Note: g.Note,
-		CreatedAt: time.Unix(g.CreatedAt, 0).UTC()}
+	return GrantView{ID: g.ID, PoolID: store.Int64Ptr(g.PoolID), Bytes: g.Bytes, Remaining: g.Remaining, Lifetime: g.Lifetime,
+		ExpiresAt: store.TimePtr(g.ExpiresAt), Active: domain.GrantActive(g, h.d.Now()), Source: g.Source,
+		PaymentID: store.Int64Ptr(g.PaymentID), PackageName: packages[g.PackageID.Int64], Note: g.Note,
+		CreatedAt: store.Time(g.CreatedAt)}
 }

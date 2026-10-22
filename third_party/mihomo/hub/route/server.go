@@ -8,8 +8,10 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 	"github.com/metacubex/mihomo/component/ca"
 	"github.com/metacubex/mihomo/component/ech"
 	C "github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/hub/metrics"
 	"github.com/metacubex/mihomo/log"
 	"github.com/metacubex/mihomo/ntp"
 	"github.com/metacubex/mihomo/tunnel/statistic"
@@ -33,6 +36,9 @@ import (
 var (
 	uiPath = ""
 
+	// serverMu guards the servers below and applied.
+	serverMu   sync.Mutex
+	applied    *appliedConfig
 	httpServer *http.Server
 	tlsServer  *http.Server
 	unixServer *http.Server
@@ -54,7 +60,7 @@ type Traffic struct {
 
 type Memory struct {
 	Inuse   uint64 `json:"inuse"`
-	OSLimit uint64 `json:"oslimit"` // maybe we need it in the future
+	OSLimit uint64 `json:"oslimit"` // the Go runtime memory limit, 0 when unlimited
 }
 
 type Config struct {
@@ -72,6 +78,17 @@ type Config struct {
 	DohServer      string
 	IsDebug        bool
 	Cors           Cors
+	// AllowInsecure explicitly enables legacy unauthenticated TCP controllers
+	// and remote plaintext HTTP carrying a bearer secret. It also turns off the
+	// browser guard of a controller without a secret.
+	AllowInsecure             bool
+	AllowLegacyWebSocketToken bool
+}
+
+// appliedConfig is what ReCreateServer last applied.
+type appliedConfig struct {
+	cfg    Config
+	uiPath string
 }
 
 type Cors struct {
@@ -89,12 +106,33 @@ func (c Cors) Apply(r chi.Router) {
 	}).Handler)
 }
 
+// ReCreateServer applies the controller configuration. The listeners are
+// rebuilt only when something in it changed (or the ui path did): then every
+// transport restarts with the new secret, TLS, address and CORS policy, and the
+// open websocket streams, authorized by the old settings, are closed. An
+// unchanged configuration leaves the listeners and their clients alone.
 func ReCreateServer(cfg *Config) {
-	go start(cfg)
-	go startTLS(cfg)
-	go startUnix(cfg)
+	serverMu.Lock()
+	defer serverMu.Unlock()
+
+	state := appliedConfig{cfg: *cfg, uiPath: uiPath}
+	if applied != nil && reflect.DeepEqual(*applied, state) {
+		return
+	}
+	if applied != nil {
+		log.Infoln("External controller settings changed, restarting the controller listeners")
+	}
+	applied = &state
+	if cfg.Secret != "" && cfg.AllowLegacyWebSocketToken {
+		log.Warnln("External controller accepts its main secret in WebSocket URLs for legacy compatibility; migrate to POST /auth/ws-ticket")
+	}
+
+	closeStreams()
+	start(cfg)
+	startTLS(cfg)
+	startUnix(cfg)
 	if inbound.SupportNamedPipe {
-		go startPipe(cfg)
+		startPipe(cfg)
 	}
 }
 
@@ -102,34 +140,43 @@ func SetUIPath(path string) {
 	uiPath = C.Path.Resolve(path)
 }
 
-func router(isDebug bool, secret string, dohServer string, cors Cors) *chi.Mux {
+func router(isDebug bool, secret string, dohServer string, cors Cors, legacyWebSocketToken ...bool) *chi.Mux {
 	r := chi.NewRouter()
 	cors.Apply(r)
-	if isDebug {
-		r.Mount("/debug", func() http.Handler {
-			r := chi.NewRouter()
-			r.Put("/gc", func(w http.ResponseWriter, r *http.Request) {
-				debug.FreeOSMemory()
-			})
-			handler := middleware.Profiler
-			r.Mount("/", handler())
-			return r
-		}())
-	}
+	r.Get("/healthz", healthAuth(secret, probe(metrics.Live)))
+	r.Get("/readyz", healthAuth(secret, probe(metrics.Ready)))
 	r.Group(func(r chi.Router) {
 		if secret != "" {
-			r.Use(authentication(secret))
+			auth := newControllerAuth(secret, len(legacyWebSocketToken) > 0 && legacyWebSocketToken[0])
+			r.Use(auth.middleware)
+			r.Post("/auth/ws-ticket", auth.issueTicket)
+		}
+		if isDebug {
+			r.Mount("/debug", func() http.Handler {
+				r := chi.NewRouter()
+				r.Put("/gc", func(w http.ResponseWriter, r *http.Request) {
+					debug.FreeOSMemory()
+				})
+				handler := middleware.Profiler
+				r.Mount("/", handler())
+				return r
+			}())
 		}
 		r.Get("/", hello)
 		r.Get("/logs", getLogs)
+		r.Get("/events", getEvents)
 		r.Get("/traffic", traffic)
+		r.Get("/traffic/users", trafficUsers)
+		r.Mount("/limits", limitsRouter())
 		r.Get("/memory", memory)
+		r.Get("/metrics", getMetrics)
 		r.Get("/version", version)
 		r.Mount("/configs", configRouter())
 		r.Mount("/proxies", proxyRouter())
 		r.Mount("/group", groupRouter())
 		r.Mount("/rules", ruleRouter())
 		r.Mount("/connections", connectionRouter())
+		r.Mount("/inbounds", inboundRouter())
 		r.Mount("/providers/proxies", proxyProviderRouter())
 		r.Mount("/providers/rules", ruleProviderRouter())
 		r.Mount("/cache", cacheRouter())
@@ -159,6 +206,22 @@ func router(isDebug bool, secret string, dohServer string, cors Cors) *chi.Mux {
 	return r
 }
 
+// newHandler builds the controller handler of the local transports (unix
+// socket and namedpipe). Every listener enforces the configured secret.
+func newHandler(cfg *Config) http.Handler {
+	return router(cfg.IsDebug, cfg.Secret, cfg.DohServer, cfg.Cors, cfg.AllowLegacyWebSocketToken)
+}
+
+// newNetworkHandler builds the handler of the tcp and tls listeners: the
+// local handler behind the browser guard of a controller without a secret.
+func newNetworkHandler(cfg *Config) http.Handler {
+	h := newHandler(cfg)
+	if cfg.Secret == "" && !cfg.AllowInsecure {
+		h = browserGuard(h, cfg.Cors.AllowOrigins, cfg.DohServer)
+	}
+	return h
+}
+
 func start(cfg *Config) {
 	// first stop existing server
 	if httpServer != nil {
@@ -168,6 +231,13 @@ func start(cfg *Config) {
 
 	// handle addr
 	if len(cfg.Addr) > 0 {
+		if err := cfg.checkTCP(); err != nil {
+			log.Errorln("External controller refused: %s", err)
+			return
+		}
+		if cfg.AllowInsecure {
+			log.Warnln("External controller %s uses the explicit insecure compatibility mode; bearer credentials may travel in clear text and a secretless listener grants the full API", cfg.Addr)
+		}
 		lc := inbound.NewListenConfig()
 		lc.SetRouteMark(cfg.RoutingMark)
 		l, err := lc.Listen(context.Background(), "tcp", cfg.Addr)
@@ -177,13 +247,9 @@ func start(cfg *Config) {
 		}
 		log.Infoln("RESTful API listening at: %s", l.Addr().String())
 
-		server := &http.Server{
-			Handler: router(cfg.IsDebug, cfg.Secret, cfg.DohServer, cfg.Cors),
-		}
+		server := newServer(newNetworkHandler(cfg))
 		httpServer = server
-		if err = server.Serve(l); err != nil {
-			log.Errorln("External controller serve error: %s", err)
-		}
+		go serve(server, l, "External controller serve error: %s")
 	}
 }
 
@@ -196,22 +262,17 @@ func startTLS(cfg *Config) {
 
 	// handle tlsAddr
 	if len(cfg.TLSAddr) > 0 {
+		if err := cfg.checkTLS(); err != nil {
+			log.Errorln("External controller refused: %s", err)
+			return
+		}
 		certLoader, err := ca.NewTLSKeyPairLoader(cfg.Certificate, cfg.PrivateKey)
 		if err != nil {
 			log.Errorln("External controller tls listen error: %s", err)
 			return
 		}
 
-		lc := inbound.NewListenConfig()
-		lc.SetRouteMark(cfg.RoutingMark)
-		l, err := lc.Listen(context.Background(), "tcp", cfg.TLSAddr)
-		if err != nil {
-			log.Errorln("External controller tls listen error: %s", err)
-			return
-		}
-
-		log.Infoln("RESTful API tls listening at: %s", l.Addr().String())
-		tlsConfig := &tls.Config{Time: ntp.Now}
+		tlsConfig := &tls.Config{Time: ntp.Now, MinVersion: tls.VersionTLS12}
 		tlsConfig.NextProtos = []string{"h2", "http/1.1"}
 		tlsConfig.GetCertificate = func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 			return certLoader()
@@ -238,13 +299,19 @@ func startTLS(cfg *Config) {
 				return
 			}
 		}
-		server := &http.Server{
-			Handler: router(cfg.IsDebug, cfg.Secret, cfg.DohServer, cfg.Cors),
+
+		lc := inbound.NewListenConfig()
+		lc.SetRouteMark(cfg.RoutingMark)
+		l, err := lc.Listen(context.Background(), "tcp", cfg.TLSAddr)
+		if err != nil {
+			log.Errorln("External controller tls listen error: %s", err)
+			return
 		}
+		log.Infoln("RESTful API tls listening at: %s", l.Addr().String())
+
+		server := newServer(newNetworkHandler(cfg))
 		tlsServer = server
-		if err = server.Serve(tls.NewListener(l, tlsConfig)); err != nil {
-			log.Errorln("External controller tls serve error: %s", err)
-		}
+		go serve(server, tls.NewListener(l, tlsConfig), "External controller tls serve error: %s")
 	}
 }
 
@@ -276,23 +343,17 @@ func startUnix(cfg *Config) {
 		// should be used to delete the socket file prior to calling bind with the same path.
 		_ = syscall.Unlink(addr)
 
-		lc := inbound.NewListenConfig()
-		lc.SetRouteMark(0) // don't set route mark for unix socket
-		l, err := lc.Listen(context.Background(), "unix", addr)
+		// Only the user the core runs as may connect, see listenUnix.
+		l, err := listenUnix(addr)
 		if err != nil {
 			log.Errorln("External controller unix listen error: %s", err)
 			return
 		}
-		_ = os.Chmod(addr, 0o666)
 		log.Infoln("RESTful API unix listening at: %s", l.Addr().String())
 
-		server := &http.Server{
-			Handler: router(cfg.IsDebug, "", cfg.DohServer, cfg.Cors),
-		}
+		server := newServer(newHandler(cfg))
 		unixServer = server
-		if err = server.Serve(l); err != nil {
-			log.Errorln("External controller unix serve error: %s", err)
-		}
+		go serve(server, l, "External controller unix serve error: %s")
 	}
 }
 
@@ -317,13 +378,9 @@ func startPipe(cfg *Config) {
 		}
 		log.Infoln("RESTful API pipe listening at: %s", l.Addr().String())
 
-		server := &http.Server{
-			Handler: router(cfg.IsDebug, "", cfg.DohServer, cfg.Cors),
-		}
+		server := newServer(newHandler(cfg))
 		pipeServer = server
-		if err = server.Serve(l); err != nil {
-			log.Errorln("External controller pipe serve error: %s", err)
-		}
+		go serve(server, l, "External controller pipe serve error: %s")
 	}
 }
 
@@ -333,39 +390,8 @@ func safeEqual(a, b string) bool {
 	return subtle.ConstantTimeCompare(aBuf, bBuf) == 1
 }
 
-func authentication(secret string) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		fn := func(w http.ResponseWriter, r *http.Request) {
-			// Browser websocket not support custom header
-			if r.Header.Get("Upgrade") == "websocket" && r.URL.Query().Get("token") != "" {
-				token := r.URL.Query().Get("token")
-				if !safeEqual(token, secret) {
-					render.Status(r, http.StatusUnauthorized)
-					render.JSON(w, r, ErrUnauthorized)
-					return
-				}
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			header := r.Header.Get("Authorization")
-			bearer, token, found := strings.Cut(header, " ")
-
-			hasInvalidHeader := bearer != "Bearer"
-			hasInvalidSecret := !found || !safeEqual(token, secret)
-			if hasInvalidHeader || hasInvalidSecret {
-				render.Status(r, http.StatusUnauthorized)
-				render.JSON(w, r, ErrUnauthorized)
-				return
-			}
-			next.ServeHTTP(w, r)
-		}
-		return http.HandlerFunc(fn)
-	}
-}
-
 func hello(w http.ResponseWriter, r *http.Request) {
-	render.JSON(w, r, render.M{"hello": "mihomo"})
+	render.JSON(w, r, render.M{"hello": "citrus"})
 }
 
 func traffic(w http.ResponseWriter, r *http.Request) {
@@ -376,6 +402,7 @@ func traffic(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return
 		}
+		defer untrackStream(wsConn)
 	}
 
 	if wsConn == nil {
@@ -422,6 +449,7 @@ func memory(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return
 		}
+		defer untrackStream(wsConn)
 	}
 
 	if wsConn == nil {
@@ -447,7 +475,7 @@ func memory(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := json.NewEncoder(buf).Encode(Memory{
 			Inuse:   inuse,
-			OSLimit: 0,
+			OSLimit: metrics.MemoryLimit(), // read every tick, the limit can change at runtime
 		}); err != nil {
 			break
 		}
@@ -505,6 +533,7 @@ func getLogs(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return
 		}
+		defer untrackStream(wsConn)
 	}
 
 	if wsConn == nil {
@@ -570,5 +599,7 @@ func getLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func version(w http.ResponseWriter, r *http.Request) {
-	render.JSON(w, r, render.M{"meta": C.Meta, "version": C.Version})
+	// "core" tells a client built for both cores which one it talks to;
+	// clients of mihomo ignore the field.
+	render.JSON(w, r, render.M{"meta": C.Meta, "version": C.Version, "core": C.MihomoName})
 }

@@ -10,19 +10,24 @@ on:
       - "docs/**"
       - "README.md"
       - ".github/ISSUE_TEMPLATE/**"
+      - "site/**"
+      - ".github/workflows/pages.yml"
+    # Release builds only: main, tags and manual runs. dev is checked by Test and PR Build.
     branches:
-      - Alpha
+      - main
     tags:
       - "v*"
-  pull_request:
-    branches:
-      - Alpha
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
   cancel-in-progress: true
-  
+
+# Read-only by default; the publishing jobs below ask for exactly what they write.
+permissions:
+  contents: read
+
 env:
-  REGISTRY: docker.io
+  REGISTRY: ghcr.io
+  RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.version }}
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -84,101 +89,13 @@ jobs:
           - { goos: android, goarch: arm, ndk: armv7a-linux-androideabi34, output: armv7 }
           - { goos: android, goarch: arm64, ndk: aarch64-linux-android34, output: arm64-v8 }
 
-          # Go 1.25 with special patch can work on Windows 7
-          # https://github.com/MetaCubeX/go/commits/release-branch.go1.25/
-          - { goos: windows, goarch: '386', output: '386-go125', goversion: '1.25' }
-          - { goos: windows, goarch: amd64, goamd64: v1, output: amd64-v1-go125, goversion: '1.25' }
-          - { goos: windows, goarch: amd64, goamd64: v2, output: amd64-v2-go125, goversion: '1.25' }
-          - { goos: windows, goarch: amd64, goamd64: v3, output: amd64-v3-go125, goversion: '1.25' }
-
-          # Go 1.24 with special patch can work on Windows 7
-          # https://github.com/MetaCubeX/go/commits/release-branch.go1.24/
-          - { goos: windows, goarch: '386', output: '386-go124', goversion: '1.24' }
-          - { goos: windows, goarch: amd64, goamd64: v1, output: amd64-v1-go124, goversion: '1.24' }
-          - { goos: windows, goarch: amd64, goamd64: v2, output: amd64-v2-go124, goversion: '1.24' }
-          - { goos: windows, goarch: amd64, goamd64: v3, output: amd64-v3-go124, goversion: '1.24' }
-
-          # Go 1.23 with special patch can work on Windows 7
-          # https://github.com/MetaCubeX/go/commits/release-branch.go1.23/
-          - { goos: windows, goarch: '386', output: '386-go123', goversion: '1.23' }
-          - { goos: windows, goarch: amd64, goamd64: v1, output: amd64-v1-go123, goversion: '1.23' }
-          - { goos: windows, goarch: amd64, goamd64: v2, output: amd64-v2-go123, goversion: '1.23' }
-          - { goos: windows, goarch: amd64, goamd64: v3, output: amd64-v3-go123, goversion: '1.23' }
-
-          # Go 1.22 with special patch can work on Windows 7
-          # https://github.com/MetaCubeX/go/commits/release-branch.go1.22/
-          - { goos: windows, goarch: '386', output: '386-go122', goversion: '1.22' }
-          - { goos: windows, goarch: amd64, goamd64: v1, output: amd64-v1-go122, goversion: '1.22' }
-          - { goos: windows, goarch: amd64, goamd64: v2, output: amd64-v2-go122, goversion: '1.22' }
-          - { goos: windows, goarch: amd64, goamd64: v3, output: amd64-v3-go122, goversion: '1.22' }
-
-          # Go 1.21 can revert commit `9e4385` to work on Windows 7
-          # https://github.com/golang/go/issues/64622#issuecomment-1847475161
-          # (OR we can just use golang1.21.4 which unneeded any patch)
-          - { goos: windows, goarch: '386', output: '386-go121', goversion: '1.21' }
-          - { goos: windows, goarch: amd64, goamd64: v1, output: amd64-v1-go121, goversion: '1.21' }
-          - { goos: windows, goarch: amd64, goamd64: v2, output: amd64-v2-go121, goversion: '1.21' }
-          - { goos: windows, goarch: amd64, goamd64: v3, output: amd64-v3-go121, goversion: '1.21' }
-
-          # Go 1.20 is the last release that will run on any release of Windows 7, 8, Server 2008 and Server 2012. Go 1.21 will require at least Windows 10 or Server 2016.
-          - { goos: windows, goarch: '386', output: '386-go120', goversion: '1.20' }
-          - { goos: windows, goarch: amd64, goamd64: v1, output: amd64-v1-go120, goversion: '1.20' }
-          - { goos: windows, goarch: amd64, goamd64: v2, output: amd64-v2-go120, goversion: '1.20' }
-          - { goos: windows, goarch: amd64, goamd64: v3, output: amd64-v3-go120, goversion: '1.20' }
-
-          # Go 1.24 is the last release that will run on macOS 11 Big Sur. Go 1.25 will require macOS 12 Monterey or later.
-          - { goos: darwin, goarch: arm64, output: arm64-go124, goversion: '1.24' }
-          - { goos: darwin, goarch: amd64, goamd64: v1, output: amd64-v1-go124, goversion: '1.24' }
-          - { goos: darwin, goarch: amd64, goamd64: v2, output: amd64-v2-go124, goversion: '1.24' }
-          - { goos: darwin, goarch: amd64, goamd64: v3, output: amd64-v3-go124, goversion: '1.24' }
-
-          # Go 1.22 is the last release that will run on macOS 10.15 Catalina. Go 1.23 will require macOS 11 Big Sur or later.
-          - { goos: darwin, goarch: arm64, output: arm64-go122, goversion: '1.22' }
-          - { goos: darwin, goarch: amd64, goamd64: v1, output: amd64-v1-go122, goversion: '1.22' }
-          - { goos: darwin, goarch: amd64, goamd64: v2, output: amd64-v2-go122, goversion: '1.22' }
-          - { goos: darwin, goarch: amd64, goamd64: v3, output: amd64-v3-go122, goversion: '1.22' }
-
-          # Go 1.20 is the last release that will run on macOS 10.13 High Sierra or 10.14 Mojave. Go 1.21 will require macOS 10.15 Catalina or later.
-          - { goos: darwin, goarch: arm64, output: arm64-go120, goversion: '1.20' }
-          - { goos: darwin, goarch: amd64, goamd64: v1, output: amd64-v1-go120, goversion: '1.20' }
-          - { goos: darwin, goarch: amd64, goamd64: v2, output: amd64-v2-go120, goversion: '1.20' }
-          - { goos: darwin, goarch: amd64, goamd64: v3, output: amd64-v3-go120, goversion: '1.20' }
-
-          # Go 1.23 is the last release that requires Linux kernel version 2.6.32 or later. Go 1.24 will require Linux kernel version 3.2 or later.
-          - { goos: linux, goarch: '386', output: '386-go123', goversion: '1.23' }
-          - { goos: linux, goarch: amd64, goamd64: v1, output: amd64-v1-go123, goversion: '1.23', test: test }
-          - { goos: linux, goarch: amd64, goamd64: v2, output: amd64-v2-go123, goversion: '1.23' }
-          - { goos: linux, goarch: amd64, goamd64: v3, output: amd64-v3-go123, goversion: '1.23' }
-
-          # only for test
-          - { goos: linux, goarch: '386', output: '386-go120', goversion: '1.20' }
-          - { goos: linux, goarch: amd64, goamd64: v1, output: amd64-v1-go120, goversion: '1.20', test: test }
-          - { goos: linux, goarch: amd64, goamd64: v2, output: amd64-v2-go120, goversion: '1.20' }
-          - { goos: linux, goarch: amd64, goamd64: v3, output: amd64-v3-go120, goversion: '1.20' }
-
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
+    # Pinned toolchain, checked against .github/go-toolchains.txt: the matrix
+    # goversion (Go 1.26 when empty), or the loong64 ABI1 build for 'custom'.
     - name: Set up Go
-      if: ${{ matrix.jobs.goversion == '' }}
-      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
-      with:
-        go-download-base-url: 'https://github.com/MetaCubeX/go/releases/download/build'
-        go-version: '1.26'
-
-    - name: Set up Go
-      if: ${{ matrix.jobs.goversion != '' && matrix.jobs.goversion != 'custom' }}
-      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
-      with:
-        go-download-base-url: 'https://github.com/MetaCubeX/go/releases/download/build'
-        go-version: ${{ matrix.jobs.goversion }}
-
-    - name: Set up Go1.26 loongarch abi1
-      if: ${{ matrix.jobs.goarch == 'loong64' && matrix.jobs.abi == '1' }}
-      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
-      with:
-        go-download-base-url: 'https://github.com/MetaCubeX/loongarch64-golang/releases/download/1.26.0'
-        go-version: 1.26.0
+      run: bash .github/scripts/setup-go.sh "${{ matrix.jobs.goversion == 'custom' && 'loong64-abi1' || matrix.jobs.goversion || '1.26' }}"
 
     - name: Verify Go installation
       run: go version
@@ -190,9 +107,18 @@ jobs:
       run: |
         VERSION="${GITHUB_REF_NAME,,}-$(git rev-parse --short HEAD)"
         VERSION="${VERSION//\//-}"
-        PackageVersion="$(curl -s "https://api.github.com/repos/MetaCubeX/mihomo/releases/latest" | jq -r '.tag_name' | sed 's/v//g' | awk -F '.' '{$NF = $NF + 1; print}' OFS='.').${VERSION/-/.}"
-        if [ -n "${{ github.event.inputs.version }}" ]; then
-          VERSION=${{ github.event.inputs.version }}
+        LATEST_VERSION="$(curl --fail --silent "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest" | jq -r '.tag_name // empty' || true)"
+        BASE_VERSION="${LATEST_VERSION#v}"
+        if [[ ! "$BASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          BASE_VERSION="0.0.0"
+        fi
+        PackageVersion="${BASE_VERSION}.${VERSION/-/.}"
+        if [ -n "$RELEASE_VERSION" ]; then
+          if [[ ! "$RELEASE_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][a-zA-Z0-9.]+)?$ ]]; then
+            echo "Release version must be a semantic version tag, such as v1.0.0" >&2
+            exit 1
+          fi
+          VERSION="$RELEASE_VERSION"
           PackageVersion="${VERSION#v}"
         fi
         echo "VERSION=${VERSION}" >> $GITHUB_ENV
@@ -205,7 +131,7 @@ jobs:
 
     - name: Setup NDK
       if: ${{ matrix.jobs.goos == 'android' }}
-      uses: nttld/setup-ndk@v1
+      uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1.6.0
       id: setup-ndk
       with:
         ndk-version: r29-beta1
@@ -242,55 +168,59 @@ jobs:
         GOMIPS: ${{matrix.jobs.gomips}}
       run: |
         go env
-        go build -v -tags "with_gvisor" -trimpath -ldflags "${BUILDTAG} -X 'github.com/metacubex/mihomo/constant.Version=${VERSION}' -X 'github.com/metacubex/mihomo/constant.BuildTime=${BUILDTIME}' -w -s -buildid="
+        CORE_BINARY="citrus"
         if [ "${{matrix.jobs.goos}}" = "windows" ]; then
-          cp mihomo.exe mihomo-${{matrix.jobs.goos}}-${{matrix.jobs.output}}.exe
-          zip -r mihomo-${{matrix.jobs.goos}}-${{matrix.jobs.output}}-${VERSION}.zip mihomo-${{matrix.jobs.goos}}-${{matrix.jobs.output}}.exe
+          CORE_BINARY="citrus.exe"
+        fi
+        go build -o "$CORE_BINARY" -v -tags "with_gvisor" -trimpath -ldflags "${BUILDTAG} -X 'github.com/metacubex/mihomo/constant.Version=${VERSION}' -X 'github.com/metacubex/mihomo/constant.BuildTime=${BUILDTIME}' -X 'github.com/metacubex/mihomo/constant.BuildSequence=${GITHUB_RUN_ID}' -w -s -buildid="
+        if [ "${{matrix.jobs.goos}}" = "windows" ]; then
+          cp citrus.exe citrus-${{matrix.jobs.goos}}-${{matrix.jobs.output}}.exe
+          zip -r citrus-${{matrix.jobs.goos}}-${{matrix.jobs.output}}-${VERSION}.zip citrus-${{matrix.jobs.goos}}-${{matrix.jobs.output}}.exe
         else
-          cp mihomo mihomo-${{matrix.jobs.goos}}-${{matrix.jobs.output}}
-          gzip -c mihomo-${{matrix.jobs.goos}}-${{matrix.jobs.output}} > mihomo-${{matrix.jobs.goos}}-${{matrix.jobs.output}}-${VERSION}.gz
-          rm mihomo-${{matrix.jobs.goos}}-${{matrix.jobs.output}}
+          cp citrus citrus-${{matrix.jobs.goos}}-${{matrix.jobs.output}}
+          gzip -c citrus-${{matrix.jobs.goos}}-${{matrix.jobs.output}} > citrus-${{matrix.jobs.goos}}-${{matrix.jobs.output}}-${VERSION}.gz
+          rm citrus-${{matrix.jobs.goos}}-${{matrix.jobs.output}}
         fi
 
     - name: Package DEB
       if: matrix.jobs.debian != ''
       run: |
         set -xeuo pipefail
-        sudo gem install fpm
+        sudo gem install fpm -v 1.18.0
         cp .github/release/.fpm_systemd .fpm
 
         fpm -t deb \
           -v "${PackageVersion}" \
-          -p "mihomo-${{matrix.jobs.goos}}-${{matrix.jobs.output}}-${VERSION}.deb" \
+          -p "citrus-${{matrix.jobs.goos}}-${{matrix.jobs.output}}-${VERSION}.deb" \
           --architecture ${{ matrix.jobs.debian }} \
-          mihomo=/usr/bin/mihomo
+          citrus=/usr/bin/citrus
 
     - name: Package RPM
       if: matrix.jobs.rpm != ''
       run: |
         set -xeuo pipefail
-        sudo gem install fpm
+        sudo gem install fpm -v 1.18.0
         cp .github/release/.fpm_systemd .fpm
 
         fpm -t rpm \
           -v "${PackageVersion}" \
-          -p "mihomo-${{matrix.jobs.goos}}-${{matrix.jobs.output}}-${VERSION}.rpm" \
+          -p "citrus-${{matrix.jobs.goos}}-${{matrix.jobs.output}}-${VERSION}.rpm" \
           --architecture ${{ matrix.jobs.rpm }} \
-          mihomo=/usr/bin/mihomo
+          citrus=/usr/bin/citrus
 
     - name: Package Pacman
       if: matrix.jobs.pacman != ''
       run: |
         set -xeuo pipefail
-        sudo gem install fpm
+        sudo gem install fpm -v 1.18.0
         sudo apt-get update && sudo apt-get install -y libarchive-tools
         cp .github/release/.fpm_systemd .fpm
 
         fpm -t pacman \
           -v "${PackageVersion}" \
-          -p "mihomo-${{matrix.jobs.goos}}-${{matrix.jobs.output}}-${VERSION}.pkg.tar.zst" \
+          -p "citrus-${{matrix.jobs.goos}}-${{matrix.jobs.output}}-${VERSION}.pkg.tar.zst" \
           --architecture ${{ matrix.jobs.pacman }} \
-          mihomo=/usr/bin/mihomo
+          citrus=/usr/bin/citrus
 
     - name: Pack Golang Toolchain
       if: ${{ matrix.jobs.goversion == '' && matrix.jobs.tarball == 'tarball' }}
@@ -313,28 +243,32 @@ jobs:
       shell: bash
 
     - name: Archive production artifacts
-      uses: actions/upload-artifact@v7
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: "${{ matrix.jobs.goos }}-${{ matrix.jobs.output }}"
         path: |
-          mihomo*.gz
-          mihomo*.deb
-          mihomo*.rpm
-          mihomo*.pkg.tar.zst
-          mihomo*.zip
+          citrus*.gz
+          citrus*.deb
+          citrus*.rpm
+          citrus*.pkg.tar.zst
+          citrus*.zip
           toolchain.tar.gz
           vendor.tar.gz
           version.txt
           checksums.txt
 
   Upload-Prerelease:
-    permissions: write-all
+    permissions:
+      contents: write # move the Prerelease tag, replace release assets
     if: ${{ github.event_name != 'workflow_dispatch' && github.ref_type == 'branch' && !startsWith(github.event_name, 'pull_request') }}
     needs: [build]
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+    - name: Set up Go
+      run: bash .github/scripts/setup-go.sh 1.26
     - name: Download all workflow run artifacts
-      uses: actions/download-artifact@v8
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
       with:
         path: bin/
         merge-multiple: true
@@ -346,8 +280,16 @@ jobs:
         cat checksums.txt
       shell: bash
 
+    - name: Generate signed update manifest
+      env:
+        CITRUS_UPDATE_PRIMARY_PRIVATE_KEY: ${{ secrets.CITRUS_UPDATE_PRIMARY_PRIVATE_KEY }}
+        CITRUS_UPDATE_RECOVERY_PRIVATE_KEY: ${{ secrets.CITRUS_UPDATE_RECOVERY_PRIVATE_KEY }}
+      run: |
+        VERSION="$(tr -d '\r\n' < bin/version.txt)"
+        go run .github/scripts/release-manifest/main.go -dir bin -channel "${GITHUB_REF_NAME}" -version "$VERSION" -commit "$GITHUB_SHA" -sequence "$GITHUB_RUN_ID" -expires 336h
+
     - name: Delete current release assets
-      uses: 8Mi-Tech/delete-release-assets-action@main
+      uses: 8Mi-Tech/delete-release-assets-action@71a740cf4364bc69448e0294b8abadffadfb3288 # main 2026-10-15
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         tag: Prerelease-${{ github.ref_name }}
@@ -358,7 +300,7 @@ jobs:
       shell: bash
 
     - name: Tag Repo
-      uses: richardsimko/update-tag@v3
+      uses: richardsimko/update-tag@24fe62c216198eb57283429200e63a06f62afe5b # v3.0.0
       with:
         tag_name: Prerelease-${{ github.ref_name }}
       env:
@@ -369,13 +311,13 @@ jobs:
         Release created at  ${{ env.BUILDTIME }}
         Synchronize ${{ github.ref_name }} branch code updates, keeping only the latest version
         <br>
-        [我应该下载哪个文件? / Which file should I download?](https://github.com/MetaCubeX/mihomo/wiki/FAQ)
+        [Configuration and build instructions](https://github.com/getmikan/Citrus#readme)
         [二进制文件筛选 / Binary file selector](https://metacubex.github.io/Meta-Docs/startup/#_1)
         [查看文档 / Docs](https://metacubex.github.io/Meta-Docs/)
         EOF
 
     - name: Upload Prerelease
-      uses: softprops/action-gh-release@v3
+      uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
       if: ${{  success() }}
       with:
         tag_name: Prerelease-${{ github.ref_name }}
@@ -386,48 +328,47 @@ jobs:
         body_path: release.txt
 
   Upload-Release:
-    permissions: write-all
-    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version != '' }}
+    permissions:
+      contents: write # push the release tag, create the release
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_type == 'tag') }}
     needs: [build]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          ref: Meta
+          ref: ${{ github.sha }}
           fetch-depth: '0'
           fetch-tags: 'true'
 
       - name: Get tags
         run: |
-          echo "CURRENTVERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+          echo "CURRENTVERSION=${RELEASE_VERSION}" >> $GITHUB_ENV
           git fetch --tags
-          echo "PREVERSION=$(git describe --tags --abbrev=0 HEAD)" >> $GITHUB_ENV
+          echo "PREVERSION=$(git describe --tags --match 'v[0-9]*' --exclude "$RELEASE_VERSION" --abbrev=0 HEAD 2>/dev/null || git rev-list --max-parents=0 HEAD | tail -n 1)" >> $GITHUB_ENV
 
-      - name: Force push Alpha branch to Meta
+      - name: Tag the built commit
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-          git fetch origin Alpha:Alpha
-          git push origin Alpha:Meta --force
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Tag the commit on Alpha
-        run: |
-          git checkout Alpha 
-          git tag ${{ github.event.inputs.version }}
-          git push origin ${{ github.event.inputs.version }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          if git show-ref --verify --quiet "refs/tags/$RELEASE_VERSION"; then
+            if [ "$(git rev-parse "$RELEASE_VERSION^{commit}")" != "$(git rev-parse HEAD)" ]; then
+              echo "The release tag already points to a different commit" >&2
+              exit 1
+            fi
+          else
+            git tag "$RELEASE_VERSION"
+            git push origin "refs/tags/$RELEASE_VERSION"
+          fi
 
       - name: Generate release notes
         run: |
             cp ./.github/genReleaseNote.sh ./
-            bash ./genReleaseNote.sh -v ${PREVERSION}...${CURRENTVERSION}
+            bash ./genReleaseNote.sh -v "${PREVERSION}...${CURRENTVERSION}"
             rm ./genReleaseNote.sh
   
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: bin/
           merge-multiple: true
@@ -435,27 +376,43 @@ jobs:
       - name: Display structure of downloaded files
         run: ls -R
         working-directory: bin
+
+      - name: Calculate checksums
+        run: |
+          cd bin/
+          find . -type f -not -name "checksums.*" -not -name "version.txt" | sort | xargs sha256sum > checksums.txt
+
+      - name: Set up Go
+        run: bash .github/scripts/setup-go.sh 1.26
+
+      - name: Generate signed update manifest
+        env:
+          CITRUS_UPDATE_PRIMARY_PRIVATE_KEY: ${{ secrets.CITRUS_UPDATE_PRIMARY_PRIVATE_KEY }}
+          CITRUS_UPDATE_RECOVERY_PRIVATE_KEY: ${{ secrets.CITRUS_UPDATE_RECOVERY_PRIVATE_KEY }}
+        run: go run .github/scripts/release-manifest/main.go -dir bin -channel release -version "$RELEASE_VERSION" -commit "$GITHUB_SHA" -sequence "$GITHUB_RUN_ID" -expires 2160h
   
       - name: Upload Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         if: ${{ success() }}
         with:
-          tag_name: ${{ github.event.inputs.version }}
+          tag_name: ${{ env.RELEASE_VERSION }}
           files: bin/*
           body_path: release.md
 
   Docker:
     if: ${{ !startsWith(github.event_name, 'pull_request') }}
-    permissions: write-all
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io
     needs: [build]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: bin/
           merge-multiple: true
@@ -464,36 +421,40 @@ jobs:
         run: ls -R
         working-directory: bin
 
+      - name: Set container image name
+        run: echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+        shell: bash
+
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
 
       - name: Setup Docker buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
           version: latest
       
       # Extract metadata (tags, labels) for Docker
       # https://github.com/docker/metadata-action
       - name: Extract Docker metadata
-        if: ${{ github.event_name != 'workflow_dispatch' }}
-        id: meta_alpha
-        uses: docker/metadata-action@v6
+        if: ${{ env.RELEASE_VERSION == '' }}
+        id: meta_branch
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: '${{ env.REGISTRY }}/${{ github.repository }}'
+          images: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}'
       
       # Extract metadata (tags, labels) for Docker
       # https://github.com/docker/metadata-action
       - name: Extract Docker metadata
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version != '' }}
+        if: ${{ env.RELEASE_VERSION != '' }}
         id: meta_release
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: '${{ env.REGISTRY }}/${{ github.repository }}'
+          images: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}'
           tags: |
-            ${{ github.event.inputs.version }}
+            ${{ env.RELEASE_VERSION }}
           flavor: |
             latest=true
-          labels: org.opencontainers.image.version=${{ github.event.inputs.version }}
+          labels: org.opencontainers.image.version=${{ env.RELEASE_VERSION }}
       
       - name: Show files
         run: |
@@ -501,17 +462,17 @@ jobs:
           ls bin/
       
       - name: login to docker REGISTRY
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.DOCKER_HUB_USER }}
-          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       # Build and push Docker image with Buildx (don't push on PR)
       # https://github.com/docker/build-push-action
       - name: Build and push Docker image
-        if: ${{ github.event_name != 'workflow_dispatch' }}
-        uses: docker/build-push-action@v7
+        if: ${{ env.RELEASE_VERSION == '' }}
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ./Dockerfile
@@ -521,12 +482,12 @@ jobs:
             linux/amd64
             linux/arm64
             linux/arm/v7
-          tags: ${{ steps.meta_alpha.outputs.tags }}
-          labels: ${{ steps.meta_alpha.outputs.labels }}
+          tags: ${{ steps.meta_branch.outputs.tags }}
+          labels: ${{ steps.meta_branch.outputs.labels }}
       
       - name: Build and push Docker image
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version != '' }}
-        uses: docker/build-push-action@v7
+        if: ${{ env.RELEASE_VERSION != '' }}
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ./Dockerfile

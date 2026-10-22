@@ -9,6 +9,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"mikan/internal/panel/settings"
+	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/tgbackup"
 )
@@ -64,8 +65,8 @@ func (h *handlers) backupView(ctx context.Context) (BackupView, error) {
 		return v, err
 	}
 	v.PasswordSet = len(pw) >= tgbackup.MinPassword
-	if h.d.Telegram != nil {
-		_, v.AdminChatSet, _ = h.d.Telegram.InfrastructureAdminChat(ctx)
+	if h.d.Gateway != nil {
+		_, v.AdminChatSet, _ = h.d.Gateway.InfrastructureAdminChat(ctx)
 	}
 	st, _, err := settings.Get[tgbackup.State](ctx, h.d.Settings, tgbackup.KeyState)
 	if err != nil {
@@ -75,7 +76,7 @@ func (h *handlers) backupView(ctx context.Context) (BackupView, error) {
 		if unix == 0 {
 			return nil
 		}
-		t := time.Unix(unix, 0).UTC()
+		t := store.Time(unix)
 		return &t
 	}
 	v.LastOK, v.LastTry, v.LastError, v.LastSize = at(st.LastOK), at(st.LastTry), st.LastError, st.LastSize
@@ -98,7 +99,7 @@ func (h *handlers) updateBackup(ctx context.Context, in *patchBackupInput) (*bac
 		return nil, err
 	}
 	if b.Password != nil && len(*b.Password) < tgbackup.MinPassword {
-		return nil, tgFieldErr("password", "backup_password_short")
+		return nil, fieldErr("body.password", "backup_password_short")
 	}
 	if b.Enabled != nil && *b.Enabled && b.Password == nil {
 		pw, err := h.d.Settings.String(ctx, tgbackup.KeyPassword)
@@ -106,7 +107,7 @@ func (h *handlers) updateBackup(ctx context.Context, in *patchBackupInput) (*bac
 			return nil, err
 		}
 		if len(pw) < tgbackup.MinPassword {
-			return nil, tgFieldErr("password", "no_backup_password")
+			return nil, fieldErr("body.password", "no_backup_password")
 		}
 	}
 	err = h.d.Store.Tx(ctx, func(q *db.Queries) error {

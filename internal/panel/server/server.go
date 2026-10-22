@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"mikan/internal/frontpage"
 	"mikan/internal/panel/secure"
 	"mikan/internal/panel/settings"
 )
@@ -20,7 +21,13 @@ type Server struct {
 	legacy http.Handler // the old panel's links (settings.Paths.Legacy); nil: none
 	site   http.Handler // every other path (OwnSite); nil: NotFound
 	hsts   atomic.Pointer[func() bool]
+	// hello answers a node's hello and says so; whatever it does not answer is served
+	// like any unknown path (see nodehello). nil: none.
+	hello func(w http.ResponseWriter, r *http.Request) bool
 }
+
+// SetHello takes the handler of the nodes' hellos.
+func (s *Server) SetHello(h func(w http.ResponseWriter, r *http.Request) bool) { s.hello = h }
 
 // SetLegacy takes the handler of the old panel's subscription links.
 func (s *Server) SetLegacy(h http.Handler) { s.legacy = h }
@@ -81,6 +88,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, admin bool) {
 		r2.URL.Path = p[len(paths.Legacy)+1:]
 		r2.URL.RawPath = ""
 		s.legacy.ServeHTTP(w, r2)
+	case s.hello != nil && s.hello(w, r):
 	default:
 		s.other(w, r)
 	}
@@ -120,10 +128,19 @@ func SecurityHeaders(h http.Header) {
 	h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
 }
 
-func NotFound(w http.ResponseWriter) {
-	h := w.Header()
-	h.Set("Content-Type", "text/plain; charset=utf-8")
-	h.Set("Cache-Control", "no-store")
-	w.WriteHeader(http.StatusNotFound)
-	_, _ = w.Write([]byte("404 Not Found\n"))
+// FrameCSP is the policy of an addon's admin pages (docs/pipeline/addons.md, section 9). The
+// sandbox gives the frame an opaque origin even when it is opened directly: no cookies, no
+// storage, no admin API, no parent, no navigation of the top window.
+const FrameCSP = "sandbox allow-scripts; default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; object-src 'none'"
+
+// FrameHeaders replace SecurityHeaders' framing rules for an addon's pages: the admin panel
+// may frame them, and CORP is cross-origin because the opaque frame could not load its
+// own scripts with same-origin. nosniff and no-referrer stay.
+func FrameHeaders(h http.Header) {
+	h.Set("Content-Security-Policy", FrameCSP)
+	h.Set("X-Frame-Options", "SAMEORIGIN")
+	h.Set("Cross-Origin-Resource-Policy", "cross-origin")
 }
+
+// NotFound is the plain 404 (frontpage.NotFound).
+func NotFound(w http.ResponseWriter) { frontpage.NotFound(w) }

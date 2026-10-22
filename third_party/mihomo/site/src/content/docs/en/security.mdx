@@ -1,0 +1,86 @@
+---
+title: Security
+description: How to report a vulnerability in Citrus, and what has been done to harden the core.
+---
+
+## Reporting a vulnerability
+
+**Do not open a public issue.** GitHub private vulnerability reporting is enabled on the repository: open a [new report](https://github.com/getmikan/Citrus/security/advisories/new) on the Security tab. Only the maintainers see it, and the discussion and the fix happen in a private advisory.
+
+To help us move quickly, include:
+
+- the Citrus version or commit and the platform;
+- the affected component (a protocol, a listener, the controller, the updater and so on);
+- a minimal config and the steps to reproduce;
+- what an attacker can do and what access they need.
+
+We acknowledge the report, fix it on a private branch, publish the fix and the advisory, and credit the reporter if they wish. The same rules are in [SECURITY.md](https://github.com/getmikan/Citrus/blob/dev/SECURITY.md).
+
+Send issues in the forks [getmikan/utls](https://github.com/getmikan/utls), [getmikan/tls](https://github.com/getmikan/tls) and [getmikan/http](https://github.com/getmikan/http) here as well. If the problem also exists in mihomo, say so in the report.
+
+## Supported versions
+
+Fixes land on `dev`, then in `main` and in releases. There are no maintenance branches for older versions: update to the latest build.
+
+## What has been done
+
+Fixes from core/fork reviews and static audits are listed in the [changelog](/Citrus/en/changelog/#hardening), with their PRs and validation. New reports are checked against the current code: an earlier changelog entry alone does not establish that a new finding is closed. Compatibility limitations are recorded below.
+
+### Controller
+
+- Without a `secret` the controller does not listen on a network address; on loopback without a secret it refuses browser requests from other sites and DNS rebinding.
+- The unix socket and the named pipe are owner-only; the `secret` is checked on every listener, `/debug` included.
+- A changed `secret` takes effect at once and closes open streams; connections are bounded in header time and idle time.
+- The API does not return inbound passwords and keys, and `external-ui` cannot point at the folder that holds the config and keys.
+
+### Authentication on inbounds
+
+- The HTTP proxy authenticates every request, not only the first one on a connection.
+- UDP through SOCKS5 works only with an open association, bound to its user and port.
+- Changing a user's password or removing the user closes its sessions; empty user names are refused.
+- UDP sessions are keyed by inbound and user, so one user's rules and limits never apply to another.
+- A client address from proxy headers is accepted only from the listed `trusted-proxies`.
+
+### Pre-authentication resources
+
+- The shared TCP wrapper for REALITY, ShadowTLS, JLS and ResTLS permits up to 256 pending handshakes per listener and closes them after 15 seconds. Classification as a client or fallback lifts this deadline; fallback limits are separate from the handshake.
+- State a client can create before its credentials are checked (XHTTP sessions, 0-RTT tickets, QUIC streams, multiplexed streams, fragment reassembly) is bounded in count, size and time.
+- Lengths declared by the peer are checked before memory is allocated.
+
+### Downloads and files
+
+- Provider responses, geodata, UI archives and update packages are bounded in size, and archives in entry count.
+- Paths are checked with symlinks resolved, and provider files are written atomically.
+- A public URL cannot redirect a download into the internal network.
+- New config, provider and cache files are created owner-only.
+
+### TLS and updates
+
+- TLS 1.2 minimum on every TLS inbound and on the controller.
+- The forks [getmikan/tls](https://github.com/getmikan/tls) and [getmikan/utls](https://github.com/getmikan/utls) carry the crypto/tls security fixes from Go 1.26 (ECH outer extension validation, CVE-2026-97031, and a KeyUpdate bound).
+- Self-update requires an Ed25519-signed, expiring manifest bound to the channel, build sequence, platform, file name, size and SHA-256. Two embedded release keys support overlap rotation; revoked IDs are rejected and per-channel sequence state prevents rollback.
+- Remote GEO databases can be pinned per type with `geox-sha256`: a database with another SHA-256 is rejected. Without a pin the database is accepted as is, since its publishers sign none.
+
+### Build and CI
+
+- Every GitHub Action is pinned to a commit SHA, and the Docker base images and test images by digest; updates come in through Dependabot.
+- CI tokens get the least privilege: read-only for the build, only the needed scopes for publishing releases and images.
+- CodeQL, govulncheck, dependency review, `go vet` and a `go mod tidy` check run on every PR.
+- The Xray and mihomo binaries used by the interop tests are checked against a pinned SHA-256.
+
+## Controller WebSockets
+
+A browser dashboard first sends `POST /auth/ws-ticket` with `Authorization: Bearer <secret>`, `Content-Type: application/json` and `{"path":"/events?types=auth"}`. Success returns HTTP 201 and `{"ticket":"...","expires_in":30}` with `Cache-Control: no-store`. It then opens `/events?types=auth&ticket=...` over WebSocket. Every reconnect needs a new ticket.
+
+A ticket lasts 30 seconds, is atomically redeemed for one authentication attempt, and permits only a GET upgrade to its specified stream with the same query parameters. If issuance included an Origin header, it must match on connection. Supported streams are `/events`, `/logs`, `/traffic`, `/traffic/users`, `/memory` and `/connections`. Tickets cannot call the REST API or mint more tickets. Each controller handler permits up to 1024 outstanding tickets; issuance over the cap returns HTTP 429, and expired entries release capacity. Recreating the controller, including secret rotation, invalidates outstanding tickets.
+
+Native clients can continue sending a bearer header during the WebSocket upgrade. Older browser dashboards can explicitly enable `external-controller-allow-legacy-websocket-token: true`, disabled by default. This accepts the old `?token=<secret>` on WebSocket streams and emits a warning: the URL again contains the main reusable secret, so this is a compatibility mode, not a fix for that exposure. Normal mode places only a short-lived one-time ticket in the URL.
+
+## Compatibility limitations
+
+- **Sudoku:** the current handshake treats knowledge of the configured `key` as the access secret and does not prove possession of a separate private key. Keep this value secret even when a tool calls it a public key. Adding such proof requires a protocol change; compatibility is preserved, and this finding is not claimed fixed.
+- **KCPTun:** a default-key warning and resource bounds do not replace a unique secret. The shared legacy key remains available for compatibility; without an explicit `key`, this transport does not have a server-specific secret.
+
+## Next
+
+Release signing and verifying downloaded dashboards and geodata are on the [roadmap](/Citrus/en/roadmap/).

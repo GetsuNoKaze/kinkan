@@ -1,0 +1,145 @@
+Backport Go 1.27.2's HPACK encoder ownership fix (GO-2026-6617).
+Source: src/net/http/internal/http2/server.go in go1.27.2.
+Reference: https://pkg.go.dev/vuln/GO-2026-6617
+Keep peer table-size changes on the serve loop until the previous frame writer
+has completed; replay the minimum and latest sizes per RFC 7541 section 4.2.
+The regression test fails before this fix when SETTINGS mutate an active encoder.
+
+diff --git a/h2_bundle.go b/h2_bundle.go
+--- a/h2_bundle.go
++++ b/h2_bundle.go
+@@ -4620,6 +4620,9 @@
+ 	sawFirstSettings            bool // got the initial SETTINGS frame after the preface
+ 	needToSendSettingsAck       bool
+ 	unackedSettings             int    // how many SETTINGS have we sent without ACKs?
++	pendingEncoderTableSize     bool   // peer changed SETTINGS_HEADER_TABLE_SIZE; apply before the next frame write
++	encoderTableSizeMin         uint32 // smallest SETTINGS_HEADER_TABLE_SIZE since the last apply
++	encoderTableSize            uint32 // latest SETTINGS_HEADER_TABLE_SIZE
+ 	queuedControlFrames         int    // control frames in the writeSched queue
+ 	clientMaxStreams            uint32 // SETTINGS_MAX_CONCURRENT_STREAMS from client (our PUSH_PROMISE limit)
+ 	advMaxStreams               uint32 // our SETTINGS_MAX_CONCURRENT_STREAMS advertised the client
+@@ -5341,6 +5344,16 @@
+ 
+ 	sc.writingFrame = true
+ 	sc.needsFrameFlush = true
++	if sc.pendingEncoderTableSize {
++		// hpackEncoder may be in use by writeFrameAsync, so SETTINGS
++		// changes to it are deferred until no frame is being written.
++		// Replaying the smallest size before the latest one keeps the
++		// encoder's view identical to having applied every change
++		// (RFC 7541, Section 4.2; GO-2026-6617).
++		sc.pendingEncoderTableSize = false
++		sc.hpackEncoder.SetMaxDynamicTableSize(sc.encoderTableSizeMin)
++		sc.hpackEncoder.SetMaxDynamicTableSize(sc.encoderTableSize)
++	}
+ 	if wr.write.staysWithinBuffer(sc.bw.Available()) {
+ 		sc.writingFrameAsync = false
+ 		err := wr.write.writeFrame(sc)
+@@ -5808,7 +5821,12 @@
+ 	}
+ 	switch s.ID {
+ 	case http2SettingHeaderTableSize:
+-		sc.hpackEncoder.SetMaxDynamicTableSize(s.Val)
++		// Applied by startFrameWrite; see comment there.
++		if !sc.pendingEncoderTableSize || s.Val < sc.encoderTableSizeMin {
++			sc.encoderTableSizeMin = s.Val
++		}
++		sc.encoderTableSize = s.Val
++		sc.pendingEncoderTableSize = true
+ 	case http2SettingEnablePush:
+ 		sc.pushEnabled = s.Val != 0
+ 	case http2SettingMaxConcurrentStreams:
+diff --git a/kinkan_hpack_test.go b/kinkan_hpack_test.go
+new file mode 100644
+--- /dev/null
++++ b/kinkan_hpack_test.go
+@@ -0,0 +1,89 @@
++package http
++
++import (
++	"bytes"
++	"testing"
++	"time"
++
++	"golang.org/x/net/http2/hpack"
++)
++
++type kinkanBlockedHeaders struct {
++	started chan struct{}
++	release chan struct{}
++}
++
++func (*kinkanBlockedHeaders) staysWithinBuffer(int) bool { return false }
++
++func (w *kinkanBlockedHeaders) writeFrame(ctx http2writeContext) error {
++	enc, _ := ctx.HeaderEncoder()
++	close(w.started)
++	<-w.release
++	return enc.WriteField(hpack.HeaderField{Name: ":status", Value: "200"})
++}
++
++// A peer's SETTINGS must not mutate the HPACK encoder while the asynchronous
++// frame writer owns it (GO-2026-6617). Preserve both the smallest and final size.
++func TestKinkanHeaderTableSizeDuringWrite(t *testing.T) {
++	sc := &http2serverConn{
++		serveG:       http2newGoroutineLock(),
++		bw:           &http2bufferedWriter{},
++		wroteFrameCh: make(chan http2frameWriteResult, 1),
++	}
++	sc.hpackEncoder = hpack.NewEncoder(&sc.headerWriteBuf)
++	release := make(chan struct{})
++	defer func() {
++		if release != nil {
++			close(release)
++		}
++	}()
++	w := &kinkanBlockedHeaders{started: make(chan struct{}), release: release}
++	sc.startFrameWrite(http2FrameWriteRequest{write: w})
++	select {
++	case <-w.started:
++	case <-time.After(5 * time.Second):
++		t.Fatal("frame writer did not start")
++	}
++	for _, size := range []uint32{0, 2048} {
++		if err := sc.processSetting(http2Setting{ID: http2SettingHeaderTableSize, Val: size}); err != nil {
++			t.Fatal(err)
++		}
++	}
++	if got := sc.hpackEncoder.MaxDynamicTableSize(); got != 4096 {
++		t.Fatalf("encoder changed during an active frame write: got %d, want 4096", got)
++	}
++	close(release)
++	release = nil
++	select {
++	case result := <-sc.wroteFrameCh:
++		if result.err != nil {
++			t.Fatal(result.err)
++		}
++	case <-time.After(5 * time.Second):
++		t.Fatal("frame writer did not finish")
++	}
++	// The serve loop has received completion; it may start the next frame.
++	sc.writingFrame = false
++	sc.headerWriteBuf.Reset()
++	w = &kinkanBlockedHeaders{started: make(chan struct{}), release: make(chan struct{})}
++	close(w.release)
++	sc.startFrameWrite(http2FrameWriteRequest{write: w})
++	select {
++	case result := <-sc.wroteFrameCh:
++		if result.err != nil {
++			t.Fatal(result.err)
++		}
++	case <-time.After(5 * time.Second):
++		t.Fatal("second frame writer did not finish")
++	}
++	var want bytes.Buffer
++	enc := hpack.NewEncoder(&want)
++	enc.SetMaxDynamicTableSize(0)
++	enc.SetMaxDynamicTableSize(2048)
++	if err := enc.WriteField(hpack.HeaderField{Name: ":status", Value: "200"}); err != nil {
++		t.Fatal(err)
++	}
++	if !bytes.Equal(sc.headerWriteBuf.Bytes(), want.Bytes()) {
++		t.Fatalf("HPACK block = %x, want %x (minimum and final table sizes)", sc.headerWriteBuf.Bytes(), want.Bytes())
++	}
++}

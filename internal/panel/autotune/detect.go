@@ -8,7 +8,6 @@ package autotune
 import (
 	"net/netip"
 	"slices"
-	"strconv"
 	"time"
 
 	"mikan/internal/nodeapi"
@@ -19,7 +18,7 @@ import (
 // User is what the detector needs to know about one slot: a subscription's own keys,
 // or the keys of one of its bound devices.
 type User struct {
-	Inbounds []int64 // inbound ids in the user's profile; empty = all
+	Inbounds []int64 // inbound ids in the user's profile; nil = all, empty = none
 	// SubFetched: when each of the user's devices (by IP) last took the profile. A device
 	// that did not take it after an inbound changed may still use the old port.
 	SubFetched map[string]int64
@@ -103,7 +102,7 @@ func Detect(e Evidence) map[int64]Verdict {
 			fetched = u.Fetched
 		}
 		for _, x := range e.Inbounds {
-			if len(u.Inbounds) > 0 && !slices.Contains(u.Inbounds, x.ID) || fetched < x.UpdatedAt {
+			if u.Inbounds != nil && !slices.Contains(u.Inbounds, x.ID) || fetched < x.UpdatedAt {
 				continue
 			}
 			others, sameNet := 0, false
@@ -152,14 +151,9 @@ func netOf(ip string) string {
 	return p.String()
 }
 
-// FreePorts returns the ports of domain.PortPool a blocked inbound of the node may move
-// to on network: free on the node's port map and not given up lately.
-func FreePorts(ports domain.PortMap, network string, abandoned map[string]bool) []string {
-	var out []string
-	for _, p := range domain.PortPool {
-		if port := strconv.Itoa(p); !abandoned[port] && ports.Free(p, network) {
-			out = append(out, port)
-		}
-	}
-	return out
+// FreePorts returns the ports a blocked inbound of the node may move to on network: free
+// on the node's port map and not given up lately, of domain.PortPool, and past it when
+// anyPort (settings.AnyPort) is on and the pool is full.
+func FreePorts(ports domain.PortMap, network string, abandoned map[string]bool, anyPort bool) []string {
+	return ports.PickPorts(network, anyPort, abandoned)
 }

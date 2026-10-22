@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"mikan/internal/nodeapi"
+	"mikan/internal/pace"
 	"mikan/internal/panel/audit"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/nodesync"
@@ -136,24 +137,16 @@ func (t *Tuner) Run(ctx context.Context) {
 	if t.o.Busy > 0 {
 		var wg sync.WaitGroup
 		defer wg.Wait()
-		wg.Go(func() { t.runBusy(ctx) })
+		wg.Go(func() { pace.Tick(ctx, t.o.Busy, t.MoveBusy) })
 	}
-	tick := time.NewTicker(t.o.Tick)
-	defer tick.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-tick.C:
-			t.Step(ctx)
-		}
-	}
+	pace.Tick(ctx, t.o.Tick, t.Step)
 }
 
 // world is the database as one round sees it; changes made in the round update it.
 type world struct {
 	now          time.Time
 	portOn       bool
+	anyPort      bool // settings.AnyPort: moves may go past domain.PortPool
 	sniOn        bool
 	nodes        []db.Node              // enabled nodes
 	inbounds     map[int64][]db.Inbound // by node id, enabled or not
@@ -236,6 +229,9 @@ func (t *Tuner) load(ctx context.Context) (*world, error) {
 	if w.portOn, err = t.set.On(ctx, settings.AutoPort); err != nil {
 		return nil, err
 	}
+	if w.anyPort, err = t.set.On(ctx, settings.AnyPort); err != nil {
+		return nil, err
+	}
 	if w.sniOn, err = t.set.On(ctx, settings.AutoSNI); err != nil {
 		return nil, err
 	}
@@ -285,9 +281,44 @@ func (t *Tuner) load(ctx context.Context) (*world, error) {
 	if err != nil {
 		return nil, err
 	}
+	servers, err := domain.AllTariffServers(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	// A group closed for a user, or one with a limit of its own run out, is out of the user's
+	// profile as the subscription leaves it out: a device that reached it before is no proof
+	// its port or SNI is blocked now.
+	groups, err := q.ListAllUserPools(ctx)
+	if err != nil {
+		return nil, err
+	}
+	left, err := domain.LoadGrantsLeft(ctx, q, t.now())
+	if err != nil {
+		return nil, err
+	}
+	spent := map[int64]map[int64]bool{}
+	for _, g := range groups {
+		if g.Mode == domain.PoolClosed || domain.PoolExhausted(g, left.Pool(g.UserID, g.PoolID)) {
+			if spent[g.UserID] == nil {
+				spent[g.UserID] = map[int64]bool{}
+			}
+			spent[g.UserID][g.PoolID] = true
+		}
+	}
 	allowed := make(map[int64][]int64, len(users))
 	for _, u := range users {
-		allowed[u.ID] = domain.DecodeInbounds(u.Inbounds)
+		access := domain.AccessOf(u, domain.ServersOf(servers, u.TariffID))
+		if out := spent[u.ID]; len(out) > 0 {
+			ids := []int64{}
+			for _, in := range inbounds {
+				if access.Allows(in) && !(in.PoolID.Valid && out[in.PoolID.Int64]) {
+					ids = append(ids, in.ID)
+				}
+			}
+			allowed[u.ID] = ids
+		} else {
+			allowed[u.ID] = access.IDs(inbounds)
+		}
 		if u.SlotID.Valid {
 			w.users[slotName[u.SlotID.Int64]] = User{Inbounds: allowed[u.ID], SubFetched: fetched[u.ID]}
 		}
@@ -410,30 +441,12 @@ func (t *Tuner) recordReach(ctx context.Context, w *world, inbounds []db.Inbound
 	for _, in := range inbounds {
 		ids[in.Name] = in.ID
 	}
-	// Blind upserts: READ COMMITTED.
-	err := t.st.TxRC(ctx, func(q *db.Queries) error {
-		for _, c := range act.Clients {
-			if _, known := w.users[c.Slot]; !known {
-				continue
-			}
-			for name, at := range c.Seen {
-				id, ok := ids[name]
-				if !ok || at-w.reach[c.Slot][id] < int64(reachStep/time.Second) {
-					continue
-				}
-				if err := q.UpsertInboundReach(ctx, db.UpsertInboundReachParams{Slot: c.Slot, InboundID: id, At: at}); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		t.log.Error("autotune: record reach", "err", err)
-		return
+	// What is new enough to write down, each (slot, inbound) once with its latest time.
+	type key struct {
+		slot string
+		id   int64
 	}
-	// Publish the cache only after commit: a retry (deadlock) must still write
-	// every reach observation from the rolled-back attempt.
+	due := map[key]int64{}
 	for _, c := range act.Clients {
 		if _, known := w.users[c.Slot]; !known {
 			continue
@@ -443,11 +456,29 @@ func (t *Tuner) recordReach(ctx context.Context, w *world, inbounds []db.Inbound
 			if !ok || at-w.reach[c.Slot][id] < int64(reachStep/time.Second) {
 				continue
 			}
-			if w.reach[c.Slot] == nil {
-				w.reach[c.Slot] = map[int64]int64{}
-			}
-			w.reach[c.Slot][id] = at
+			k := key{c.Slot, id}
+			due[k] = max(due[k], at)
 		}
+	}
+	if len(due) == 0 {
+		return
+	}
+	p := db.UpsertInboundReachesParams{}
+	for k, at := range due {
+		p.Slots, p.InboundIds, p.Ats = append(p.Slots, k.slot), append(p.InboundIds, k.id), append(p.Ats, at)
+	}
+	// One blind upsert for the whole node: READ COMMITTED.
+	err := t.st.TxRC(ctx, func(q *db.Queries) error { return q.UpsertInboundReaches(ctx, p) })
+	if err != nil {
+		t.log.Error("autotune: record reach", "err", err)
+		return
+	}
+	// The cache only after the commit: a retry must still write every reach.
+	for k, at := range due {
+		if w.reach[k.slot] == nil {
+			w.reach[k.slot] = map[int64]int64{}
+		}
+		w.reach[k.slot][k.id] = at
 	}
 }
 
@@ -549,7 +580,7 @@ func (t *Tuner) movePort(ctx context.Context, w *world, n db.Node, x db.Inbound,
 	}
 	abandoned := t.leftPorts(w.events, n.ID, network, w.now)
 	abandoned[x.Port] = true
-	free := FreePorts(ports, network, abandoned)
+	free := FreePorts(ports, network, abandoned, w.anyPort)
 	if len(free) == 0 {
 		t.setStuck(x.ID, "no_port")
 		return
@@ -693,7 +724,16 @@ func (t *Tuner) replaceTarget(ctx context.Context, w *world, n db.Node, x db.Inb
 		t.setStuck(x.ID, "no_target")
 		return false
 	}
-	found, err := t.nodes.ScanTargets(ctx, n.ID, nodeapi.TargetScanRequest{IP: ip, Limit: 16})
+	wide, err := t.set.On(ctx, settings.WideScan)
+	if err != nil {
+		t.log.Warn("autotune: scan targets: settings", "node", n.ID, "err", err)
+		return false
+	}
+	limit := 16
+	if wide {
+		limit = scan.WideEnough
+	}
+	found, err := t.nodes.ScanTargets(ctx, n.ID, nodeapi.TargetScanRequest{IP: ip, Limit: limit, Wide: wide})
 	if err != nil {
 		t.log.Warn("autotune: scan targets", "node", n.ID, "err", err)
 		return false

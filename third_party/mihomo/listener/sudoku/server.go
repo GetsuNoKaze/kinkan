@@ -7,14 +7,15 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/metacubex/mihomo/adapter/inbound"
 	N "github.com/metacubex/mihomo/common/net"
 	"github.com/metacubex/mihomo/common/utils"
+	"github.com/metacubex/mihomo/component/authevent"
 	C "github.com/metacubex/mihomo/constant"
 	LC "github.com/metacubex/mihomo/listener/config"
-	"github.com/metacubex/mihomo/listener/inner"
 	"github.com/metacubex/mihomo/listener/sing"
 	"github.com/metacubex/mihomo/log"
 	"github.com/metacubex/mihomo/transport/socks5"
@@ -24,11 +25,12 @@ import (
 type Listener struct {
 	listener  net.Listener
 	addr      string
-	closed    bool
+	closed    atomic.Bool
 	protoConf sudoku.ProtocolConfig
 	tunnelSrv *sudoku.HTTPMaskTunnelServer
 	fallback  string
 	handler   *sing.ListenerHandler
+	fallbacks fallbackLimiter
 }
 
 // RawAddress implements C.Listener
@@ -46,7 +48,8 @@ func (l *Listener) Address() string {
 
 // Close implements C.Listener
 func (l *Listener) Close() error {
-	l.closed = true
+	l.closed.Store(true)
+	l.fallbacks.close()
 	if l.listener != nil {
 		return l.listener.Close()
 	}
@@ -82,12 +85,7 @@ func (l *Listener) handleConn(conn net.Conn, tunnel C.Tunnel, additions ...inbou
 
 	if l.fallback != "" {
 		if r, ok := handshakeConn.(interface{ IsHTTPMaskRejected() bool }); ok && r.IsHTTPMaskRejected() {
-			fb, err := inner.HandleTcp(tunnel, l.fallback, "")
-			if err != nil {
-				closeConns()
-				return
-			}
-			N.Relay(handshakeConn, fb)
+			l.relayFallback(handshakeConn, conn, tunnel, false)
 			return
 		}
 	}
@@ -98,13 +96,11 @@ func (l *Listener) handleConn(conn net.Conn, tunnel C.Tunnel, additions ...inbou
 		var susp *sudoku.SuspiciousError
 		isSuspicious := errors.As(err, &susp) && susp != nil && susp.Conn != nil
 		if isSuspicious {
+			authevent.EmitAddr("sudoku", authevent.ReasonRejectedHandshake, conn.LocalAddr(), conn.RemoteAddr())
 			log.Warnln("[Sudoku] suspicious handshake from %s: %v", conn.RemoteAddr(), err)
 			if fallbackAddr != "" {
-				fb, err := inner.HandleTcp(tunnel, fallbackAddr, "")
-				if err == nil {
-					relayToFallback(susp.Conn, conn, fb)
-					return
-				}
+				l.relayFallback(susp.Conn, conn, tunnel, true)
+				return
 			}
 		} else {
 			log.Debugln("[Sudoku] handshake failed from %s: %v", conn.RemoteAddr(), err)
@@ -315,7 +311,7 @@ func New(config LC.SudokuServer, lc C.InboundListenConfig, tunnel C.Tunnel, addi
 		for {
 			c, err := l.Accept()
 			if err != nil {
-				if sl.closed {
+				if sl.closed.Load() {
 					break
 				}
 				continue

@@ -19,6 +19,9 @@ import (
 type ServerSession struct {
 	PfsKey  []byte
 	NfsKeys sync.Map
+	// Guarded by ServerInstance.RWLock, including changes to NfsKeys.
+	replayKeys int
+	exhausted  bool
 }
 
 type ServerInstance struct {
@@ -32,11 +35,12 @@ type ServerInstance struct {
 	PaddingLens   [][3]int
 	PaddingGaps   [][3]int
 
-	RWLock   sync.RWMutex
-	Closed   bool
-	Lasts    map[int64][16]byte
-	Tickets  [][16]byte
-	Sessions map[[16]byte]*ServerSession
+	RWLock     sync.RWMutex
+	Closed     bool
+	Lasts      map[int64][16]byte
+	Tickets    [][16]byte
+	Sessions   map[[16]byte]*ServerSession
+	replayKeys int
 }
 
 func (i *ServerInstance) Init(nfsSKeysBytes [][]byte, xorMode uint32, secondsFrom, secondsTo int64, padding string) (err error) {
@@ -86,24 +90,102 @@ func (i *ServerInstance) Init(nfsSKeysBytes [][]byte, xorMode uint32, secondsFro
 					i.RWLock.Unlock()
 					return
 				}
-				minute := time.Now().Unix() / 60
-				last := i.Lasts[minute]
-				delete(i.Lasts, minute)
-				delete(i.Lasts, minute-1) // for insurance
-				if last != [16]byte{} {
-					for j, ticket := range i.Tickets {
-						delete(i.Sessions, ticket)
-						if ticket == last {
-							i.Tickets = i.Tickets[j+1:]
-							break
-						}
-					}
-				}
+				i.expireTicketsLocked(time.Now())
 				i.RWLock.Unlock()
 			}
 		}()
 	}
 	return
+}
+
+// MaxServerSessions bounds the number of 0-RTT tickets a ServerInstance keeps.
+// A ticket is issued after a successful 1-RTT handshake, which happens before
+// the inner VLESS UUID is checked, so without a cap any peer that knows the
+// public decryption key could grow the store without limit until the
+// per-minute expiry catches up. When the store is full, the oldest tickets are
+// evicted first; a client presenting an evicted ticket is simply told to do a
+// new 1-RTT handshake, exactly as for an expired one. Xray-core has no such
+// limit; it does not affect the wire format.
+var MaxServerSessions = 65536
+
+// Replay keys are recorded before the inner VLESS identity is authenticated.
+// Bound both one ticket and the whole server. A saturated ticket is retired,
+// never recycled: forgetting keys while accepting that ticket permits replay.
+var (
+	MaxSessionReplayKeys = 1024
+	MaxServerReplayKeys  = 65536
+)
+
+func (i *ServerInstance) useTicket(ticket [16]byte, key [32]byte) (*ServerSession, bool) {
+	i.RWLock.Lock()
+	defer i.RWLock.Unlock()
+	s := i.Sessions[ticket]
+	if s == nil || s.exhausted {
+		return nil, false
+	}
+	if _, replay := s.NfsKeys.Load(key); replay {
+		return nil, true
+	}
+	if s.replayKeys >= max(MaxSessionReplayKeys, 1) || i.replayKeys >= max(MaxServerReplayKeys, 1) {
+		i.replayKeys -= s.replayKeys
+		s.NfsKeys.Clear()
+		s.replayKeys = 0
+		s.exhausted = true
+		return nil, false // same wire response as an expired ticket: retry 1-RTT
+	}
+	s.NfsKeys.Store(key, true)
+	s.replayKeys++
+	i.replayKeys++
+	return s, false
+}
+
+func (i *ServerInstance) deleteTicketLocked(ticket [16]byte) {
+	if s := i.Sessions[ticket]; s != nil {
+		i.replayKeys -= s.replayKeys
+	}
+	delete(i.Sessions, ticket)
+}
+
+// expireTicketsLocked drops every ticket issued up to the last ticket recorded
+// for the current minute. The caller holds i.RWLock for writing.
+func (i *ServerInstance) expireTicketsLocked(now time.Time) {
+	minute := now.Unix() / 60
+	last := i.Lasts[minute]
+	delete(i.Lasts, minute)
+	delete(i.Lasts, minute-1) // for insurance
+	if last == [16]byte{} {
+		return
+	}
+	if _, ok := i.Sessions[last]; !ok {
+		return // already evicted by the cap, together with everything older
+	}
+	for j, ticket := range i.Tickets {
+		i.deleteTicketLocked(ticket)
+		if ticket == last {
+			i.Tickets = i.Tickets[j+1:]
+			break
+		}
+	}
+}
+
+// storeTicketLocked records a new ticket, evicting the oldest ones when the
+// store is full. The caller holds i.RWLock for writing.
+func (i *ServerInstance) storeTicketLocked(now time.Time, ticket [16]byte, s *ServerSession) {
+	if _, ok := i.Sessions[ticket]; ok { // a 112-bit random collision: the ticket is already queued
+		i.deleteTicketLocked(ticket)
+		i.Sessions[ticket] = s
+		return
+	}
+	limit := max(MaxServerSessions, 1)
+	if n := len(i.Tickets) - limit + 1; n > 0 {
+		for _, old := range i.Tickets[:n] {
+			i.deleteTicketLocked(old)
+		}
+		i.Tickets = i.Tickets[n:]
+	}
+	i.Lasts[(now.Unix()+max(i.SecondsFrom, i.SecondsTo))/60+2] = ticket
+	i.Tickets = append(i.Tickets, ticket)
+	i.Sessions[ticket] = s
 }
 
 func (i *ServerInstance) Close() (err error) {
@@ -206,9 +288,10 @@ func (i *ServerInstance) Handshake(conn net.Conn, fallback *[]byte) (*CommonConn
 		if err != nil {
 			return nil, err
 		}
-		i.RWLock.RLock()
-		s := i.Sessions[[16]byte(ticket)]
-		i.RWLock.RUnlock()
+		s, replay := i.useTicket([16]byte(ticket), [32]byte(nfsKey))
+		if replay {
+			return nil, errors.New("replay detected")
+		}
 		if s == nil {
 			noises := make([]byte, randBetween(1279, 2279)) // matches 1-RTT's server hello length for "random", though it is not important, just for example
 			var err error
@@ -216,11 +299,15 @@ func (i *ServerInstance) Handshake(conn net.Conn, fallback *[]byte) (*CommonConn
 				rand.Read(noises)
 				_, err = DecodeHeader(noises)
 			}
-			conn.Write(noises) // make client do new handshake
+			if _, writeErr := conn.Write(noises); writeErr == nil {
+				// A close with unread client data can discard the response with
+				// TCP RST (notably on Windows). Let the client consume the
+				// expired-ticket response and close; bound a peer that stays.
+				_ = conn.SetReadDeadline(time.Now().Add(time.Second))
+				_, _ = io.Copy(io.Discard, conn)
+				_ = conn.SetReadDeadline(time.Time{})
+			}
 			return nil, errors.New("expired ticket")
-		}
-		if _, loaded := s.NfsKeys.LoadOrStore([32]byte(nfsKey), true); loaded { // prevents bad client also
-			return nil, errors.New("replay detected")
 		}
 		c.UnitedKey = append(s.PfsKey, nfsKey...) // the same nfsKey links the upload & download (prevents server -> client's another request)
 		c.PreWrite = make([]byte, 16)
@@ -276,9 +363,7 @@ func (i *ServerInstance) Handshake(conn net.Conn, fallback *[]byte) (*CommonConn
 	copy(ticket[:], EncodeLength(int(seconds)))
 	if seconds > 0 {
 		i.RWLock.Lock()
-		i.Lasts[(time.Now().Unix()+max(i.SecondsFrom, i.SecondsTo))/60+2] = ticket
-		i.Tickets = append(i.Tickets, ticket)
-		i.Sessions[ticket] = &ServerSession{PfsKey: pfsKey}
+		i.storeTicketLocked(time.Now(), ticket, &ServerSession{PfsKey: pfsKey})
 		i.RWLock.Unlock()
 	}
 

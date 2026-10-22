@@ -110,6 +110,10 @@ iade destekleyen ödeme yöntemleriyle ödenebilir: Telegram Stars ve iade deste
 adaptörler. Böylece sağlayıcı ödemeyi onaylamadan promosyon rezervasyonunun süresi dolarsa
 Mikan ödemeyi iade edebilir.
 
+## Destek erişimi
+
+Yardıma ihtiyacın olduğunda geçici erişimi kendin açarsın: Ayarlar → Destek, 2, 6 veya 24 saatliğine, «görüntüleme», «değiştirme» veya «terminal» seviyesinde. Bu düğme olmadan mikan geliştiricileri dahil kimse panele giremez: projenin sunucularına kalıcı erişimi yoktur ve panel kendiliğinden hiçbir yere bağlanmaz. Operatörün her işlemi denetim günlüğüne yazılır, erişim tek düğmeyle geri alınır, terminal parolan ve 2FA ile açılır ve kaydedilir. Özelliği tamamen kapatmak için aynı karttaki anahtarı kullan veya sunucuda `mikan support-access off` çalıştır. Ücretli destek kuralları: [sitede](https://miroshka000.github.io/mikan/support/paid/).
+
 ## Ekran görüntüleri
 
 <table>
@@ -185,6 +189,10 @@ Menü için `mikan` komutunu çalıştırın veya komutları doğrudan kullanın
 | `mikan targets scan` · `apply` | sunucunun yakınındaki REALITY kamuflaj siteleri |
 | `mikan join KEY` | düğümde: panelden yeni bir anahtar al |
 | `mikan restart` | konteynerleri yeniden başlat |
+| `mikan doctor` | sunucuyu denetle: Docker, portlar, güvenlik duvarı, saat, DNS, disk |
+| `mikan support KOD` | panel erişilemezken tanılamayı destek talebine gönder |
+| `mikan support-access on\|off` | bu sunucuda destek erişimine izin ver veya yasakla |
+| `mikan api-lockdown [status\|off]` | bir düğümde: «düğüm API'si yalnızca panel IP'sinden» kuralının durumu veya kuralı hemen kaldırma |
 | `mikan uninstall` | durdur ve komutu kaldır, veriyi koru |
 
 ## Güncellemeler
@@ -204,9 +212,24 @@ cd installer && cargo test                    # the installer (Rust)
 
 Geliştirme `dev` dalında yapılır. `main` dalına açılan çekme istekleri derlenir ve test edilir, sürümler etiketlerden yayımlanır.
 
+## ⛔ Fork'lar ve üçüncü taraf derlemeler
+
+> [!CAUTION]
+> **Resmî mikan yalnızca burada:** `Miroshka000/mikan` deposu, `ghcr.io/miroshka000/mikan` imajı ve mikan anahtarıyla imzalanmış sürümler. Resmî eklentiler yalnızca `getmikan/marketplace` kataloğundan gelir; topluluk kaydı `getmikan/marketplace-community`, mikan'ın incelemediği ve sorumluluğunu almadığı üçüncü taraf eklentileri listeler. Geri kalan her şey, adı ne olursa olsun, mikan değildir.
+>
+> **mikan projesi, her fork'u ve başka kaynaklardan gelen her derlemeyi potansiyel olarak güvensiz kabul eder.**
+>
+> **Resmî derlemeler doğrulanabilir.** Her sürüm bu deponun açık kodundan otomatik olarak derlenir ve imzalanır; panel ve kurulum aracı yalnızca bu imzayı taşıyan güncellemeleri kabul eder. Başkasının derlemesinin neyden yapıldığını yalnızca yazarı bilir.
+>
+> **Fork'lar güncellemelerimizi almaz.** Bir fork, sürümlerini mikan anahtarıyla imzalayamaz; bu yüzden hata ve güvenlik açığı düzeltmeleri, yazarı onları taşımadıkça ona ulaşmaz.
+>
+> **Fork'ları desteklemiyoruz.** Onları incelemiyoruz ve içlerindeki hatalardan, güvenlik açıklarından veya veri kaybından sorumlu değiliz. Başkalarının derlemeleriyle ilgili sorular sohbette ve issue'larda ele alınmaz.
+>
+> **Ad lisansın parçası değildir.** GPL v3 kodu kapsar, mikan adını ve logosunu değil (GPL v3 bölüm 7, bkz. [NOTICE.md](NOTICE.md) ve [TRADEMARK.md](TRADEMARK.md)). Bir fork başka bir ad kullanmalı ve kendini mikan olarak tanıtmamalıdır.
+
 ## Lisans
 
-mikan, [GNU GPL v3](LICENSE) altında özgür yazılımdır. İçine [mihomo](https://github.com/MetaCubeX/mihomo) (GPL-3.0) gömülüdür. Yazı tipleri: Unbounded, Onest, JetBrains Mono (SIL OFL 1.1).
+mikan, [GNU GPL v3](LICENSE) ve [NOTICE.md](NOTICE.md) dosyasındaki ek koşullar altında özgür yazılımdır: atıf korunur, değiştirilmiş bir sürüm orijinal gibi tanıtılmaz, ad ve logo üzerinde hak verilmez. Copyright (C) 2026 Miroshka and Mikan. İçine [mihomo](https://github.com/MetaCubeX/mihomo) (GPL-3.0) gömülüdür ve [3x-ui](https://github.com/MHSanaei/3x-ui) (GPL-3.0) kodunun bazı bölümleri uyarlanmıştır. Yazı tipleri: Unbounded, Onest, JetBrains Mono (SIL OFL 1.1).
 
 <div align="center">
 <sub>🍊 ile yapıldı</sub>

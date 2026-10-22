@@ -18,7 +18,7 @@ func kinkanProbeTransport(cfg *nodeprobe.Config, t proto.Template) {
 		return
 	}
 	enabled, _ := t["tls"].(bool)
-	if !enabled && (cfg.Protocol == "vless" || cfg.Protocol == "vmess" || cfg.Protocol == "trojan") {
+	if !enabled && (cfg.Protocol == "vless" || cfg.Protocol == "trojan") {
 		cfg.PlainTCP = true
 	}
 }

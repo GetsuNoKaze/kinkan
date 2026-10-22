@@ -19,6 +19,15 @@ import (
 	"github.com/metacubex/mihomo/transport/anytls/util"
 )
 
+// MaxServerStreams caps the streams one client session may have open on a
+// server. Every stream costs a goroutine, which first waits for the stream's
+// destination, so without a cap one authenticated client could open streams
+// until the process runs out of memory. A SYN beyond it is answered with a
+// FIN. Clients open one stream per proxied connection, and reference clients
+// keep one stream per session, so 1024 is far above real use. A variable only
+// so that tests can lower it.
+var MaxServerStreams = 1024
+
 type Session struct {
 	conn     net.Conn
 	connLock sync.Mutex
@@ -31,6 +40,10 @@ type Session struct {
 	die     chan struct{}
 	dieHook func()
 
+	// data frames queued on the streams and not read yet (see recv.go)
+	recvQueued atomic.Int64
+	recvSpace  chan struct{}
+
 	synDone     func()
 	synDoneLock sync.Mutex
 
@@ -39,7 +52,9 @@ type Session struct {
 	idleSince time.Time
 	padding   *atomic.Pointer[padding.PaddingFactory]
 
-	peerVersion byte
+	// peerVersion is written by recvLoop when the peer's settings arrive and
+	// read by OpenStream and the handshake reports on other goroutines.
+	peerVersion atomic.Uint32
 
 	// client
 	isClient       bool
@@ -62,6 +77,7 @@ func NewClientSession(conn net.Conn, _padding *atomic.Pointer[padding.PaddingFac
 		clientMetadata: clientMetadata,
 	}
 	s.die = make(chan struct{})
+	s.recvSpace = make(chan struct{}, 1)
 	s.streams = make(map[uint32]*Stream)
 	return s
 }
@@ -73,16 +89,24 @@ func NewServerSession(conn net.Conn, onNewStream func(stream *Stream), _padding 
 		padding:     _padding,
 	}
 	s.die = make(chan struct{})
+	s.recvSpace = make(chan struct{}, 1)
 	s.streams = make(map[uint32]*Stream)
 	return s
 }
 
 func (s *Session) Run() {
 	if !s.isClient {
+		// a server session's goroutine waits here for its next frame for as
+		// long as the session lives: keep the frames under it small (see
+		// recvLoop)
 		s.recvLoop()
 		return
 	}
+	s.runClient()
+}
 
+//go:noinline
+func (s *Session) runClient() {
 	settings := util.StringMap{
 		"v":           "2",
 		"client":      s.clientMetadata,
@@ -131,16 +155,19 @@ func (s *Session) Close() error {
 	}
 }
 
-// OpenStream is used to create a new stream for CLIENT
-func (s *Session) OpenStream() (*Stream, error) {
+// OpenStream is used to create a new stream for CLIENT. dieHook, if not nil,
+// runs once when the stream dies; it is installed before the stream becomes
+// visible to the session, which may close it from recvLoop at any time.
+func (s *Session) OpenStream(dieHook func()) (*Stream, error) {
 	if s.IsClosed() {
 		return nil, io.ErrClosedPipe
 	}
 
 	sid := s.streamId.Add(1)
 	stream := newStream(sid, s)
+	stream.dieHook = dieHook
 
-	if sid >= 2 && s.peerVersion >= 2 {
+	if sid >= 2 && s.peerVersion.Load() >= 2 {
 		s.synDoneLock.Lock()
 		if s.synDone != nil {
 			s.synDone()
@@ -155,7 +182,9 @@ func (s *Session) OpenStream() (*Stream, error) {
 		return nil, err
 	}
 
+	s.connLock.Lock()
 	s.buffering = false // proxy Write it's SocksAddr to flush the buffer
+	s.connLock.Unlock()
 
 	s.streamLock.Lock()
 	defer s.streamLock.Unlock()
@@ -184,179 +213,215 @@ func (s *Session) recvLoop() error {
 			return io.ErrClosedPipe
 		}
 		// read header first
-		if _, err := io.ReadFull(s.conn, hdr[:]); err == nil {
-			sid := hdr.StreamID()
-			switch hdr.Cmd() {
-			case cmdPSH:
-				if hdr.Length() > 0 {
-					buffer := pool.Get(int(hdr.Length()))
-					if _, err := io.ReadFull(s.conn, buffer); err == nil {
-						s.streamLock.RLock()
-						stream, ok := s.streams[sid]
-						s.streamLock.RUnlock()
-						if ok {
-							stream.pipeW.Write(buffer)
-						}
-						pool.Put(buffer)
-					} else {
-						pool.Put(buffer)
-						return err
-					}
-				}
-			case cmdSYN: // should be server only
-				if !s.isClient && !receivedSettingsFromClient {
-					f := newFrame(cmdAlert, 0)
-					f.data = []byte("client did not send its settings")
-					s.writeControlFrame(f)
-					return nil
-				}
-				s.streamLock.Lock()
-				if _, ok := s.streams[sid]; !ok {
-					stream := newStream(sid, s)
-					s.streams[sid] = stream
-					go func() {
-						if s.onNewStream != nil {
-							s.onNewStream(stream)
-						} else {
-							stream.Close()
-						}
-					}()
-				}
-				s.streamLock.Unlock()
-			case cmdSYNACK: // should be client only
-				s.synDoneLock.Lock()
-				if s.synDone != nil {
-					s.synDone()
-					s.synDone = nil
-				}
-				s.synDoneLock.Unlock()
-				if hdr.Length() > 0 {
-					buffer := pool.Get(int(hdr.Length()))
-					if _, err := io.ReadFull(s.conn, buffer); err != nil {
-						pool.Put(buffer)
-						return err
-					}
-					// report error
-					s.streamLock.RLock()
-					stream, ok := s.streams[sid]
-					s.streamLock.RUnlock()
-					if ok {
-						stream.closeWithError(fmt.Errorf("remote: %s", string(buffer)))
-					}
-					pool.Put(buffer)
-				}
-			case cmdFIN:
-				s.streamLock.Lock()
-				stream, ok := s.streams[sid]
-				delete(s.streams, sid)
-				s.streamLock.Unlock()
-				if ok {
-					stream.closeLocally()
-				}
-			case cmdWaste:
-				if hdr.Length() > 0 {
-					buffer := pool.Get(int(hdr.Length()))
-					if _, err := io.ReadFull(s.conn, buffer); err != nil {
-						pool.Put(buffer)
-						return err
-					}
-					pool.Put(buffer)
-				}
-			case cmdSettings:
-				if hdr.Length() > 0 {
-					buffer := pool.Get(int(hdr.Length()))
-					if _, err := io.ReadFull(s.conn, buffer); err != nil {
-						pool.Put(buffer)
-						return err
-					}
-					if !s.isClient {
-						receivedSettingsFromClient = true
-						m := util.StringMapFromBytes(buffer)
-						paddingF := s.padding.Load()
-						if m["padding-md5"] != paddingF.Md5 {
-							f := newFrame(cmdUpdatePaddingScheme, 0)
-							f.data = paddingF.RawScheme
-							_, err = s.writeControlFrame(f)
-							if err != nil {
-								pool.Put(buffer)
-								return err
-							}
-						}
-						// check client's version
-						if v, err := strconv.Atoi(m["v"]); err == nil && v >= 2 {
-							s.peerVersion = byte(v)
-							// send cmdServerSettings
-							f := newFrame(cmdServerSettings, 0)
-							f.data = util.StringMap{
-								"v": "2",
-							}.ToBytes()
-							_, err = s.writeControlFrame(f)
-							if err != nil {
-								pool.Put(buffer)
-								return err
-							}
-						}
-					}
-					pool.Put(buffer)
-				}
-			case cmdAlert:
-				if hdr.Length() > 0 {
-					buffer := pool.Get(int(hdr.Length()))
-					if _, err := io.ReadFull(s.conn, buffer); err != nil {
-						pool.Put(buffer)
-						return err
-					}
-					if s.isClient {
-						log.Errorln("[Alert from server] %s", string(buffer))
-					}
-					pool.Put(buffer)
-					return nil
-				}
-			case cmdUpdatePaddingScheme:
-				if hdr.Length() > 0 {
-					// `rawScheme` Do not use buffer to prevent subsequent misuse
-					rawScheme := make([]byte, int(hdr.Length()))
-					if _, err := io.ReadFull(s.conn, rawScheme); err != nil {
-						return err
-					}
-					if s.isClient {
-						if padding.UpdatePaddingScheme(rawScheme, s.padding) {
-							log.Debugln("[Update padding succeed] %x\n", md5.Sum(rawScheme))
-						} else {
-							log.Warnln("[Update padding failed] %x\n", md5.Sum(rawScheme))
-						}
-					}
-				}
-			case cmdHeartRequest:
-				if _, err := s.writeControlFrame(newFrame(cmdHeartResponse, sid)); err != nil {
-					return err
-				}
-			case cmdHeartResponse:
-				// Active keepalive checking is not implemented yet
-				break
-			case cmdServerSettings:
-				if hdr.Length() > 0 {
-					buffer := pool.Get(int(hdr.Length()))
-					if _, err := io.ReadFull(s.conn, buffer); err != nil {
-						pool.Put(buffer)
-						return err
-					}
-					if s.isClient {
-						// check server's version
-						m := util.StringMapFromBytes(buffer)
-						if v, err := strconv.Atoi(m["v"]); err == nil {
-							s.peerVersion = byte(v)
-						}
-					}
-					pool.Put(buffer)
-				}
-			default:
-				// I don't know what command it is (can't have data)
-			}
-		} else {
+		if _, err := io.ReadFull(s.conn, hdr[:]); err != nil {
+			return err
+		}
+		if done, err := s.handleFrame(hdr, &receivedSettingsFromClient); done {
 			return err
 		}
 	}
+}
+
+// handleFrame handles a frame whose header recvLoop read, and reports whether
+// the session ends, with the error to end it with.
+//
+// It is a function of its own so that its frame (over 1 KiB) is not on the
+// stack while recvLoop waits for the next frame, which is where a session
+// spends its life: the runtime shrinks a goroutine stack at GC only when
+// less than a quarter of it is in use, and a large frame there keeps an idle
+// session's goroutine at 16 KiB instead of 8 KiB.
+//
+//go:noinline
+func (s *Session) handleFrame(hdr rawHeader, receivedSettingsFromClient *bool) (bool, error) {
+	sid := hdr.StreamID()
+	switch hdr.Cmd() {
+	case cmdPSH:
+		if hdr.Length() > 0 {
+			buffer := buf.NewSize(int(hdr.Length()))
+			if _, err := buffer.ReadFullFrom(s.conn, int(hdr.Length())); err != nil {
+				buffer.Release()
+				return true, err
+			}
+			s.streamLock.RLock()
+			stream, ok := s.streams[sid]
+			s.streamLock.RUnlock()
+			if !ok {
+				buffer.Release()
+				break
+			}
+			stream.pushRecv(buffer)
+			if err := s.waitRecvBudget(); err != nil {
+				return true, err
+			}
+		}
+	case cmdSYN: // should be server only
+		if !s.isClient && !*receivedSettingsFromClient {
+			f := newFrame(cmdAlert, 0)
+			f.data = []byte("client did not send its settings")
+			s.writeControlFrame(f)
+			return true, nil
+		}
+		s.streamLock.Lock()
+		_, exists := s.streams[sid]
+		refuse := !exists && len(s.streams) >= MaxServerStreams
+		if !exists && !refuse {
+			stream := newStream(sid, s)
+			s.streams[sid] = stream
+			go func() {
+				if s.onNewStream != nil {
+					s.onNewStream(stream)
+				} else {
+					stream.Close()
+				}
+			}()
+		}
+		s.streamLock.Unlock()
+		if refuse {
+			// too many open streams: refuse this one without
+			// allocating anything for it, as a failed handshake (v2
+			// clients wait for a SYNACK) followed by a FIN
+			if s.peerVersion.Load() >= 2 {
+				f := newFrame(cmdSYNACK, sid)
+				f.data = []byte("too many streams")
+				if _, err := s.writeControlFrame(f); err != nil {
+					return true, err
+				}
+			}
+			if _, err := s.writeControlFrame(newFrame(cmdFIN, sid)); err != nil {
+				return true, err
+			}
+		}
+	case cmdSYNACK: // should be client only
+		s.synDoneLock.Lock()
+		if s.synDone != nil {
+			s.synDone()
+			s.synDone = nil
+		}
+		s.synDoneLock.Unlock()
+		if hdr.Length() > 0 {
+			buffer := pool.Get(int(hdr.Length()))
+			if _, err := io.ReadFull(s.conn, buffer); err != nil {
+				pool.Put(buffer)
+				return true, err
+			}
+			// report error
+			s.streamLock.RLock()
+			stream, ok := s.streams[sid]
+			s.streamLock.RUnlock()
+			if ok {
+				stream.closeWithError(fmt.Errorf("remote: %s", string(buffer)))
+			}
+			pool.Put(buffer)
+		}
+	case cmdFIN:
+		s.streamLock.Lock()
+		stream, ok := s.streams[sid]
+		delete(s.streams, sid)
+		s.streamLock.Unlock()
+		if ok {
+			stream.closeLocally()
+		}
+	case cmdWaste:
+		if hdr.Length() > 0 {
+			buffer := pool.Get(int(hdr.Length()))
+			if _, err := io.ReadFull(s.conn, buffer); err != nil {
+				pool.Put(buffer)
+				return true, err
+			}
+			pool.Put(buffer)
+		}
+	case cmdSettings:
+		if hdr.Length() > 0 {
+			buffer := pool.Get(int(hdr.Length()))
+			if _, err := io.ReadFull(s.conn, buffer); err != nil {
+				pool.Put(buffer)
+				return true, err
+			}
+			if !s.isClient {
+				*receivedSettingsFromClient = true
+				m := util.StringMapFromBytes(buffer)
+				paddingF := s.padding.Load()
+				if m["padding-md5"] != paddingF.Md5 {
+					f := newFrame(cmdUpdatePaddingScheme, 0)
+					f.data = paddingF.RawScheme
+					_, err := s.writeControlFrame(f)
+					if err != nil {
+						pool.Put(buffer)
+						return true, err
+					}
+				}
+				// check client's version
+				if v, ok := parsePeerVersion(m["v"]); ok && v >= 2 {
+					s.peerVersion.Store(v)
+					// send cmdServerSettings
+					f := newFrame(cmdServerSettings, 0)
+					f.data = util.StringMap{
+						"v": "2",
+					}.ToBytes()
+					_, err := s.writeControlFrame(f)
+					if err != nil {
+						pool.Put(buffer)
+						return true, err
+					}
+				}
+			}
+			pool.Put(buffer)
+		}
+	case cmdAlert:
+		if hdr.Length() > 0 {
+			buffer := pool.Get(int(hdr.Length()))
+			if _, err := io.ReadFull(s.conn, buffer); err != nil {
+				pool.Put(buffer)
+				return true, err
+			}
+			if s.isClient {
+				log.Errorln("[Alert from server] %s", string(buffer))
+			}
+			pool.Put(buffer)
+			return true, nil
+		}
+	case cmdUpdatePaddingScheme:
+		if hdr.Length() > 0 {
+			// `rawScheme` Do not use buffer to prevent subsequent misuse
+			rawScheme := make([]byte, int(hdr.Length()))
+			if _, err := io.ReadFull(s.conn, rawScheme); err != nil {
+				return true, err
+			}
+			if s.isClient {
+				if padding.UpdatePaddingScheme(rawScheme, s.padding) {
+					log.Debugln("[Update padding succeed] %x\n", md5.Sum(rawScheme))
+				} else {
+					log.Warnln("[Update padding failed] %x\n", md5.Sum(rawScheme))
+				}
+			}
+		}
+	case cmdHeartRequest:
+		if _, err := s.writeControlFrame(newFrame(cmdHeartResponse, sid)); err != nil {
+			return true, err
+		}
+	case cmdHeartResponse:
+		// Active keepalive checking is not implemented yet
+		break
+	case cmdServerSettings:
+		if hdr.Length() > 0 {
+			buffer := pool.Get(int(hdr.Length()))
+			if _, err := io.ReadFull(s.conn, buffer); err != nil {
+				pool.Put(buffer)
+				return true, err
+			}
+			if s.isClient {
+				// check server's version
+				m := util.StringMapFromBytes(buffer)
+				if v, ok := parsePeerVersion(m["v"]); ok {
+					s.peerVersion.Store(v)
+				}
+			}
+			pool.Put(buffer)
+		}
+	default:
+		// I don't know what command it is (can't have data)
+	}
+	return false, nil
 }
 
 func (s *Session) streamClosed(sid uint32) error {
@@ -417,6 +482,30 @@ func (s *Session) writeDataFrame(sid uint32, data []byte) (int, error) {
 		return 0, err
 	}
 	return dataLen, nil
+}
+
+// writeDataBuffer is writeDataFrame for a buffer that the caller hands over:
+// with room for the header in front of the data (Stream.FrontHeadroom), the
+// frame is built in place instead of being copied into a new buffer. The
+// buffer is released in every case.
+func (s *Session) writeDataBuffer(sid uint32, buffer *buf.Buffer) error {
+	dataLen := buffer.Len()
+	if dataLen == 0 {
+		buffer.Release()
+		return nil
+	}
+	if dataLen > maxFrameDataLen || buffer.Start() < headerOverHeadSize {
+		_, err := s.writeDataFrame(sid, buffer.Bytes())
+		buffer.Release()
+		return err
+	}
+	header := buffer.ExtendHeader(headerOverHeadSize)
+	header[0] = cmdPSH
+	binary.BigEndian.PutUint32(header[1:5], sid)
+	binary.BigEndian.PutUint16(header[5:7], uint16(dataLen))
+	_, err := s.writeConn(buffer.Bytes())
+	buffer.Release()
+	return err
 }
 
 func (s *Session) writeControlFrame(frame frame) (int, error) {
@@ -516,4 +605,15 @@ func (s *Session) writeConn(b []byte) (n int, err error) {
 	}
 
 	return s.conn.Write(b)
+}
+
+// parsePeerVersion reads the "v" field of the peer's settings. It comes off the
+// wire, so a negative or oversized value is rejected rather than wrapped into a
+// uint32 (a "-1" would otherwise read as a huge version and turn on v2 features).
+func parsePeerVersion(s string) (uint32, bool) {
+	v, err := strconv.ParseUint(s, 10, 32)
+	if err != nil {
+		return 0, false
+	}
+	return uint32(v), true
 }

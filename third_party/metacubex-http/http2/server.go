@@ -650,6 +650,21 @@ type serverConn struct {
 	shutdownOnce sync.Once
 }
 
+// writeSchedIgnoresRFC7540 reports whether the connection's write scheduler
+// disregards RFC 7540 priorities, as every scheduler but the RFC 7540 one does.
+func (sc *serverConn) writeSchedIgnoresRFC7540() bool {
+	switch sc.writeSched.(type) {
+	case *priorityWriteSchedulerRFC9218:
+		return true
+	case *randomWriteScheduler:
+		return true
+	case *roundRobinWriteScheduler:
+		return true
+	default:
+		return false
+	}
+}
+
 func (sc *serverConn) maxHeaderListSize() uint32 {
 	n := sc.hs.MaxHeaderBytes
 	if n <= 0 {
@@ -937,6 +952,12 @@ func (sc *serverConn) serve(conf http2Config) {
 	}
 	if !disableExtendedConnectProtocol {
 		settings = append(settings, Setting{SettingEnableConnectProtocol, 1})
+	}
+	// As golang.org/x/net/http2 (and so Caddy) does: announce RFC 9218's
+	// SETTINGS_NO_RFC7540_PRIORITIES last unless the write scheduler acts on
+	// RFC 7540 priorities. Thanks to Kinkan (GetsuNoKaze/kinkan) for the patch.
+	if sc.writeSchedIgnoresRFC7540() {
+		settings = append(settings, Setting{SettingNoRFC7540Priorities, 1})
 	}
 	sc.writeFrame(FrameWriteRequest{
 		write: settings,

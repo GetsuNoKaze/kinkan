@@ -10,11 +10,15 @@ import (
 	"hash"
 	"io"
 	"net"
+	"net/netip"
 	"os"
 	"strings"
 	"time"
 
 	N "github.com/metacubex/mihomo/common/net"
+	"github.com/metacubex/mihomo/common/pool"
+	"github.com/metacubex/mihomo/component/publicaddr"
+	"github.com/metacubex/mihomo/component/resolver"
 	"github.com/metacubex/mihomo/log"
 )
 
@@ -46,6 +50,10 @@ type ServerConfig struct {
 	handshakeForServerName map[string]HandshakeConfig // for protocol version 2/3
 	strictMode             bool                       // for protocol version 3
 	wildcardSNI            WildcardSNI                // for protocol version 3
+
+	// lookupIP resolves the SNI of an unauthenticated client under WildcardSNIAll;
+	// nil means resolver.LookupIP. Tests replace it.
+	lookupIP func(ctx context.Context, host string) ([]netip.Addr, error)
 }
 
 func NewServerConfig(
@@ -127,7 +135,9 @@ func (s *ServerConfig) serverV1(ctx context.Context, conn net.Conn) (net.Conn, s
 }
 
 func (s *ServerConfig) serverV2(ctx context.Context, conn net.Conn) (net.Conn, string, error) {
-	clientHello, err := readFrame(conn)
+	helloBuffer := pool.Get(maxTLSFrame)
+	defer pool.Put(helloBuffer)
+	clientHello, err := readFrameBuffer(conn, helloBuffer)
 	if err != nil {
 		return nil, "", fmt.Errorf("shadow-tls: read client handshake: %w", err)
 	}
@@ -156,6 +166,7 @@ func (s *ServerConfig) serverV2(ctx context.Context, conn net.Conn) (net.Conn, s
 		return N.NewCachedConn(newConn(conn), request), "", nil
 	}
 	if errors.Is(err, os.ErrPermission) {
+		N.HandshakeComplete(conn)
 		log.Warnln("[ShadowTLS] fallback connection")
 		hashConn.Fallback()
 		clientCopyDone := make(chan error, 1)
@@ -184,7 +195,9 @@ func (s *ServerConfig) serverV2(ctx context.Context, conn net.Conn) (net.Conn, s
 }
 
 func (s *ServerConfig) serverV3(ctx context.Context, conn net.Conn) (net.Conn, string, error) {
-	clientHello, err := readFrame(conn)
+	helloBuffer := pool.Get(maxTLSFrame)
+	defer pool.Put(helloBuffer)
+	clientHello, err := readFrameBuffer(conn, helloBuffer)
 	if err != nil {
 		return nil, "", fmt.Errorf("shadow-tls: read client handshake: %w", err)
 	}
@@ -193,12 +206,12 @@ func (s *ServerConfig) serverV3(ctx context.Context, conn net.Conn) (net.Conn, s
 		return nil, "", fmt.Errorf("shadow-tls: extract server name: %w", err)
 	}
 	user, authErr := verifyClientHello(clientHello, s.users)
-	handshakeConfig := s.selectV3Handshake(serverName, authErr == nil)
 	if authErr != nil {
 		log.Warnln("[ShadowTLS] client hello verify failed: %v", authErr)
-		return nil, "", s.relayFallback(ctx, conn, clientHello, handshakeConfig)
+		return nil, "", s.relayFallback(ctx, conn, clientHello, s.fallbackV3Handshake(ctx, serverName))
 	}
 	log.Debugln("[ShadowTLS] client hello verify success")
+	handshakeConfig := s.selectV3Handshake(serverName, true)
 
 	handshakeConn, err := handshakeConfig.dial(ctx)
 	if err != nil {
@@ -208,7 +221,9 @@ func (s *ServerConfig) serverV3(ctx context.Context, conn net.Conn) (net.Conn, s
 	if _, err = handshakeConn.Write(clientHello); err != nil {
 		return nil, "", fmt.Errorf("shadow-tls: write client handshake: %w", err)
 	}
-	serverHello, err := readFrame(handshakeConn)
+	serverBuffer := pool.Get(maxTLSFrame)
+	defer pool.Put(serverBuffer)
+	serverHello, err := readFrameBuffer(handshakeConn, serverBuffer)
 	if err != nil {
 		return nil, "", fmt.Errorf("shadow-tls: read server handshake: %w", err)
 	}
@@ -217,6 +232,7 @@ func (s *ServerConfig) serverV3(ctx context.Context, conn net.Conn) (net.Conn, s
 	}
 	serverRandom := extractServerRandom(serverHello)
 	if serverRandom == nil {
+		N.HandshakeComplete(conn)
 		log.Warnln("[ShadowTLS] server random extract failed, will copy bidirectional")
 		if err = N.RelayContext(ctx, conn, handshakeConn); err != nil {
 			return nil, "", err
@@ -224,6 +240,7 @@ func (s *ServerConfig) serverV3(ctx context.Context, conn net.Conn) (net.Conn, s
 		return nil, "", ErrFallbackCompleted
 	}
 	if s.strictMode && !isServerHelloSupportTLS13(serverHello) {
+		N.HandshakeComplete(conn)
 		log.Warnln("[ShadowTLS] TLS 1.3 is not supported, will copy bidirectional")
 		if err = N.RelayContext(ctx, conn, handshakeConn); err != nil {
 			return nil, "", err
@@ -250,6 +267,7 @@ func (s *ServerConfig) serverV3(ctx context.Context, conn net.Conn) (net.Conn, s
 }
 
 func (s *ServerConfig) relayFallback(ctx context.Context, conn net.Conn, prefix []byte, handshakeConfig HandshakeConfig) error {
+	N.HandshakeComplete(conn)
 	handshakeConn, err := handshakeConfig.dial(ctx)
 	if err != nil {
 		return fmt.Errorf("shadow-tls: dial fallback server: %w", err)
@@ -270,15 +288,68 @@ func (s *ServerConfig) selectHandshake(clientHello []byte) HandshakeConfig {
 	return s.handshake
 }
 
+// selectV3Handshake picks the handshake server without any network access. Under
+// WildcardSNIAll an unauthenticated client gets the default here; its SNI is only
+// used after the checks in fallbackV3Handshake.
 func (s *ServerConfig) selectV3Handshake(serverName string, authenticated bool) HandshakeConfig {
 	if custom, found := s.handshakeForServerName[serverName]; found {
 		return custom
 	}
 	handshakeConfig := s.handshake
-	if s.wildcardSNI == WildcardSNIAll || (authenticated && s.wildcardSNI == WildcardSNIAuthed) {
+	if authenticated && (s.wildcardSNI == WildcardSNIAuthed || s.wildcardSNI == WildcardSNIAll) {
 		handshakeConfig.Server = net.JoinHostPort(serverName, "443")
 	}
 	return handshakeConfig
+}
+
+// fallbackV3Handshake picks the server that an unauthenticated client is relayed
+// to. Under WildcardSNIAll the client chooses it through the SNI, so the name must
+// be a public host name whose addresses are all public, and the vetted address is
+// dialed instead of the name, which a second lookup could rebind to an internal
+// address. Anything else falls back to the default handshake server.
+func (s *ServerConfig) fallbackV3Handshake(ctx context.Context, serverName string) HandshakeConfig {
+	if custom, found := s.handshakeForServerName[serverName]; found {
+		return custom
+	}
+	if s.wildcardSNI != WildcardSNIAll {
+		return s.handshake
+	}
+	addr, err := s.resolvePublicServerName(ctx, serverName)
+	if err != nil {
+		log.Debugln("[ShadowTLS] wildcard SNI %q refused for fallback, using the default handshake server: %v", serverName, err)
+		return s.handshake
+	}
+	handshakeConfig := s.handshake
+	handshakeConfig.Server = netip.AddrPortFrom(addr, 443).String()
+	return handshakeConfig
+}
+
+var errNonPublicServerName = errors.New("not a public host name")
+
+func (s *ServerConfig) resolvePublicServerName(ctx context.Context, serverName string) (netip.Addr, error) {
+	if !publicaddr.IsPublicHostname(serverName) {
+		return netip.Addr{}, errNonPublicServerName
+	}
+	lookupIP := s.lookupIP
+	if lookupIP == nil {
+		lookupIP = resolver.LookupIP
+	}
+	addrs, err := lookupIP(ctx, serverName)
+	if err != nil {
+		return netip.Addr{}, err
+	}
+	if len(addrs) == 0 {
+		return netip.Addr{}, fmt.Errorf("%w: %s", resolver.ErrIPNotFound, serverName)
+	}
+	for _, addr := range addrs {
+		if !publicaddr.IsPublicIP(addr) {
+			return netip.Addr{}, fmt.Errorf("resolves to non-public address %s", addr)
+		}
+	}
+	if ipv4s, _ := resolver.SortationAddr(addrs); len(ipv4s) > 0 {
+		return ipv4s[0].Unmap(), nil
+	}
+	return addrs[0], nil
 }
 
 type authenticatedConn struct {

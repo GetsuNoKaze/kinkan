@@ -8,9 +8,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io/fs"
-	"math/rand/v2"
-	"os"
-	"path/filepath"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -21,13 +18,10 @@ import (
 	"github.com/pressly/goose/v3"
 	"github.com/pressly/goose/v3/lock"
 
+	"mikan/internal/pace"
+	"mikan/internal/panel/config"
 	"mikan/internal/panel/store/db"
 )
-
-// Legacy migrations are exclusively for normalizing a COPY during SQLite import.
-//
-//go:embed migrations/*.sql
-var migrations embed.FS
 
 //go:embed postgres/*.sql
 var postgresMigrations embed.FS
@@ -53,9 +47,13 @@ type Store struct {
 // since the store opened.
 func (s *Store) Conflicts() uint64 { return s.conflicts.Load() }
 
-// DatabaseURL is MIKAN_DATABASE_URL, the panel's PostgreSQL.
+// DatabaseURL is MIKAN_DATABASE_URL, the panel's PostgreSQL: the variable, or the file
+// MIKAN_DATABASE_URL_FILE names (the installer's secret, config.Secret).
 func DatabaseURL() (string, error) {
-	dsn := os.Getenv("MIKAN_DATABASE_URL")
+	dsn, err := config.Secret("MIKAN_DATABASE_URL")
+	if err != nil {
+		return "", err
+	}
 	if dsn == "" {
 		return "", errNoDatabaseURL
 	}
@@ -84,8 +82,8 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 	return OpenPostgres(ctx, dataDir, dsn)
 }
 
-// OpenPostgres never falls back to SQLite. A legacy installation must first complete
-// database migrate while all its writers are stopped; an empty PG is not a new install.
+// OpenPostgres refuses data still in SQLite (checkLegacy): such a server goes through
+// 0.5.0.4 first, which moves them.
 func OpenPostgres(ctx context.Context, dataDir, dsn string) (*Store, error) {
 	if err := prepareSchema(ctx, dataDir, dsn); err != nil {
 		return nil, err
@@ -94,7 +92,7 @@ func OpenPostgres(ctx context.Context, dataDir, dsn string) (*Store, error) {
 }
 
 // OpenMigrated brings dsn's schema to this binary's version and opens it, without the
-// legacy SQLite checks of OpenPostgres: for test fixtures (storetest), each in a schema
+// SQLite check of OpenPostgres: for test fixtures (storetest), each in a schema
 // of its own. cleanup runs after the store closes.
 func OpenMigrated(ctx context.Context, dsn string, cleanup func() error) (*Store, error) {
 	conn, err := connectPostgres(ctx, dsn, maintenanceSession)
@@ -115,27 +113,13 @@ func OpenMigrated(ctx context.Context, dsn string, cleanup func() error) (*Store
 // prepareSchema checks and migrates on maintenance connections: a migration may run
 // longer than a runtime statement may.
 func prepareSchema(ctx context.Context, dataDir, dsn string) error {
-	conn, err := openAtImportBaseline(ctx, dsn)
+	conn, err := openMaintenance(ctx, dsn)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
-	_, legacyErr := os.Stat(filepath.Join(dataDir, "mikan.db"))
-	_, markerErr := os.Stat(filepath.Join(dataDir, MigrationMarker))
-	if legacyErr == nil || markerErr == nil {
-		var report string
-		if err := conn.QueryRowContext(ctx, "SELECT report FROM mikan_sqlite_import WHERE id = 1").Scan(&report); err != nil {
-			return errors.New("SQLite data have not been imported: stop the panel and run mikan database migrate")
-		}
-		// A crash after COMMIT but before writing the marker is recovered from PostgreSQL.
-		if err := writeMigrationMarker(dataDir, []byte(report)); err != nil {
-			return err
-		}
-	} else if !errors.Is(legacyErr, fs.ErrNotExist) {
-		return fmt.Errorf("legacy database: %w", legacyErr)
-	}
-	if markerErr != nil && !errors.Is(markerErr, fs.ErrNotExist) {
-		return markerErr
+	if err := checkLegacy(ctx, conn, dataDir); err != nil {
+		return err
 	}
 	if err := migrateUp(ctx, conn, postgresFS); err != nil {
 		return err
@@ -210,20 +194,16 @@ const startupWait = 60 * time.Second
 
 func waitReady(ctx context.Context, conn *sql.DB) error {
 	deadline := time.Now().Add(startupWait)
-	delay := 250 * time.Millisecond
-	for {
+	pause := pace.Backoff{Base: 250 * time.Millisecond, Max: 5 * time.Second}
+	for attempt := 0; ; attempt++ {
 		err := conn.PingContext(ctx)
+		delay := pause.Next(attempt)
 		if err == nil || !notReady(err) || time.Now().Add(delay).After(deadline) {
 			return err
 		}
-		timer := time.NewTimer(delay)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
+		if !pace.Sleep(ctx, delay) {
 			return errors.Join(ctx.Err(), err)
-		case <-timer.C:
 		}
-		delay = min(2*delay, 5*time.Second)
 	}
 }
 
@@ -325,6 +305,10 @@ func (s *Store) Close() error {
 // last attempt starts within about three seconds at most.
 const txAttempts = 16
 
+// conflictWindow is the longest a retry waits after a conflict, by the attempt: it doubles
+// from 5 ms to a quarter of a second, and the wait is a random part of it (retry).
+var conflictWindow = pace.Backoff{Base: 5 * time.Millisecond, Max: 250 * time.Millisecond}
+
 // Tx preserves read/check/write invariants (quotas, payments, ports, slot numbers) with
 // serializable transactions. Callbacks only change database state: a serialization
 // conflict retries the whole callback, never just its final statement.
@@ -350,13 +334,8 @@ func (s *Store) retry(ctx context.Context, level sql.IsolationLevel, fn func(q *
 		// Exponential backoff with full jitter: writers that collided together must not
 		// all come back together, or the same conflict repeats until the attempts run out.
 		s.conflicts.Add(1)
-		window := min(5*time.Millisecond<<attempt, 250*time.Millisecond)
-		timer := time.NewTimer(rand.N(window) + time.Millisecond)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
+		if !pace.Sleep(ctx, pace.Jitter(conflictWindow.Next(attempt))+time.Millisecond) {
 			return ctx.Err()
-		case <-timer.C:
 		}
 	}
 }
@@ -376,4 +355,10 @@ func (s *Store) txOnce(ctx context.Context, level sql.IsolationLevel, fn func(q 
 func IsUnique(err error) bool {
 	var pe *pgconn.PgError
 	return errors.As(err, &pe) && pe.Code == "23505"
+}
+
+// IsForeignKey: the row points at one that is not there (any more).
+func IsForeignKey(err error) bool {
+	var pe *pgconn.PgError
+	return errors.As(err, &pe) && pe.Code == "23503"
 }

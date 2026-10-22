@@ -1,101 +1,108 @@
 <h1 align="center">
-  <img src="Meta.png" alt="Meta Kennel" width="200">
-  <br>Meta Kernel<br>
+  <img src="assets/avatars/citrus-lime.png" alt="Citrus" width="160">
+  <br>Citrus
 </h1>
 
-<h3 align="center">Another Mihomo Kernel.</h3>
+<p align="center">The network core for Mikan.</p>
 
 <p align="center">
-  <a href="https://goreportcard.com/report/github.com/MetaCubeX/mihomo">
-    <img src="https://goreportcard.com/badge/github.com/MetaCubeX/mihomo?style=flat-square">
-  </a>
-  <img src="https://img.shields.io/github/go-mod/go-version/MetaCubeX/mihomo/Alpha?style=flat-square">
-  <a href="https://github.com/MetaCubeX/mihomo/releases">
-    <img src="https://img.shields.io/github/release/MetaCubeX/mihomo/all.svg?style=flat-square">
-  </a>
-  <a href="https://github.com/MetaCubeX/mihomo">
-    <img src="https://img.shields.io/badge/release-Meta-00b4f0?style=flat-square">
-  </a>
+  <a href="https://github.com/getmikan/Citrus/actions/workflows/test.yml"><img src="https://github.com/getmikan/Citrus/actions/workflows/test.yml/badge.svg?branch=main" alt="Tests"></a>
+  <a href="https://github.com/getmikan/Citrus/blob/main/go.mod"><img src="https://img.shields.io/github/go-mod/go-version/getmikan/Citrus/main?style=flat-square" alt="Go version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-orange?style=flat-square" alt="GPL-3.0 license"></a>
 </p>
+
+Citrus is a cross-platform proxy core maintained by [Mikan](https://github.com/getmikan).
+It combines local proxy listeners, encrypted DNS, TUN networking, and rule-based routing
+in one YAML configuration.
 
 ## Features
 
-- Local HTTP/HTTPS/SOCKS server with authentication support
-- VMess, VLESS, Shadowsocks, Trojan, Snell, TUIC, Hysteria protocol support
-- Built-in DNS server that aims to minimize DNS pollution attack impact, supports DoH/DoT upstream and fake IP.
-- Rules based off domains, GEOIP, IPCIDR or Process to forward packets to different nodes
-- Remote groups allow users to implement powerful rules. Supports automatic fallback, load balancing or auto select node
-  based off latency
-- Remote providers, allowing users to get node lists remotely instead of hard-coding in config
-- Netfilter TCP redirecting. Deploy Mihomo on your Internet gateway with `iptables`.
-- Comprehensive HTTP RESTful API controller
+- HTTP, HTTPS, SOCKS, mixed, redirect, and TPROXY listeners.
+- VLESS, Shadowsocks, Trojan, Snell, TUIC, Hysteria2, and other outbound protocols.
+- TUN networking with a configurable network stack.
+- DNS over HTTPS, TLS, and QUIC, with fake IP and DNS routing rules.
+- Routing by domain, IP range, geodata, process, and logical rule combinations.
+- Remote proxy and rule providers, health checks, fallback, and load balancing.
+- HTTP and WebSocket controller APIs for compatible clients and dashboards.
 
-## Dashboard
+## Branches and builds
 
-A web dashboard with first-class support for this project has been created; it can be checked out at [metacubexd](https://github.com/MetaCubeX/metacubexd).
+| Branch | Role | Automated build |
+| --- | --- | --- |
+| [`main`](https://github.com/getmikan/Citrus/tree/main) | Primary branch | `Prerelease-main` |
+| [`dev`](https://github.com/getmikan/Citrus/tree/dev) | Integration branch, all PRs | — (tested, not packaged) |
 
-## Configration example
+Build artifacts are available through [GitHub Actions](https://github.com/getmikan/Citrus/actions)
+and published builds through [Releases](https://github.com/getmikan/Citrus/releases).
+Release files use the `citrus-<os>-<architecture>-<version>` naming scheme.
 
-Configuration example is located at [/docs/config.yaml](https://github.com/MetaCubeX/mihomo/blob/Alpha/docs/config.yaml).
+## Configuration
 
-## Docs
+Start with the annotated [configuration reference](docs/config.yaml).
+Citrus reads `config.yaml` from its configuration directory:
 
-Documentation can be found in [mihomo Docs](https://wiki.metacubex.one/).
+- Linux and macOS: `~/.config/citrus/`, or `$XDG_CONFIG_HOME/citrus/` when configured.
+- Windows: `%USERPROFILE%/.config/citrus/`.
+- Linux packages: `/etc/citrus/` when started by `citrus.service`.
 
-## For development
-
-Requirements:
-[Go 1.20 or newer](https://go.dev/dl/)
-
-Build mihomo:
-
-```shell
-git clone https://github.com/MetaCubeX/mihomo.git
-cd mihomo && go mod download
-go build
-```
-
-Set go proxy if a connection to GitHub is not possible:
+Use `-d` to select a directory or `-f` to select a configuration file.
+An existing configuration can be used by passing its directory explicitly.
 
 ```shell
-go env -w GOPROXY=https://goproxy.io,direct
+citrus -d /path/to/config
+citrus -t -f /path/to/config.yaml
+citrus -v
 ```
 
-Build with gvisor tun stack:
+The upstream [configuration documentation](https://wiki.metacubex.one/) describes
+the shared configuration format and controller API.
+Compatible dashboards include [MetaCubeXD](https://github.com/MetaCubeX/metacubexd).
+
+## Build from source
+
+The module needs Go 1.26 or newer. Windows and macOS releases are built with the patched
+[MetaCubeX Go toolchain](https://github.com/MetaCubeX/go), which keeps Windows 7/8 and older
+macOS working (not tested separately). Linux needs kernel 3.2 or newer. There are no separate
+builds on old Go versions (`-go120` and the like).
 
 ```shell
-go build -tags with_gvisor
+git clone https://github.com/getmikan/Citrus.git
+cd Citrus
+go mod download
+go build -tags with_gvisor -trimpath -o citrus .
+./citrus -v
 ```
 
-### IPTABLES configuration
+On Windows, use `-o citrus.exe` and run `./citrus.exe`.
+The Go module path remains `github.com/metacubex/mihomo`. Internal package names and protobuf
+namespaces follow upstream to make cherry-picks and pull request transfers easier.
+The product, executable, and release assets are named Citrus / `citrus`.
 
-Work on Linux OS which supported `iptables`
-
-```yaml
-# Enable the TPROXY listener
-tproxy-port: 9898
-
-iptables:
-  enable: true # default is false
-  inbound-interface: eth0 # detect the inbound interface, default is 'lo'
+```shell
+go test ./...
+go test -tags with_gvisor ./...
 ```
 
-## Debugging
+The separate `test/` module contains integration tests that require their external
+services and Docker fixtures. CI disables optional external interoperability tests
+with `SKIP_INTEROP_TEST=1`.
 
-Check [wiki](https://wiki.metacubex.one/api/#debug) to get an instruction on using debug
-API.
+## Updates
 
-## Credits
+Core updates download Citrus assets from this repository.
+The `main` and `dev` channels follow their respective prerelease builds; `release`
+uses the latest tagged release. Automatic channel selection follows the running
+binary's version. The legacy `alpha` channel name selects `main` for client compatibility.
 
-- [Dreamacro/clash](https://github.com/Dreamacro/clash)
-- [SagerNet/sing-box](https://github.com/SagerNet/sing-box)
-- [riobard/go-shadowsocks2](https://github.com/riobard/go-shadowsocks2)
-- [v2ray/v2ray-core](https://github.com/v2ray/v2ray-core)
-- [WireGuard/wireguard-go](https://github.com/WireGuard/wireguard-go)
-- [yaling888/clash-plus-pro](https://github.com/yaling888/clash)
+## Credits and license
 
-## License
+Citrus is an independent fork of the [MetaCubeX](https://github.com/MetaCubeX) network core.
+The original Git history and contributor authorship are preserved.
 
-This software is released under the GPL-3.0 license.
+The project builds on work from [Dreamacro](https://github.com/Dreamacro/clash),
+[SagerNet](https://github.com/SagerNet/sing-box),
+[v2fly](https://github.com/v2fly/v2ray-core),
+[WireGuard](https://github.com/WireGuard/wireguard-go), and the other dependencies
+listed in [go.mod](go.mod).
 
-**In addition, any downstream projects not affiliated with `MetaCubeX` shall not contain the word `mihomo` in their names.**
+Citrus is distributed under the [GNU GPL-3.0 license](LICENSE).

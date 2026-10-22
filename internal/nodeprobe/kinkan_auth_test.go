@@ -21,7 +21,7 @@ func TestWrongKeyAgainstOrdinaryHTTPS(t *testing.T) {
 	defer ref.Close()
 	roots := x509.NewCertPool()
 	roots.AddCert(s.Certificate())
-	for _, protocol := range []string{"vless", "vmess", "trojan", "anytls", "trusttunnel"} {
+	for _, protocol := range []string{"vless", "trojan", "anytls", "trusttunnel"} {
 		t.Run(protocol, func(t *testing.T) {
 			cfg := Config{Protocol: protocol, Target: s.URL, Reference: ref.URL, Timeout: time.Second, TLS: &tls.Config{RootCAs: roots}}
 			u, _ := origin(s.URL)

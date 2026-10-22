@@ -33,7 +33,9 @@ import (
 	"github.com/metacubex/age"
 
 	"mikan/internal/panel/settings"
-	"mikan/internal/panel/tgbot"
+	"mikan/internal/panel/tgate"
+	"mikan/internal/textutil"
+	"mikan/internal/tgapi"
 )
 
 const (
@@ -76,9 +78,10 @@ var (
 	ErrUnavailable = errors.New("backup_unavailable") // the panel has no data directory
 )
 
-// Bot is the part of the Telegram bot the backups use (tgbot.Bot).
+// Bot is the part of the Telegram gateway the backups use (tgate.Gateway): no screens of
+// the bot, only its token, route and the admin's chat.
 type Bot interface {
-	InfrastructureClient(ctx context.Context) (*tgbot.Client, error)
+	InfrastructureClient(ctx context.Context) (*tgapi.Client, error)
 	InfrastructureAdminChat(ctx context.Context) (int64, bool, error)
 }
 
@@ -94,6 +97,12 @@ type Service struct {
 	now     func() time.Time
 	log     *slog.Logger
 	mu      sync.Mutex
+	// A backup Start began runs on Run's context and Run waits for it, so it never works
+	// on a database the panel has closed: life is that context, closed set once Run ended.
+	lifeMu  sync.Mutex
+	life    context.Context
+	closed  bool
+	started sync.WaitGroup
 }
 
 // New: dataDir is the panel's data directory, where the dump is made before it is sent;
@@ -128,6 +137,15 @@ func (s *Service) Cleanup() {
 // that day.
 func (s *Service) Run(ctx context.Context) {
 	s.Cleanup()
+	s.lifeMu.Lock()
+	s.life = ctx
+	s.lifeMu.Unlock()
+	defer func() {
+		s.lifeMu.Lock()
+		s.closed = true
+		s.lifeMu.Unlock()
+		s.started.Wait()
+	}()
 	t := time.NewTicker(time.Minute)
 	defer t.Stop()
 	for {
@@ -204,13 +222,22 @@ func (s *Service) Start() error {
 	if s.Busy() {
 		return ErrBusy
 	}
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), SendTimeout)
+	s.lifeMu.Lock()
+	defer s.lifeMu.Unlock()
+	if s.closed {
+		return ErrBusy
+	}
+	life := s.life
+	if life == nil { // Run not started: the CLI, tests
+		life = context.Background()
+	}
+	s.started.Go(func() {
+		ctx, cancel := context.WithTimeout(life, SendTimeout)
 		defer cancel()
 		if _, err := s.Send(ctx); err != nil && !errors.Is(err, ErrBusy) {
 			s.log.Warn("telegram backup", "err", err)
 		}
-	}()
+	})
 	return nil
 }
 
@@ -247,16 +274,16 @@ func (s *Service) Send(ctx context.Context) (State, error) {
 // Code is the error code State keeps for err: never pg_dump's or Telegram's own text, which
 // may name hosts, ports and databases.
 func Code(err error) string {
-	var ae *tgbot.APIError
+	var ae *tgapi.APIError
 	for _, known := range []error{ErrNoChat, ErrNoPassword, ErrTooBig, ErrBusy, ErrDump, ErrUnavailable} {
 		if errors.Is(err, known) {
 			return known.Error()
 		}
 	}
 	switch {
-	case errors.Is(err, tgbot.ErrOff):
+	case errors.Is(err, tgate.ErrOff):
 		return "bot_off"
-	case errors.Is(err, tgbot.ErrUnreachable), errors.As(err, &ae), errors.Is(err, context.DeadlineExceeded):
+	case errors.Is(err, tgapi.ErrUnreachable), errors.As(err, &ae), errors.Is(err, context.DeadlineExceeded):
 		return "tg_unreachable"
 	}
 	return "backup_failed"
@@ -301,7 +328,7 @@ func (s *Service) send(ctx context.Context, now time.Time) (int64, error) {
 	host := safeName(s.name(ctx))
 	name := "mikan-" + host + "-" + now.Format("20060102-1504") + ".tar.gz.age"
 	caption := fmt.Sprintf("mikan · %s · %s UTC · %s\n\nage -d -o mikan.tar.gz %s\nmikan restore mikan.tar.gz",
-		host, now.Format("2006-01-02 15:04"), sizeText(size), name)
+		host, now.Format("2006-01-02 15:04"), textutil.Size(size, "en"), name)
 	if _, err := client.SendDocument(ctx, chat, name, f, size, caption); err != nil {
 		return 0, err
 	}
@@ -338,7 +365,7 @@ func Make(ctx context.Context, dump Dumper, dir, password string, now time.Time)
 	if err != nil {
 		return "", 0, err
 	}
-	if fi.Size() > tgbot.MaxDocument-packOverhead {
+	if fi.Size() > tgapi.MaxDocument-packOverhead {
 		return "", 0, ErrTooBig
 	}
 	r, err := age.NewScryptRecipient(password)
@@ -377,7 +404,7 @@ func Make(ctx context.Context, dump Dumper, dir, password string, now time.Time)
 	if err != nil {
 		return "", 0, err
 	}
-	if st.Size() > tgbot.MaxDocument {
+	if st.Size() > tgapi.MaxDocument {
 		os.Remove(path)
 		return "", 0, ErrTooBig
 	}
@@ -420,14 +447,4 @@ func safeName(s string) string {
 		return "panel"
 	}
 	return s
-}
-
-func sizeText(n int64) string {
-	switch {
-	case n >= 1<<20:
-		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
-	case n >= 1<<10:
-		return fmt.Sprintf("%d KB", n>>10)
-	}
-	return fmt.Sprintf("%d B", n)
 }

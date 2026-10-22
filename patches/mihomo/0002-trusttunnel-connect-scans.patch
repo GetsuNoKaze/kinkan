@@ -1,0 +1,58 @@
+diff --git a/transport/trusttunnel/authevent.go b/transport/trusttunnel/authevent.go
+index 9f36487d..b958f920 100644
+--- a/transport/trusttunnel/authevent.go
++++ b/transport/trusttunnel/authevent.go
+@@ -2,6 +2,7 @@ package trusttunnel
+ 
+ import (
+ 	"net"
++	"strings"
+ 
+ 	"github.com/metacubex/mihomo/component/authevent"
+ 	"github.com/metacubex/mihomo/listener/inbounduser"
+@@ -16,10 +17,12 @@ func (s *Service) verifyRequest(request *http.Request, authorization string) (en
+ 		reason := authevent.ReasonNoCredentials
+ 		if authorization != "" {
+ 			reason = authevent.ReasonWrongCredentials
+-		} else if s.fallbackProxy != nil {
++		} else if s.fallbackProxy != nil && !strings.EqualFold(request.Method, http.MethodConnect) {
+ 			// With a fallback, a request without credentials is a visit to the
+ 			// cover site; reporting it would make every visitor look like a
+-			// failed login to fail2ban-style consumers.
++			// failed login to fail2ban-style consumers. A CONNECT is not: no
++			// browser sends one to a site, so it is a proxy scan (Kinkan's
++			// scanner journal counts these).
+ 			return
+ 		}
+ 		authevent.Emit(authevent.Event{
+diff --git a/transport/trusttunnel/authevent_test.go b/transport/trusttunnel/authevent_test.go
+index 253ed983..9a2da382 100644
+--- a/transport/trusttunnel/authevent_test.go
++++ b/transport/trusttunnel/authevent_test.go
+@@ -77,7 +77,7 @@ func TestServeHTTPEmitsAuthEvent(t *testing.T) {
+ }
+ 
+ // With a fallback, requests without credentials are cover-site visits and are
+-// not reported; wrong credentials still are.
++// not reported, except CONNECT; wrong credentials still are.
+ func TestServeHTTPAuthEventWithFallback(t *testing.T) {
+ 	events := make(chan authevent.Event, 4)
+ 	authevent.SetHandler(func(e authevent.Event) { events <- e })
+@@ -110,6 +110,17 @@ func TestServeHTTPAuthEventWithFallback(t *testing.T) {
+ 	case <-time.After(100 * time.Millisecond):
+ 	}
+ 
++	// A CONNECT without credentials is a proxy scan, not a visit: still reported.
++	serve(http.MethodConnect, "")
++	select {
++	case e := <-events:
++		if e.Reason != authevent.ReasonNoCredentials || e.Method != http.MethodConnect {
++			t.Fatalf("got %+v, want no_credentials for CONNECT", e)
++		}
++	case <-time.After(5 * time.Second):
++		t.Fatal("CONNECT without credentials not reported")
++	}
++
+ 	serve(http.MethodGet, "Basic "+base64.StdEncoding.EncodeToString([]byte("user:wrong")))
+ 	select {
+ 	case e := <-events:

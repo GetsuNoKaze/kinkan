@@ -15,32 +15,44 @@ import (
 	"sync"
 	"time"
 
-	"mikan/internal/nodeapi"
+	"mikan/internal/hostchan"
+	"mikan/internal/logbuf"
 	"mikan/internal/nodetls"
+	"mikan/internal/pace"
 	"mikan/internal/panel/acme"
 	"mikan/internal/panel/addons"
+	addonpages "mikan/internal/panel/addons/pages"
+	"mikan/internal/panel/addons/panelapi"
 	"mikan/internal/panel/api"
 	"mikan/internal/panel/auth"
 	"mikan/internal/panel/autotune"
 	"mikan/internal/panel/billing"
+	"mikan/internal/panel/botpanel"
 	"mikan/internal/panel/dnscheck"
 	"mikan/internal/panel/domain"
+	"mikan/internal/panel/events"
+	"mikan/internal/panel/events/feed"
 	"mikan/internal/panel/infraalerts"
+	"mikan/internal/panel/ipgeo"
+	"mikan/internal/panel/model"
 	"mikan/internal/panel/nodesync"
 	"mikan/internal/panel/nodeupdate"
 	"mikan/internal/panel/panelimport"
 	"mikan/internal/panel/promo"
+	"mikan/internal/panel/reach"
 	"mikan/internal/panel/server"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/subpage"
 	"mikan/internal/panel/subs"
+	"mikan/internal/panel/support"
+	"mikan/internal/panel/tgate"
 	"mikan/internal/panel/tgbackup"
-	"mikan/internal/panel/tgbot"
 	"mikan/internal/panel/tlscert"
 	"mikan/internal/panel/updates"
 	"mikan/internal/panel/warp"
+	"mikan/internal/release"
 )
 
 // Panel is the fully wired HTTP side of the panel, without the listener.
@@ -55,23 +67,29 @@ type Panel struct {
 	Tuner  *autotune.Tuner // nil without nodes
 	// NodeUpdates updates the remote nodes to the panel's version; nil without nodes.
 	NodeUpdates *nodeupdate.Service
-	Telegram    *tgbot.Bot
-	Billing     *billing.Service
-	Updates     *updates.Checker
-	Alerts      *infraalerts.Monitor
-	Backups     *tgbackup.Service
-	Importer    *panelimport.Importer
-	Addons      *addons.Manager
-	server      *server.Server
-	spa         *server.SPA
-	subPage     *server.SPA
-	sessions    *auth.Sessions
-	st          *store.Store
-	devices     *domain.Devices
-	ipLimit     *auth.Limiter
-	userLimit   *auth.Limiter
-	now         func() time.Time
-	log         *slog.Logger
+	// Gateway is the panel's side of Telegram: the token, polling, Stars, the alerts' way
+	// out; Telegram is the admin's setup of the bot, its notices and broadcasts on top of it.
+	Gateway  *tgate.Gateway
+	Telegram *botpanel.Panel
+	Billing  *billing.Service
+	Updates  *updates.Checker
+	Alerts   *infraalerts.Monitor
+	Backups  *tgbackup.Service
+	Importer *panelimport.Importer
+	// Support keeps the support access grants; the operator's terminal hooks into it.
+	Support   *support.Service
+	Addons    *addons.Manager
+	AddonsAPI *panelapi.Server
+	server    *server.Server
+	spa       *server.SPA
+	subPage   *server.SPA
+	sessions  *auth.Sessions
+	st        *store.Store
+	devices   *domain.Devices
+	ipLimit   *auth.Limiter
+	userLimit *auth.Limiter
+	now       func() time.Time
+	log       *slog.Logger
 }
 
 type Options struct {
@@ -80,13 +98,19 @@ type Options struct {
 	Version    string
 	Web        fs.FS
 	TrustProxy bool
+	// SupportOff turns support access off whatever the setting says (MIKAN_SUPPORT_ACCESS=off).
+	SupportOff bool
+	// SupportBot is the support bot a support access is opened for; nil: none can be opened.
+	SupportBot support.Bot
 	Log        *slog.Logger
 	Now        func() time.Time
 	// Connect reaches a node; nil when the panel runs without nodes (tests, UI development).
 	Connect nodesync.Connect
-	// QUIC is a node's long-lived self-signed Hysteria2/TUIC certificate and its pin,
-	// which subscription links carry.
-	QUIC func(n db.Node) (*nodeapi.TLSFiles, string, error)
+	// TLS picks the certificate of a node's protocols on TLS and the pin links carry for
+	// it; nil leaves links unpinned (tests).
+	TLS *NodeTLS
+	// NodesACME orders the remote nodes' public certificates; nil in development.
+	NodesACME *acme.Nodes
 	// PanelCert is the client certificate remote nodes pin; join keys carry its hash.
 	PanelCert func() (nodetls.Pair, error)
 	// NodeCerts keeps the nodes' own certificates; nil: nodes have none.
@@ -101,6 +125,10 @@ type Options struct {
 	// one is not served; nil where the panel runs no server (tests, the CLI).
 	SubPort      func(port int) error
 	SubPortError func() string
+	// SubDomain serves a new subscription domain; SubCerts is its certificate. nil where
+	// the panel runs no server, and in development.
+	SubDomain func(name string)
+	SubCerts  *acme.Manager
 	// DataDir is where the host updater and the panel meet (update/); "" turns that off.
 	DataDir string
 	// Releases finds the release to update to; nil never checks.
@@ -109,6 +137,11 @@ type Options struct {
 	WarpAPI string
 	// AddonsCatalog is the marketplace's signed catalog; "" is the real one.
 	AddonsCatalog string
+	// AddonsCommunity is the registry of community addons; "" is the real one.
+	AddonsCommunity string
+	// Dev is the panel running for development: addon sources may be read over plain http
+	// from 127.0.0.1.
+	Dev bool
 	// DNS checks new domains against public DNS; nil leaves them unchecked.
 	DNS *dnscheck.Checker
 	// HSTS says whether browsers are told to keep to HTTPS: for a panel that serves TLS
@@ -117,6 +150,12 @@ type Options struct {
 	// Resolve looks up the names the panel is told to dial (REALITY targets); nil is the
 	// system's resolver, tests set their own.
 	Resolve func(ctx context.Context, host string) ([]netip.Addr, error)
+	// Reach checks ports from Russia (Globalping); nil: the check is not offered (tests).
+	Reach *reach.Client
+	// Geo asks the geo bases where an address is; nil: the check is not offered (tests).
+	Geo *ipgeo.Client
+	// Logs holds the last lines of the panel's log for the Diagnostics page; nil: none.
+	Logs *logbuf.Buffer
 }
 
 type noChanges struct{}
@@ -136,15 +175,32 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		log:       o.Log,
 	}
 	pool := domain.NewPool(st, o.Now)
+	// The feed of events for addons: what changes users, devices, nodes and payments is
+	// written in its own transaction, and the hub wakes the addons reading it.
+	hub := events.NewHub()
 	var changes domain.Changes = noChanges{}
 	deps := api.Deps{
 		Version: o.Version, Store: st, Settings: set, Sessions: p.sessions,
 		IPLimit: p.ipLimit, UserLimit: p.userLimit, TOTP: auth.NewTOTPGuard(),
 		TrustProxy: o.TrustProxy, Log: o.Log, Now: o.Now, Pool: pool,
 	}
+	p.Support = support.New(st, o.Now, o.Log)
+	p.Support.SetSwitch(func(ctx context.Context) (string, error) {
+		if o.SupportOff {
+			return support.OffEnv, nil
+		}
+		on, err := set.On(ctx, settings.SupportAccess)
+		if err != nil || on {
+			return "", err
+		}
+		return support.OffSetting, nil
+	})
+	p.Support.SetBot(o.SupportBot)
+	deps.Support = p.Support
 	p.newKinkan(o, &deps) // Kinkan: the fork's services (kinkan.go)
 	if o.Connect != nil {
 		p.Nodes = nodesync.NewManager(st, set, pool, o.Connect, o.Log, o.Now)
+		p.Nodes.SetEvents(hub)
 		changes = p.Nodes
 		deps.Online = p.Nodes.Online
 		deps.Nodes = p.Nodes
@@ -159,8 +215,13 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	}
 	deps.PanelCert = o.PanelCert
 	deps.SubPort, deps.SubPortError = o.SubPort, o.SubPortError
+	deps.SubDomain = o.SubDomain
+	if o.SubCerts != nil {
+		deps.SubCerts = o.SubCerts
+	}
 	deps.Changes = changes
 	deps.Users = domain.NewUsers(st, pool, changes, o.Now)
+	deps.Users.SetEvents(hub)
 	// The nodes try a new listener before it is saved, when the panel runs them.
 	var dryRun domain.DryRun
 	if p.Nodes != nil {
@@ -179,51 +240,99 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	}
 	deps.Inbounds.SetResolver(deps.Resolve)
 	deps.Devices = domain.NewDevices(st, pool, changes, o.Now)
+	deps.Devices.SetEvents(hub)
 	p.st, p.devices = st, deps.Devices
 	deps.Packages = domain.NewPackages(st, o.Now)
+	deps.Campaigns = domain.NewCampaigns(st, o.Now)
+	deps.Balancer = domain.NewBalancer(st, o.Now, o.Log)
 	if o.Certs != nil {
-		deps.Cert, deps.RenewCert = o.Certs.Status, o.Certs.Renew
+		deps.Cert, deps.RenewCert, deps.RenewCertNow = o.Certs.Status, o.Certs.Renew, o.Certs.RenewNow
 		deps.SetCert, deps.ClearCert = o.Certs.SetCustom, o.Certs.ClearCustom
+	}
+	if o.NodesACME != nil {
+		deps.RenewNodeCert, deps.WakeNodeCerts = o.NodesACME.Renew, o.NodesACME.Wake
+	}
+	if o.TLS != nil {
+		deps.NodeTLS = nodeTLSView(o.TLS, p.Nodes, o.NodesACME, o.Now)
+		if o.Certs != nil {
+			dns := o.DNS
+			if dns == nil {
+				dns = dnscheck.New()
+			}
+			deps.CheckCerts = checkCerts(st, set, o.Certs, o.SubCerts, o.TLS, p.Nodes, o.NodesACME, dns)
+		}
 	}
 	deps.NodeCerts = o.NodeCerts
 	deps.ForgetNode = forgetNodeFiles(o)
 	subBase := func(ctx context.Context) string {
 		ep, err := set.SubEndpoint(ctx)
-		if err != nil || ep.Host == "" {
+		if err != nil || ep.URL() == "" {
 			return ""
 		}
 		paths, err := set.Paths(ctx)
 		if err != nil {
 			return ""
 		}
-		return "https://" + net.JoinHostPort(ep.Host, strconv.Itoa(ep.Port)) + "/" + paths.Sub
+		return ep.URL() + "/" + paths.Sub
 	}
 	p.Addons = addons.New(o.DataDir, o.AddonsCatalog, o.Version, o.Log, o.Now)
+	if o.AddonsCommunity != "" {
+		p.Addons.SetCommunityURL(o.AddonsCommunity)
+	}
+	p.Addons.SetDev(o.Dev)
 	deps.Addons = p.Addons
+	addonPages := addonpages.New(addonpages.Deps{Addons: p.Addons, Store: st.Q, Log: o.Log, Now: o.Now})
+	deps.Pages = addonPages
 	deps.DNS = o.DNS
+	deps.Reach, deps.Geo = o.Reach, o.Geo
+	deps.DataDir = o.DataDir
+	deps.Logs, deps.Host = o.Logs, hostchan.New(o.DataDir)
 	promos := promo.New(st, o.Now)
 	promos.Changed = deps.Users.Changed
 	p.Billing = billing.New(billing.Deps{Store: st, Settings: set, Users: deps.Users, Log: o.Log, Now: o.Now, TrustProxy: o.TrustProxy,
-		MaxLinks: tgbot.MaxLinks,
-		Addons:   deps.Addons, SubBase: subBase, Promo: promos})
+		MaxLinks: model.MaxLinks,
+		Addons:   deps.Addons, SubBase: subBase, Promo: promos, Events: hub,
+		TopupWaiting: func(ctx context.Context, t db.Topup) { p.tellAdminOfTopup(ctx, t) }})
 	deps.Billing, deps.SubBase = p.Billing, subBase
 	// The bot may reach Telegram through a node when the panel's server cannot.
 	var tunnel func(ctx context.Context, nodeID int64, addr string) (net.Conn, error)
 	if p.Nodes != nil {
 		tunnel = p.Nodes.Tunnel
 	}
-	p.Telegram = tgbot.New(tgbot.Deps{Store: st, Settings: set, Devices: deps.Devices, SubBase: subBase, API: o.TelegramAPI, Log: o.Log, Now: o.Now, Billing: p.Billing,
+	p.Gateway = tgate.New(tgate.Deps{Store: st, Settings: set, API: o.TelegramAPI, Log: o.Log, Now: o.Now, Billing: p.Billing, Tunnel: tunnel})
+	// The bot's screens, which run as an addon, see the panel through the Panel API: Local
+	// answers their calls (botpanel.RPCHandler).
+	backend := &botpanel.Local{Store: st, Settings: set, Binder: deps.Devices, Users: deps.Users, Billing: p.Billing, Gateway: p.Gateway, SubBase: subBase, Now: o.Now,
 		// Telegram apps refuse a Mini App on a self-signed certificate.
-		MiniApp: func() bool { return o.Certs != nil && o.Certs.Status().Kind == "letsencrypt" }, Tunnel: tunnel})
-	deps.Telegram = p.Telegram
-	p.Billing.SetTelegram(p.Telegram)
+		MiniApp: func() bool { return o.Certs != nil && o.Certs.Trusted() }}
+	// The panel's API for addons, with the Bot API proxy over the gateway for the addon that
+	// holds the bot.
+	p.AddonsAPI = panelapi.New(panelapi.Deps{Addons: p.Addons, Store: st, Hub: hub, Log: o.Log, Now: o.Now,
+		Telegram: p.Gateway, Settings: set, SubBase: subBase, Bot: botpanel.RPCHandler(backend), Users: deps.Users,
+		Inbounds: deps.Inbounds, Changes: deps.Changes, NodeState: nodeState(p.Nodes)})
+	// What the bot says comes from the bot addon (the official one is installed by itself,
+	// botaddon.go): the panel tells it through events, and keeps the broadcasts and the
+	// previews of the admin's texts.
+	emit := func(ctx context.Context, typ string, userID, tgID int64, data any, dedupe string) error {
+		err := st.Tx(ctx, func(q *db.Queries) error { return feed.Emit(ctx, q, o.Now(), typ, userID, tgID, data, dedupe) })
+		if err == nil {
+			hub.Kick()
+		}
+		return err
+	}
+	p.Telegram = botpanel.New(botpanel.Deps{Backend: backend, Outbox: p.Gateway.Outbox, Emit: emit, Log: o.Log, Now: o.Now})
+	// The updates wait in the buffer for the addon that holds the bot.
+	p.Gateway.SetHandler(p.AddonsAPI.BotSlot())
+	deps.Telegram, deps.Gateway = p.Telegram, p.Gateway
+	p.Support.SetNotifier(p.tellAdminOfSupport)
+	p.Billing.SetTelegram(p.Gateway)
 	p.Updates = updates.New(o.DataDir, o.Version, o.Releases, o.Log, o.Now)
 	deps.Updates = p.Updates
 	var certStatus infraalerts.CertificateSource
 	if o.Certs != nil {
 		certStatus = o.Certs.Status
 	}
-	p.Alerts = infraalerts.New(st, settings.Cached(st.Q, loopSettingsTTL), p.Nodes, p.Tuner, certStatus, p.Updates, p.Telegram, o.Log, o.Now)
+	p.Alerts = infraalerts.New(st, settings.Cached(st.Q, loopSettingsTTL), p.Nodes, p.Tuner, certStatus, p.Updates, p.Gateway, o.Log, o.Now)
 	if p.NodeUpdates != nil {
 		p.Alerts.WatchNodeUpdates(p.NodeUpdates)
 	}
@@ -235,7 +344,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		h, _ := set.String(ctx, settings.KeyPublicHost)
 		return h
 	}
-	p.Backups = tgbackup.New(selfDump, set, p.Telegram, o.DataDir, serverName, o.Now, o.Log)
+	p.Backups = tgbackup.New(selfDump, set, p.Gateway, o.DataDir, serverName, o.Now, o.Log)
 	deps.Backups = p.Backups
 	deps.Warp = warp.Client{API: o.WarpAPI}
 	importer := panelimport.NewImporter(st, deps.Users, nil, o.Now, o.Log)
@@ -291,16 +400,16 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		if err != nil {
 			return subs.Config{}, err
 		}
-		var domainName, publicHost, routing, fingerprint, rules string
+		var domainName, subDomain, publicHost, routing, fingerprint, rules string
 		var groups subs.Groups
-		for key, dst := range map[string]*string{settings.KeyDomain: &domainName, settings.KeyPublicHost: &publicHost, settings.KeyGroupMain: &groups.Main, settings.KeyGroupAuto: &groups.Auto,
+		for key, dst := range map[string]*string{settings.KeyDomain: &domainName, settings.KeySubDomain: &subDomain, settings.KeyPublicHost: &publicHost, settings.KeyGroupMain: &groups.Main, settings.KeyGroupAuto: &groups.Auto,
 			settings.KeyRouting: &routing, settings.KeyFingerprint: &fingerprint, settings.KeyRules: &rules} {
 			if *dst, err = set.String(ctx, key); err != nil {
 				return subs.Config{}, err
 			}
 		}
 		cfg := subs.Config{Brand: brand, SupportURL: support, Groups: groups, Routing: subs.ParseRouting(routing), Fingerprint: fingerprint,
-			Direct: []string{publicHost, domainName}, Lang: lang, Rules: subs.ServedRules(rules, groups.WithDefaults(lang))}
+			Direct: []string{publicHost, domainName, subDomain}, Lang: lang, Rules: subs.ServedRules(rules, groups.WithDefaults(lang))}
 		if cfg.Routes, _, err = settings.Get[subs.Routes](ctx, set, settings.KeyRoutes); err != nil {
 			return subs.Config{}, err
 		}
@@ -327,6 +436,20 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		}
 		if cfg.Happ.HideSettings, err = set.On(ctx, settings.HappHide); err != nil {
 			return subs.Config{}, err
+		}
+		if cfg.InactiveServer, err = set.On(ctx, settings.InactiveServer); err != nil {
+			return subs.Config{}, err
+		}
+		if cfg.InactiveText, err = set.String(ctx, settings.KeyInactiveText); err != nil {
+			return subs.Config{}, err
+		}
+		tariffs, err := st.Q.ListTariffs(ctx)
+		if err != nil {
+			return subs.Config{}, err
+		}
+		cfg.Tariffs = make(map[int64]string, len(tariffs))
+		for _, t := range tariffs {
+			cfg.Tariffs[t.ID] = t.Name
 		}
 		for key, dst := range map[string]*string{settings.KeySubTitle: &cfg.Title, settings.KeyAnnounce: &cfg.Announce, settings.KeyAnnounceURL: &cfg.AnnounceURL,
 			settings.KeyBrandAccent: &cfg.App.Accent, settings.KeyBrandLogo: &cfg.App.LogoURL,
@@ -358,9 +481,25 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 				sn.Endpoint = subs.Endpoint{Host: domain.NodeHost(n), SNI: n.Domain}
 				cfg.Direct = append(cfg.Direct, n.PublicHost, n.Domain)
 			}
-			if o.QUIC != nil {
-				if _, pin, err := o.QUIC(n); err == nil {
-					sn.Endpoint.PinSHA256 = pin
+			sn.Endpoint.SNIRouter = n.SniRouter != 0
+			// A node older than the Shadowsocks-2022 key per user runs one key for everyone: its
+			// links carry that one until it is updated. A version that is not a release (a
+			// build of the source) is taken as new.
+			if p.Nodes != nil && n.Address != "" {
+				if hv, ok := p.Nodes.Health(n.ID); ok && release.Valid(hv.Health.Version) && release.Newer(ssUsersSince, hv.Health.Version) {
+					sn.SSOneKey = true
+				}
+			}
+			if o.TLS != nil {
+				if c, err := o.TLS.Pick(n); err == nil {
+					sn.Endpoint.PinSHA256 = c.Pin
+				}
+				// What the node serves, as of the last state it took: a certificate picked now
+				// reaches it with the next state, and the links follow once it has.
+				if p.Nodes != nil {
+					if pin, ok := p.Nodes.ServedPin(n.ID); ok {
+						sn.Endpoint.PinSHA256 = pin
+					}
 				}
 			}
 			cfg.Nodes = append(cfg.Nodes, sn)
@@ -383,21 +522,43 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	}}
 	subCfg := func(ctx context.Context) (subs.Config, error) { return cache.get(ctx, buildSubCfg) }
 	subHandler = subs.NewHandler(st, subCfg, subPageHandler, o.Now, deps.Devices, o.TrustProxy)
+	subHandler.SetBalancer(deps.Balancer)
 	subHandler.SetLogger(o.Log)
-	subHandler.SetTelegram(p.Telegram)
+	subHandler.SetTelegram(p.Gateway)
+	subHandler.SetReissuer(deps.Users)
 	subHandler.SetShop(p.Billing)
 	subHandler.SetPromo(promos)
 	subHandler.SetPages(pages)
 
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/api/", apiHandler)
+	adminMux.Handle(addonpages.Prefix, addonPages)
+	// What a browser installs the panel as (Settings → General → App on this device).
+	adminMux.Handle("/manifest.webmanifest", server.Manifest(func(ctx context.Context) (server.ManifestInfo, error) {
+		name, err := set.String(ctx, settings.KeyPanelAppName)
+		if err != nil {
+			return server.ManifestInfo{}, err
+		}
+		brand, err := set.String(ctx, settings.KeyBrand)
+		if err != nil {
+			return server.ManifestInfo{}, err
+		}
+		lang, err := set.Lang(ctx)
+		return server.ManifestInfo{Name: server.AppName(name, brand), Lang: lang}, err
+	}))
 	adminMux.Handle("/", p.spa)
 	p.server = server.New(adminMux, subHandler)
 	p.server.SetLegacy(subHandler.Legacy())
 	if o.DataDir != "" {
-		p.server.SetSite(server.OwnSite(filepath.Join(o.DataDir, "www")))
+		set := settings.New(st.Q)
+		p.server.SetSite(server.OwnSite(filepath.Join(o.DataDir, "www"), settingsCached(func(ctx context.Context) (string, error) {
+			return set.String(ctx, settings.KeySiteTemplate)
+		})))
 	}
 	p.server.SetHSTS(o.HSTS)
+	if p.Nodes != nil && o.PanelCert != nil {
+		p.server.SetHello(nodeHello(st, p.Nodes, o).Serve)
+	}
 	p.Handler = p.server
 	return p, nil
 }
@@ -434,10 +595,6 @@ func (p *Panel) Apply(ctx context.Context) (settings.Paths, error) {
 // edit them), drives the node syncer and cleans up expired state. It returns once ctx is
 // done and every one of its workers has stopped: the caller closes the database after it.
 func (p *Panel) Run(ctx context.Context) {
-	// Before the reconcile loop: payments of the built-in providers take their adapters' names.
-	if err := p.Billing.MoveBuiltin(ctx); err != nil {
-		p.log.Error("billing: move the built-in providers", "err", err)
-	}
 	// The host reads the switch and the channel from a file; the settings are what the
 	// admin chose. The channel is the panel's own check's too.
 	auto, err := p.Settings.On(ctx, settings.AutoUpdate)
@@ -460,16 +617,25 @@ func (p *Panel) Run(ctx context.Context) {
 	if p.NodeUpdates != nil {
 		workers = append(workers, p.NodeUpdates.Run)
 	}
-	workers = append(workers, p.Telegram.Run, p.Billing.Run, p.Updates.Run, p.Alerts.Run, p.Backups.Run, p.Importer.Run,
+	workers = append(workers, p.Gateway.Run, p.Telegram.Run, p.Billing.Run, p.AddonsAPI.Run, p.AddonsAPI.RunPush, (&botAddon{p: p}).Run, p.Updates.Run, p.Alerts.Run, p.Backups.Run, p.Importer.Run,
 		func(ctx context.Context) {
-			every(ctx, 5*time.Second, func() {
+			pace.Tick(ctx, 5*time.Second, func(ctx context.Context) {
 				if _, err := p.Apply(ctx); err != nil {
 					p.log.Error("reload settings", "err", err)
 				}
 			})
 		},
+		// A support grant whose time ran out is written to the journal and the admin is told
+		// within the half minute, not when the next request meets it.
 		func(ctx context.Context) {
-			every(ctx, 10*time.Minute, func() {
+			pace.Tick(ctx, 30*time.Second, func(ctx context.Context) {
+				if err := p.Support.Sweep(ctx); err != nil {
+					p.log.Error("support sweep", "err", err)
+				}
+			})
+		},
+		func(ctx context.Context) {
+			pace.Tick(ctx, 10*time.Minute, func(ctx context.Context) {
 				if err := p.sessions.Cleanup(ctx); err != nil {
 					p.log.Error("session cleanup", "err", err)
 				}
@@ -493,6 +659,9 @@ func runAll(ctx context.Context, workers ...func(context.Context)) {
 
 // configCacheTTL: the longest a changed setting is not seen, when the change was made by
 // another process (the server CLI); this process's own changes drop the cache at once.
+// ssUsersSince is the first release whose nodes run Shadowsocks-2022 with a key per user.
+const ssUsersSince = "0.5.1.1-rc.11"
+
 const configCacheTTL = 10 * time.Second
 
 // configCache keeps the subscription's config between requests. Errors are not kept.
@@ -523,29 +692,64 @@ func (c *configCache) get(ctx context.Context, build func(context.Context) (subs
 }
 
 // forgetNodeFiles removes what the panel keeps on disk for a node id: its own certificate
-// (Options.NodeCerts) and the self-signed pair its QUIC protocols use, <data>/tls/nodes/<id>.
+// (Options.NodeCerts), the public one ordered for it (<data>/tls/acme-nodes/<id>) and the
+// self-signed pair, <data>/tls/nodes/<id>.
 func forgetNodeFiles(o Options) func(id int64) error {
 	return func(id int64) error {
 		var errs []error
 		if o.NodeCerts != nil {
 			errs = append(errs, o.NodeCerts.Clear(id))
 		}
+		if o.NodesACME != nil {
+			errs = append(errs, o.NodesACME.Forget(id))
+		}
 		if o.DataDir != "" {
 			errs = append(errs, os.RemoveAll(filepath.Join(o.DataDir, "tls", "nodes", strconv.FormatInt(id, 10))))
+			errs = append(errs, os.RemoveAll(filepath.Join(o.DataDir, "tls", "acme-nodes", strconv.FormatInt(id, 10))))
 		}
 		return errors.Join(errs...)
 	}
 }
 
-func every(ctx context.Context, d time.Duration, fn func()) {
-	t := time.NewTicker(d)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			fn()
+// settingsCached is a setting read again only once this process changed a setting
+// (settings.Generation) or a minute went by (another process, the CLI): it is asked on
+// every request a stranger makes.
+func settingsCached(read func(context.Context) (string, error)) func() string {
+	var (
+		mu   sync.Mutex
+		gen  uint64
+		at   time.Time
+		have bool
+		v    string
+	)
+	return func() string {
+		g := settings.Generation()
+		mu.Lock()
+		defer mu.Unlock()
+		if !have || g != gen || time.Since(at) > time.Minute {
+			if s, err := read(context.Background()); err == nil {
+				v, gen, at, have = s, g, time.Now(), true
+			}
 		}
+		return v
+	}
+}
+
+// nodeState is what addons with nodes:read and inbounds:read learn of a node: whether the
+// panel reached it, its version and connections, which listeners run.
+func nodeState(m *nodesync.Manager) func(int64) panelapi.NodeState {
+	return func(id int64) panelapi.NodeState {
+		if m == nil {
+			return panelapi.NodeState{}
+		}
+		hv, ok := m.Health(id)
+		if !ok || hv.CheckedAt.IsZero() {
+			return panelapi.NodeState{}
+		}
+		st := panelapi.NodeState{Known: true, OK: hv.OK, Version: hv.Health.Version, Conns: hv.Health.Conns, Statuses: map[string]bool{}}
+		for _, l := range hv.Listeners {
+			st.Statuses[l.Name] = l.OK
+		}
+		return st
 	}
 }

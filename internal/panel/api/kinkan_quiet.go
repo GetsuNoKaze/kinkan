@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"mikan/internal/netaddr"
 	"mikan/internal/nodeapi"
 	"mikan/internal/panel/domain"
 	"mikan/internal/proto"
@@ -284,7 +285,7 @@ func (h *handlers) farTargetOf(ctx context.Context, t proto.Template, nodeIP net
 		}
 		ip = addrs[0]
 	}
-	if !proto.PublicAddr(ip.Unmap()) {
+	if !netaddr.IsPublic(ip.Unmap()) {
 		return nil
 	}
 	target, node := h.d.GeoIP.Lookup(ip.Unmap()), h.d.GeoIP.Lookup(nodeIP.Unmap())

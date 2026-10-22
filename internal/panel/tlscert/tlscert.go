@@ -4,11 +4,9 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -16,11 +14,13 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"mikan/internal/fsutil"
+	"mikan/internal/nodetls"
 )
 
 // Holder lets the certificate be swapped (ACME renewal, host change) without a restart.
@@ -115,6 +115,33 @@ func PEM(dir string) (certPEM, keyPEM, pin string, err error) {
 	if block == nil {
 		return "", "", "", errors.New("self.crt: no PEM block")
 	}
-	sum := sha256.Sum256(block.Bytes)
-	return string(c), string(k), hex.EncodeToString(sum[:]), nil
+	return string(c), string(k), nodetls.PinOfDER(block.Bytes), nil
+}
+
+// BySNI serves the subscription domain's certificate to clients that name that domain,
+// and the panel's to the rest, the domain's own clients included while it has none yet.
+type BySNI struct {
+	Panel, Sub *Holder
+	name       atomic.Pointer[string]
+}
+
+// SetName is the subscription domain now; "" when there is none.
+func (b *BySNI) SetName(name string) { b.name.Store(&name) }
+
+// Name is the subscription domain, "" when there is none.
+func (b *BySNI) Name() string {
+	if n := b.name.Load(); n != nil {
+		return *n
+	}
+	return ""
+}
+
+// Get is tls.Config.GetCertificate.
+func (b *BySNI) Get(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	if n := b.Name(); n != "" && hello != nil && strings.EqualFold(strings.TrimSuffix(hello.ServerName, "."), n) {
+		if c, err := b.Sub.Get(hello); err == nil {
+			return c, nil
+		}
+	}
+	return b.Panel.Get(hello)
 }

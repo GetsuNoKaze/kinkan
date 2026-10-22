@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"mikan/internal/panel/domain"
+	"mikan/internal/panel/events"
 	"mikan/internal/panel/promo"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
@@ -26,22 +28,17 @@ type noChanges struct{}
 func (noChanges) PoliciesChanged() {}
 func (noChanges) SlotsChanged()    {}
 
-// fakeTG is the bot: Stars links, refunds and what buyers were told.
+// fakeTG is the gateway and the bot: Stars links, refunds and what buyers were told.
 type fakeTG struct {
 	mu        sync.Mutex
-	paid      []db.Payment
 	refunds   []string
 	refundErr error
 	invoices  int
-	refunded  []refundNote
 	onRefund  func() // runs after Telegram accepted a refund
-}
-
-// refundNote is what the buyer was told about a refund.
-type refundNote struct {
-	p        db.Payment
-	u        db.User
-	disabled bool
+	// The bot's channel: its link ("" none), who is in it, and why it cannot be asked.
+	channel   string
+	members   map[int64]bool
+	memberErr error
 }
 
 func (f *fakeTG) InvoiceLink(_ context.Context, _, _, payload string, stars int64) (string, error) {
@@ -62,26 +59,16 @@ func (f *fakeTG) RefundStars(_ context.Context, _ int64, charge string) error {
 	f.refunds = append(f.refunds, charge)
 	return nil
 }
-func (f *fakeTG) Paid(_ context.Context, p db.Payment, _ db.User, _ bool) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.paid = append(f.paid, p)
-}
-func (f *fakeTG) Refunded(_ context.Context, p db.Payment, u db.User, disabled bool) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.refunded = append(f.refunded, refundNote{p, u, disabled})
-}
-func (f *fakeTG) refundNotes() []refundNote {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return append([]refundNote(nil), f.refunded...)
-}
 func (f *fakeTG) BotURL(context.Context) string { return "https://t.me/mikan_test_bot" }
-func (f *fakeTG) told() int {
+func (f *fakeTG) Channel(context.Context) (string, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return len(f.paid)
+	return f.channel, f.channel != ""
+}
+func (f *fakeTG) Subscribed(_ context.Context, tgID int64) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.members[tgID], f.memberErr
 }
 func (f *fakeTG) invoiceCount() int {
 	f.mu.Lock()
@@ -115,7 +102,7 @@ func newEnv(t *testing.T) *env {
 	clock := func() time.Time { return e.now }
 	set := settings.New(e.st.Q)
 	e.s = New(Deps{Store: e.st, Settings: set, Users: domain.NewUsers(e.st, domain.NewPool(e.st, clock), noChanges{}, clock),
-		Log: slog.New(slog.NewTextHandler(e.logs, &slog.HandlerOptions{Level: slog.LevelDebug})), Now: clock})
+		Log: slog.New(slog.NewTextHandler(e.logs, &slog.HandlerOptions{Level: slog.LevelDebug})), Now: clock, MaxLinks: 5})
 	e.s.SetTelegram(e.tg)
 	must(t, settings.Set(ctx, set, KeyConfig, Config{Enabled: true, Stars: true, AllowNew: true, RenewResetsTraffic: true}))
 	ts, _ := e.st.Q.ListTariffs(ctx)
@@ -153,6 +140,28 @@ func (e *env) payment(id int64) db.Payment {
 	p, err := e.st.Q.GetPayment(context.Background(), id)
 	must(e.t, err)
 	return p
+}
+
+// toldEvent is a buyer's message billing asked for: an event of the panel's feed, written
+// in the transaction of the change, as the bot addon reads it.
+type toldEvent struct {
+	events.Payment
+	UserID int64
+	TgID   int64
+}
+
+// told are the events of type typ in the feed, oldest first.
+func (e *env) told(typ string) []toldEvent {
+	e.t.Helper()
+	rows, err := e.st.Q.ListAddonEvents(context.Background(), db.ListAddonEventsParams{Types: []string{typ}, Lim: 1000})
+	must(e.t, err)
+	out := make([]toldEvent, 0, len(rows))
+	for _, r := range rows {
+		var p events.Payment
+		must(e.t, json.Unmarshal([]byte(r.Data), &p))
+		out = append(out, toldEvent{Payment: p, UserID: r.UserID.Int64, TgID: r.TgID.Int64})
+	}
+	return out
 }
 
 func (e *env) users() int {
@@ -391,14 +400,18 @@ func TestStarsNewSubscription(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	// A different charge id for the same invoice changes nothing either.
-	_ = e.s.StarsPaid(ctx, 555, p.Payload, "ch-2", "XTR", 150)
+	// A second charge for the same invoice gives nothing and goes back to the buyer.
+	must(t, e.s.StarsPaid(ctx, 555, p.Payload, "ch-2", "XTR", 150))
+	must(t, e.s.StarsPaid(ctx, 555, p.Payload, "ch-1", "XTR", 150)) // the first one again: nothing
+	if len(e.tg.refunds) != 1 || e.tg.refunds[0] != "ch-2" {
+		t.Fatalf("a second charge was not refunded: %v", e.tg.refunds)
+	}
 	got := e.payment(p.ID)
 	if got.Status != "applied" || got.ExternalID.String != "ch-1" || !got.UserID.Valid {
 		t.Fatalf("payment: %+v", got)
 	}
-	if e.users() != before+1 || e.tg.told() != 1 {
-		t.Fatalf("users %d (was %d), told %d", e.users(), before, e.tg.told())
+	if paid := e.told(events.PaymentPaid); e.users() != before+1 || len(paid) != 1 {
+		t.Fatalf("users %d (was %d), told %d", e.users(), before, len(paid))
 	}
 	link, err := e.st.Q.GetTgLink(ctx, got.UserID.Int64)
 	if err != nil || link.TgID != 555 {
@@ -419,7 +432,7 @@ func TestStarsNewSubscription(t *testing.T) {
 	if _, err := e.s.Refund(ctx, p.ID); err != nil {
 		t.Fatal(err)
 	}
-	if e.payment(p.ID).Status != "refunded" || len(e.tg.refunds) != 1 || e.tg.refunds[0] != "ch-1" {
+	if e.payment(p.ID).Status != "refunded" || len(e.tg.refunds) != 2 || e.tg.refunds[1] != "ch-1" {
 		t.Fatalf("refund: %+v %v", e.payment(p.ID), e.tg.refunds)
 	}
 	if off, _ := e.st.Q.GetUser(ctx, got.UserID.Int64); off.Status != "disabled" {
@@ -606,5 +619,47 @@ func TestSalesDefault(t *testing.T) {
 	must(t, settings.Set(ctx, e.s.d.Settings, KeyConfig, map[string]any{"stars": true, "allow_new": true}))
 	if c := e.s.Config(ctx); !c.Enabled || !c.Stars {
 		t.Fatalf("settings from 0.4.1 lost selling: %+v", c)
+	}
+}
+
+// A database that does not answer is not "no such invoice": the bot offers the payment
+// again, and once the database answers it is applied.
+func TestStarsPaidLookupFailureIsRetried(t *testing.T) {
+	e := newEnv(t)
+	p := e.invoice(555, 0, Stars)
+	down, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := e.s.StarsPaid(down, 555, p.Payload, "ch-1", "XTR", 150)
+	if err == nil || errors.Is(err, ErrBadPayment) || errors.Is(err, ErrRecorded) {
+		t.Fatalf("a failed lookup answered %v", err)
+	}
+	must(t, e.s.StarsPaid(context.Background(), 555, p.Payload, "ch-1", "XTR", 150))
+	if got := e.payment(p.ID); got.Status != "applied" {
+		t.Fatalf("payment after the retry: %q", got.Status)
+	}
+}
+
+// A payment saved with its charge but not applied says so: the reconcile pass finishes
+// it, the report of the payment is not needed again.
+func TestStarsPaidSavedButNotApplied(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	p := e.invoice(555, 0, Stars)
+	// The payment settings turn unreadable: applying fails after the payment is saved.
+	_, err := e.st.DB.ExecContext(ctx, "UPDATE settings SET value = '{' WHERE key = $1", KeyConfig)
+	must(t, err)
+	err = e.s.StarsPaid(ctx, 555, p.Payload, "ch-1", "XTR", 150)
+	if !errors.Is(err, ErrRecorded) {
+		t.Fatalf("an unapplied saved payment answered %v", err)
+	}
+	if got := e.payment(p.ID); got.Status != "paid" || got.ExternalID.String != "ch-1" {
+		t.Fatalf("payment: %+v", got)
+	}
+	// Paid and never applied: the admin can still give the Stars back.
+	if _, err := e.s.Refund(ctx, p.ID); err != nil {
+		t.Fatalf("refund of a paid payment: %v", err)
+	}
+	if got := e.payment(p.ID); got.Status != "refunded" || len(e.tg.refunds) != 1 || e.tg.refunds[0] != "ch-1" {
+		t.Fatalf("after the refund: %+v %v", got, e.tg.refunds)
 	}
 }

@@ -23,10 +23,19 @@ fail() {
 
 version="$(awk -v m="$module" '$1 == m && $2 ~ /^v/ { print $2; exit }' "$root/third_party/mihomo/go.mod")"
 [ -n "$version" ] || fail "no $module version in third_party/mihomo/go.mod"
+# A replace in mihomo's go.mod (Citrus takes getmikan/http, its fork under the same module
+# path) names the source instead: the patches go on top of what upstream builds with.
+source="$module"
+replaced="$(awk -v m="$module" '{ sub(/^replace[ \t]+/, "") } $1 == m { for (i = 2; i <= NF; i++) if ($i == "=>") { print $(i + 1), $(i + 2); exit } }' "$root/third_party/mihomo/go.mod")"
+if [ -n "$replaced" ]; then
+	read -r source version <<<"$replaced"
+	case "$source" in ./* | ../*) fail "third_party/mihomo/go.mod replaces $module with a directory, $source" ;; esac
+	[ -n "$version" ] || fail "third_party/mihomo/go.mod replaces $module with $source and no version"
+fi
 
 # The module proxy's copy, verified against the checksum database like any download.
-dir="$(cd "$root" && GOFLAGS=-mod=mod go mod download -json "$module@$version" | awk -F'"' '$2 == "Dir" { print $4 }')"
-[ -n "$dir" ] || fail "cannot download $module $version"
+dir="$(cd "$root" && GOFLAGS=-mod=mod go mod download -json "$source@$version" | awk -F'"' '$2 == "Dir" { print $4 }')"
+[ -n "$dir" ] || fail "cannot download $source $version"
 dir="${dir//\\\\//}"
 
 tmp="$(mktemp -d)"
@@ -42,7 +51,7 @@ for p in "$root"/patches/metacubex-http/*.patch; do
 	git -C "$src" apply "$p"
 done
 rm -rf "$src/.git"
-echo "$version" >"$src/.http-version"
+echo "$source $version" >"$src/.http-version"
 
 if $check; then
 	diff -r -q "$src" "$dest" >/dev/null ||

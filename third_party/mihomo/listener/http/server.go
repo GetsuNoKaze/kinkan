@@ -68,7 +68,7 @@ func NewWithConfig(config LC.AuthServer, lc C.InboundListenConfig, tunnel C.Tunn
 		return nil, err
 	}
 
-	tlsConfig := &tls.Config{Time: ntp.Now}
+	tlsConfig := &tls.Config{Time: ntp.Now, MinVersion: tls.VersionTLS12}
 	var realityBuilder *reality.Builder
 
 	if config.Certificate != "" && config.PrivateKey != "" {
@@ -136,11 +136,12 @@ func NewWithConfig(config LC.AuthServer, lc C.InboundListenConfig, tunnel C.Tunn
 
 			store := config.AuthStore
 			if isDefault || store == authStore.Default { // only apply on default listener
-				if !inbound.IsRemoteAddrDisAllowed(conn.RemoteAddr()) {
+				allowed, skipAuth := inbound.EvaluateRemoteAddr(conn.RemoteAddr())
+				if !allowed {
 					_ = conn.Close()
 					continue
 				}
-				if inbound.SkipAuthRemoteAddr(conn.RemoteAddr()) {
+				if skipAuth {
 					store = authStore.Nil
 				}
 			}

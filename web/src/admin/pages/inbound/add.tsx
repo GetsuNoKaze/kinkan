@@ -1,8 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
-import { api, ApiError, errorText, unwrap, type Schemas } from "../../../api/client";
+import { api, unwrap, type Schemas } from "../../../api/client";
+import { onFormError } from "../../../lib/fields";
 import { qk, usePresets } from "../../../api/hooks";
-import { Drawer } from "../../../components/overlay";
+import { Drawer, DrawerFooter } from "../../../components/overlay";
 import { useToast } from "../../../components/toast";
 import { Button, Field } from "../../../components/ui";
 import { t } from "../../../i18n";
@@ -13,6 +14,7 @@ export function AddDrawer({ open, onOpenChange, nodeId, nodeName }: { open: bool
   const qc = useQueryClient();
   const toast = useToast();
   const validate = useValidate();
+  const { reset: resetValidate } = validate;
   const [preset, setPreset] = useState<string>("vless_reality_xhttp");
   const [port, setPort] = useState("");
   const [config, setConfig] = useState("");
@@ -22,10 +24,9 @@ export function AddDrawer({ open, onOpenChange, nodeId, nodeName }: { open: bool
       setPort("");
       setErrors({});
       setConfig(t("inbounds.customSkeleton"));
-      validate.reset();
+      resetValidate();
     }
-    // `validate` changes identity on every render; reset only when the drawer opens.
-  }, [open]);
+  }, [open, resetValidate]);
   const editConfig = (v: string) => {
     setConfig(v);
     setErrors(({ config: _, ...rest }) => rest);
@@ -40,8 +41,7 @@ export function AddDrawer({ open, onOpenChange, nodeId, nodeName }: { open: bool
     },
     onError: (e) => {
       validate.reset();
-      if (e instanceof ApiError && Object.keys(e.fields).length) setErrors(e.fields);
-      else toast.error(errorText(e));
+      onFormError(e, toast, setErrors);
     },
   });
   const custom = preset === "custom";
@@ -64,14 +64,9 @@ export function AddDrawer({ open, onOpenChange, nodeId, nodeName }: { open: bool
       title={t("inbounds.newTitle")}
       meta={nodeName ? t("inbounds.newOn", { name: nodeName }) : custom ? t("inbounds.customMeta") : t("inbounds.newMeta")}
       footer={
-        <>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            {t("common.cancel")}
-          </Button>
-          <Button variant="primary" type="submit" form="add-inbound" loading={create.isPending}>
-            {t("common.add")}
-          </Button>
-        </>
+        <DrawerFooter form="add-inbound" onCancel={() => onOpenChange(false)} loading={create.isPending}>
+          {t("common.add")}
+        </DrawerFooter>
       }
     >
       <form id="add-inbound" onSubmit={submit} className="pt-5" noValidate>
@@ -81,7 +76,7 @@ export function AddDrawer({ open, onOpenChange, nodeId, nodeName }: { open: bool
               <button key={p.id} type="button" role="radio" aria-checked={preset === p.id} className="opt" onClick={() => setPreset(p.id)}>
                 <span className="font-semibold">{presetTitle(p)}</span>
                 <span className="text-xs text-[var(--ink-500)]">{presetSummary(p)}</span>
-                <LimitBadges clashOnly={p.apps === "mihomo"} shared={!!p.shared} />
+                <LimitBadges clashOnly={p.apps === "mihomo"} shared={!!p.shared} nestedTLS={!!p.nested_tls} />
               </button>
             ))}
           </div>
@@ -94,7 +89,7 @@ export function AddDrawer({ open, onOpenChange, nodeId, nodeName }: { open: bool
         >
           <input id="in-port" className="input max-w-[200px]" inputMode="numeric" placeholder={chosen?.default_port} value={port} onChange={(e) => setPort(e.target.value)} aria-invalid={!!errors.port} />
         </Field>
-        {chosen && !custom ? <LimitNotes clashOnly={chosen.apps === "mihomo"} shared={!!chosen.shared} domainCert={!!chosen.domain_cert} /> : null}
+        {chosen && !custom ? <LimitNotes clashOnly={chosen.apps === "mihomo"} shared={!!chosen.shared} domainCert={!!chosen.domain_cert} nestedTLS={!!chosen.nested_tls} /> : null}
         {custom ? (
           <Field label={t("inbounds.configLabel")} hint={t("inbounds.configHint")} error={errors.config}>
             <Editor value={config} onChange={editConfig} invalid={!!errors.config} />

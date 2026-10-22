@@ -34,10 +34,6 @@ func (e *TemplateError) Error() string { return e.Code + ": " + e.Detail }
 
 func templateErr(code, detail string) error { return &TemplateError{Code: code, Detail: detail} }
 
-// MaxTemplate is the size of the largest template: a full profile with rule lists is
-// a few dozen kilobytes.
-const MaxTemplate = 512 << 10
-
 func parseProfileTemplate(src string) (map[string]any, error) {
 	var cfg map[string]any
 	if err := yaml.Unmarshal([]byte(src), &cfg); err != nil {
@@ -60,38 +56,41 @@ func yamlLine(err error) string {
 
 // Template renders the admin's template for p.
 func Template(p Profile, src string) ([]byte, error) {
-	cfg, err := templateConfig(p, src)
+	cfg, _, err := templateConfig(p, src)
 	if err != nil {
 		return nil, err
 	}
 	return marshalYAML(cfg)
 }
 
-// templateConfig is the profile Template renders.
-func templateConfig(p Profile, src string) (map[string]any, error) {
+// templateConfig is the profile Template renders, and the panel's proxies in it.
+func templateConfig(p Profile, src string) (map[string]any, []proxy, error) {
 	ps, err := build(p)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(ps) == 0 {
-		return nil, ErrNoProxies
+		return nil, nil, ErrNoProxies
 	}
 	cfg, err := parseProfileTemplate(src)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// Checked again for this user: their inbounds and app may leave a group the template
 	// names a member of empty, and mihomo refuses a profile with a missing member.
-	if err := fillTemplate(cfg, p, ps); err != nil {
-		return nil, err
+	in, err := fillTemplate(cfg, p, ps)
+	if err != nil {
+		return nil, nil, err
 	}
 	if err := checkFilled(cfg, p); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return cfg, nil
+	return cfg, in, nil
 }
 
-func fillTemplate(cfg map[string]any, p Profile, ps []proxy) error {
+// fillTemplate puts ps into the template cfg and returns those that went in: a proxy of
+// the template's own by the same name stays in its place.
+func fillTemplate(cfg map[string]any, p Profile, ps []proxy) ([]proxy, error) {
 	own, _ := cfg["proxies"].([]any)
 	taken := map[string]bool{}
 	for _, x := range own {
@@ -114,7 +113,7 @@ func fillTemplate(cfg map[string]any, p Profile, ps []proxy) error {
 	for _, g := range groups {
 		if m, ok := g.(map[string]any); ok {
 			if err := fillGroup(m, p.Nodes, names, providers); err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
@@ -132,7 +131,7 @@ func fillTemplate(cfg map[string]any, p Profile, ps []proxy) error {
 		}
 	}
 	cfg["rules"] = out
-	return nil
+	return names, nil
 }
 
 // fillGroup puts the user's proxies the group asks for into it.
@@ -271,7 +270,7 @@ func CheckTemplate(p Profile, src string) error {
 	if err != nil {
 		return err
 	}
-	if err := fillTemplate(cfg, p, ps); err != nil {
+	if _, err := fillTemplate(cfg, p, ps); err != nil {
 		return err
 	}
 	return checkFilled(cfg, p)

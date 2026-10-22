@@ -1,15 +1,42 @@
 import clsx from "clsx";
 import { ChevronRight, Eye } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { t } from "../i18n";
 import { useMediaQuery } from "../lib/media";
 import { Drawer } from "./overlay";
 import { Button } from "./ui";
 import type { LucideIcon } from "lucide-react";
 
+/** The head of a card: its title (id names the card for aria-labelledby), what it is about,
+ * and what stands at its right (a mark, a button). */
+export function CardHead({ title, sub, aside, id }: { title: ReactNode; sub?: ReactNode; aside?: ReactNode; id?: string }) {
+  return (
+    <div className="card-head">
+      <div>
+        <h2 className="card-title" id={id}>
+          {title}
+        </h2>
+        {sub ? <div className="card-sub">{sub}</div> : null}
+      </div>
+      {aside}
+    </div>
+  );
+}
+
+/** A card of a page with its head. i staggers its entrance among the page's cards; reveal
+ * false: no entrance (a card that comes and goes with a tab inside the page). */
+export function Card({ title, sub, aside, i, reveal = true, className, children }: { title: ReactNode; sub?: ReactNode; aside?: ReactNode; i?: number; reveal?: boolean; className?: string; children: ReactNode }) {
+  return (
+    <section className={clsx("card glass", reveal && "reveal", className)} style={i ? ({ "--i": i } as CSSProperties) : undefined}>
+      <CardHead title={title} sub={sub} aside={aside} />
+      {children}
+    </section>
+  );
+}
+
 /** A section of a page in the side list; `parts` are its own sub-sections, listed under it while it is open. */
-export type NavSection<T extends string> = { id: T; label: string; icon?: LucideIcon; badge?: ReactNode; parts?: { id: string; label: string }[] };
+type NavSection<T extends string> = { id: T; label: string; icon?: LucideIcon; badge?: ReactNode; parts?: { id: string; label: string }[] };
 
 /**
  * A page with many sections: a list beside the content on wide screens (it stays in place
@@ -139,18 +166,28 @@ function useMasonry(ref: RefObject<HTMLElement | null>, on: boolean) {
       return;
     }
     el.classList.add("masonry");
-    const place = (c: HTMLElement) => {
-      c.style.gridRowEnd = `span ${Math.max(1, Math.ceil((c.getBoundingClientRect().height + GAP) / ROW))}`;
+    // Heights are all read first and the rows written after: a write between two reads
+    // would make the browser lay the page out again for every card.
+    const place = (cards: HTMLElement[], heights: number[]) => {
+      cards.forEach((c, i) => {
+        c.style.gridRowEnd = `span ${Math.max(1, Math.ceil((heights[i]! + GAP) / ROW))}`;
+      });
     };
     const sizes = new ResizeObserver((entries) => {
-      for (const e of entries) place(e.target as HTMLElement);
+      // The observer has the border box measured already, so it costs no layout.
+      place(
+        entries.map((e) => e.target as HTMLElement),
+        entries.map((e) => e.borderBoxSize?.[0]?.blockSize ?? e.target.getBoundingClientRect().height),
+      );
     });
     const watch = () => {
       sizes.disconnect();
-      for (const c of items()) {
-        place(c);
-        sizes.observe(c);
-      }
+      const cards = items();
+      place(
+        cards,
+        cards.map((c) => c.getBoundingClientRect().height),
+      );
+      for (const c of cards) sizes.observe(c);
     };
     watch();
     // Cards come and go with the section and with loading.
@@ -166,7 +203,7 @@ function useMasonry(ref: RefObject<HTMLElement | null>, on: boolean) {
 }
 
 /** The width of an element, followed as it changes; 0 before the first measure. */
-export function useWidth(ref: RefObject<HTMLElement | null>): number {
+function useWidth(ref: RefObject<HTMLElement | null>): number {
   const [width, setWidth] = useState(0);
   useLayoutEffect(() => {
     const el = ref.current;
@@ -230,30 +267,40 @@ export function FormActions({ dirty, saving, onReset, disabled, label, note, chi
 }
 
 /** The bar of a page's unsaved draft, under the content and kept in view while it scrolls. */
-export function SaveBar({ dirty, saving, onSave, onReset, label }: { dirty: boolean; saving?: boolean; onSave: () => void; onReset: () => void; label?: string }) {
+/** A bar that rises from the bottom while it has something to offer: a selection to act on,
+ * changes to save. With reduced motion it only fades. */
+export function FloatingBar({ open, className, label, children }: { open: boolean; className: string; label: string; children: ReactNode }) {
   const reduce = useReducedMotion();
   return (
     <AnimatePresence>
-      {dirty ? (
+      {open ? (
         <motion.div
-          className="savebar glass-strong"
+          className={clsx(className, "glass-strong")}
           role="region"
-          aria-label={label ?? t("common.unsaved")}
+          aria-label={label}
           initial={reduce ? { opacity: 0 } : { opacity: 0, y: 24 }}
           animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
           exit={reduce ? { opacity: 0 } : { opacity: 0, y: 24 }}
           transition={{ type: "spring", stiffness: 420, damping: 32 }}
         >
-          <span className="savebar-text">{label ?? t("common.unsaved")}</span>
-          <Button variant="ghost" size="sm" onClick={onReset} disabled={saving}>
-            {t("common.discard")}
-          </Button>
-          <Button variant="primary" size="sm" loading={saving} onClick={onSave}>
-            {t("common.save")}
-          </Button>
+          {children}
         </motion.div>
       ) : null}
     </AnimatePresence>
+  );
+}
+
+export function SaveBar({ dirty, saving, onSave, onReset, label }: { dirty: boolean; saving?: boolean; onSave: () => void; onReset: () => void; label?: string }) {
+  return (
+    <FloatingBar open={dirty} className="savebar" label={label ?? t("common.unsaved")}>
+      <span className="savebar-text">{label ?? t("common.unsaved")}</span>
+      <Button variant="ghost" size="sm" onClick={onReset} disabled={saving}>
+        {t("common.discard")}
+      </Button>
+      <Button variant="primary" size="sm" loading={saving} onClick={onSave}>
+        {t("common.save")}
+      </Button>
+    </FloatingBar>
   );
 }
 

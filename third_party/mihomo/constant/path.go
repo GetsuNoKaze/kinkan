@@ -12,7 +12,7 @@ import (
 	"github.com/metacubex/mihomo/constant/features"
 )
 
-const Name = "mihomo"
+const Name = "citrus"
 
 var (
 	GeositeName   = "GeoSite.dat"
@@ -23,8 +23,8 @@ var (
 
 // Path is used to get the configuration path
 //
-// on Unix systems, `$HOME/.config/mihomo`.
-// on Windows, `%USERPROFILE%/.config/mihomo`.
+// on Unix systems, `$HOME/.config/citrus`.
+// on Windows, `%USERPROFILE%/.config/citrus`.
 var Path = func() *path {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -85,13 +85,36 @@ func (p *path) Resolve(path string) string {
 }
 
 // IsSafePath return true if path is a subpath of homedir (or in the SAFE_PATHS environment variable)
+//
+// The check holds both for the path as written and for the path with every
+// symlink (or Windows junction) in it resolved, so a link inside a safe
+// directory cannot lead reads and writes outside of it. Safe directories may
+// themselves be links; they are resolved too.
 func (p *path) IsSafePath(path string) bool {
 	if p.allowUnsafePath || features.CMFA {
 		return true
 	}
 	path = p.Resolve(path)
-	for _, safePath := range p.SafePaths() {
-		if rel, err := filepath.Rel(safePath, path); err == nil {
+	safePaths := p.SafePaths()
+	if !underAny(path, safePaths) {
+		return false
+	}
+	realPath, err := evalExisting(path)
+	if err != nil {
+		return false
+	}
+	realSafePaths := make([]string, 0, len(safePaths))
+	for _, safePath := range safePaths {
+		if realSafePath, err := evalExisting(safePath); err == nil {
+			realSafePaths = append(realSafePaths, realSafePath)
+		}
+	}
+	return underAny(realPath, realSafePaths)
+}
+
+func underAny(path string, roots []string) bool {
+	for _, root := range roots {
+		if rel, err := filepath.Rel(root, path); err == nil {
 			if filepath.IsLocal(rel) {
 				return true
 			}
@@ -100,8 +123,64 @@ func (p *path) IsSafePath(path string) bool {
 	return false
 }
 
+// evalExisting resolves the symlinks in the longest existing prefix of path
+// and appends the part that does not exist yet. A dangling symlink is an
+// error: writing through it would create its target, wherever that is.
+func evalExisting(path string) (string, error) {
+	path = filepath.Clean(path)
+	real, err := filepath.EvalSymlinks(path)
+	if err == nil {
+		return real, nil
+	}
+	if !os.IsNotExist(err) {
+		return "", err
+	}
+	if _, lerr := os.Lstat(path); lerr == nil {
+		return "", fmt.Errorf("%s: dangling symlink", path)
+	}
+	dir, file := filepath.Split(path)
+	dir = filepath.Clean(dir)
+	if dir == path { // the root itself does not exist
+		return "", err
+	}
+	realDir, err := evalExisting(dir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(realDir, file), nil
+}
+
 func (p *path) SafePaths() []string {
 	return append([]string{p.homeDir}, p.safePaths...) // add homedir to safePaths
+}
+
+// HoldsCoreState reports whether dir is the home directory, the directory of
+// the config file or a SAFE_PATHS root, or an ancestor of one of them: a
+// directory the core keeps its own files in. Such a directory must never be
+// emptied or served as a whole, whatever SKIP_SAFE_PATH_CHECK says.
+func (p *path) HoldsCoreState(dir string) bool {
+	dir = filepath.Clean(p.Resolve(dir))
+	if realDir, err := evalExisting(dir); err == nil {
+		dir = filepath.Clean(realDir)
+	} else {
+		// A path whose identity cannot be established must never be used as a
+		// destructive/served UI root.
+		return true
+	}
+	roots := append([]string{filepath.Dir(p.Resolve(p.configFile))}, p.SafePaths()...)
+	for _, root := range roots {
+		if root == "" {
+			continue
+		}
+		root = filepath.Clean(root)
+		if realRoot, err := evalExisting(root); err == nil {
+			root = filepath.Clean(realRoot)
+		}
+		if rel, err := filepath.Rel(dir, root); err == nil && filepath.IsLocal(rel) {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *path) ErrNotSafePath(path string) error {
@@ -235,7 +314,7 @@ func (p *path) GetAssetLocation(file string) string {
 func (p *path) GetExecutableFullPath() string {
 	exePath, err := os.Executable()
 	if err != nil {
-		return "mihomo"
+		return "citrus"
 	}
 	res, _ := filepath.EvalSymlinks(exePath)
 	return res

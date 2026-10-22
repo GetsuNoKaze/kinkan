@@ -25,6 +25,20 @@ import (
 
 type slot struct{ name, uuid, secret string }
 
+// RealitySettings are the REALITY keys and target of the fixture's two VLESS inbounds.
+type RealitySettings struct {
+	PrivateKey  string
+	PublicKey   string
+	ShortIDs    []string
+	Dest        string
+	ServerNames []string
+}
+
+// reality is the template's reality-config of r.
+func (r RealitySettings) reality() map[string]any {
+	return map[string]any{"dest": r.Dest, "private-key": r.PrivateKey, "short-id": r.ShortIDs, "server-names": r.ServerNames}
+}
+
 func main() {
 	out := flag.String("out", "/work", "output directory")
 	flag.Parse()
@@ -34,7 +48,7 @@ func main() {
 		log.Fatal(err)
 	}
 	b64 := base64.RawURLEncoding
-	reality := nodeapi.RealitySettings{
+	reality := RealitySettings{
 		PrivateKey: b64.EncodeToString(priv.Bytes()), PublicKey: b64.EncodeToString(priv.PublicKey().Bytes()),
 		ShortIDs: []string{"a1b2c3d4"}, Dest: "www.microsoft.com:443", ServerNames: []string{"www.microsoft.com"},
 	}
@@ -43,31 +57,32 @@ func main() {
 		slots[i] = slot{fmt.Sprintf("s%06d", i+1), uuid(), token()}
 	}
 	certPEM, keyPEM := selfSigned()
+	// The templates the node takes (proto.Template as JSON), as the panel sends them.
 	raw := func(v any) json.RawMessage { b, _ := json.Marshal(v); return b }
+	obfs := token()
 	st := nodeapi.DesiredState{
 		Revision: 1,
 		Inbounds: []nodeapi.Inbound{
-			{Name: "vision", Preset: nodeapi.PresetVlessVision, Port: "8443", Settings: raw(nodeapi.VlessVisionSettings{Reality: reality})},
-			{Name: "xhttp", Preset: nodeapi.PresetVlessXHTTP, Port: "8444", Settings: raw(nodeapi.VlessXHTTPSettings{Reality: reality, Path: "/x7kq", Mode: "stream-one"})},
-			{Name: "hy2", Preset: nodeapi.PresetHysteria2, Port: "8445", Settings: raw(nodeapi.Hysteria2Settings{ObfsPassword: token()})},
-			{Name: "tuic", Preset: nodeapi.PresetTUIC, Port: "8446", Settings: raw(nodeapi.TUICSettings{CongestionControl: "bbr"})},
-			{Name: "tt", Port: "8447", Config: raw(map[string]any{"type": "trusttunnel", "fallback": "target:8080"})},
+			{Name: "vision", Port: "8443", Config: raw(map[string]any{"type": "vless", "reality-config": reality.reality(), "mikan": map[string]any{"flow": "xtls-rprx-vision"}})},
+			// "stream-one": "auto" hangs on mihomo v1.19.31 (S-01a).
+			{Name: "xhttp", Port: "8444", Config: raw(map[string]any{"type": "vless", "reality-config": reality.reality(), "xhttp-config": map[string]any{"path": "/x7kq", "mode": "stream-one"}})},
+			{Name: "hy2", Port: "8445", Config: raw(map[string]any{"type": "hysteria2", "alpn": []string{"h3"}, "obfs": "salamander", "obfs-password": obfs})},
+			{Name: "tuic", Port: "8446", Config: raw(map[string]any{"type": "tuic", "alpn": []string{"h3"}, "congestion-controller": "bbr"})},
+			{Name: "tt", Port: "8447", Config: raw(map[string]any{"type": "trusttunnel", "fallback": "target:8080"})}, // Kinkan
 		},
 		TLS: &nodeapi.TLSFiles{CertPEM: certPEM, KeyPEM: keyPEM},
 	}
 	for _, s := range slots {
 		st.Slots = append(st.Slots, nodeapi.Slot{Name: s.name, UUID: s.uuid, Secret: s.secret})
 	}
-	var hy2 nodeapi.Hysteria2Settings
-	_ = json.Unmarshal(st.Inbounds[2].Settings, &hy2)
 
 	must(os.MkdirAll(filepath.Join(*out, "clients"), 0o755))
 	must(writeJSON(filepath.Join(*out, "state.json"), st))
-	// Port plan: proto 1=vision 2=xhttp 3=hy2 4=tuic 5=tt.
-	must(os.WriteFile(filepath.Join(*out, "clients", "client.yaml"), []byte(clientConfig(slots, reality, hy2.ObfsPassword)), 0o644))
+	// Port plan in client configs: 1<slot><proto>, proto 1=vision 2=xhttp 3=hy2 4=tuic 5=tt (Kinkan).
+	must(os.WriteFile(filepath.Join(*out, "clients", "client.yaml"), []byte(clientConfig(slots, reality, obfs)), 0o644))
 }
 
-func clientConfig(slots []slot, r nodeapi.RealitySettings, obfs string) string {
+func clientConfig(slots []slot, r RealitySettings, obfs string) string {
 	s := "mixed-port: 0\nallow-lan: true\nbind-address: \"*\"\nmode: rule\nlog-level: warning\nproxies:\n"
 	for i, sl := range slots {
 		n := i + 1

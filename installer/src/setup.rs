@@ -8,21 +8,21 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::mpsc::Sender;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::{Context, Result, anyhow, bail};
 
-use crate::envfile::{EnvFile, write_private};
+use crate::config::{Config, write_private};
 use crate::lock::{self, Wait};
 use crate::system::{self, Proto};
-use crate::{DIR, acme, docker, host, panelfs, release};
+use crate::{DIR, acme, docker, hello, host, panelfs, release};
 
 /// Present from the first file written until the last step is done: a server with it and
 /// a .env is an install that stopped half way, and `mikan install` continues it.
 const UNFINISHED: &str = ".installing";
 
 fn unfinished(root: &Path) -> bool {
-    root.join(".env").exists() && root.join(UNFINISHED).exists()
+    crate::config::installed(root) && root.join(UNFINISHED).exists()
 }
 
 /// The flags of `mikan install`; the installer asks for what they leave out.
@@ -133,7 +133,7 @@ impl Plan {
 
     /// The plan of an install that stopped: what it chose is in .env (the port, the mode,
     /// the key, the image), and that is what continues.
-    fn resumed(mut self, env: &EnvFile) -> Self {
+    fn resumed(mut self, env: &Config) -> Self {
         self.resume = true;
         if let Some(p) = env.get("PANEL_PORT").and_then(|p| p.parse().ok()) {
             self.port = p;
@@ -222,7 +222,7 @@ pub enum Event {
     Log(String),
     Done(Step),
     Failed(Step, String),
-    Finished(Outcome),
+    Finished(Box<Outcome>),
 }
 
 #[derive(Clone, Debug)]
@@ -235,6 +235,11 @@ pub struct Outcome {
     pub password: String,
     /// A domain whose port 80 something else holds: what became of Let's Encrypt.
     pub acme: Option<acme::Report>,
+    /// A node: how the panel's first contact with it went. None for a panel, and for a
+    /// node whose image does not report it.
+    pub hello: Option<Vec<(system::Level, String)>>,
+    /// A node whose port 80 another program holds: how its public certificate can come.
+    pub port80: Option<String>,
 }
 
 /// Port 80 of a panel with a domain, when something else holds it.
@@ -255,11 +260,8 @@ fn port80(plan: &Plan) -> Option<Port80> {
     }
     let Some(front) = acme::Front::from_process(&who) else { return Some(Port80::Other(who)) };
     // A continued install keeps the port the attempt before it chose.
-    let earlier = plan
-        .resume
-        .then(|| EnvFile::load(Path::new(DIR).join(".env")).ok())
-        .flatten()
-        .and_then(|e| e.get("MIKAN_ACME_LISTEN").and_then(acme::listen_port));
+    let earlier =
+        plan.resume.then(|| Config::load(DIR).ok()).flatten().and_then(|e| e.get("MIKAN_ACME_LISTEN").and_then(acme::listen_port));
     Some(Port80::Front(front, earlier.unwrap_or_else(acme::free_port)))
 }
 
@@ -360,11 +362,7 @@ fn run(plan: &Plan, tx: &Sender<Event>) -> StepResult<()> {
         let progress = |p| {
             let _ = tx.send(Event::Progress(Step::Image, p));
         };
-        let earlier = plan
-            .resume
-            .then(|| EnvFile::load(Path::new(DIR).join(".env")).ok())
-            .flatten()
-            .and_then(|e| e.get("MIKAN_IMAGE").map(str::to_owned));
+        let earlier = plan.resume.then(|| Config::load(DIR).ok()).flatten().and_then(|e| e.get("MIKAN_IMAGE").map(str::to_owned));
         let image = if let Some(tar) = &plan.image_tar {
             note(tx, Step::Image, format!("loading {tar}"));
             docker::load(tar)?
@@ -486,21 +484,38 @@ fn run(plan: &Plan, tx: &Sender<Event>) -> StepResult<()> {
     })
     .map_err(kept)?;
 
-    step(tx, Step::Start, || {
+    let hello = step(tx, Step::Start, || {
+        let since = SystemTime::now();
         docker::compose_run(&["up", "-d"])?;
         wait_ready(api_port, Duration::from_secs(90))?;
         note(tx, Step::Start, "running");
-        Ok(())
+        // A node tells how its first contact with the panel went; a panel has no one to
+        // wait for. What it says never fails the install.
+        let Some(port) = api_port else { return Ok(None) };
+        note(tx, Step::Start, "waiting for the panel to connect");
+        Ok(hello::wait(since, hello::LIMIT).map(|h| hello::lines(&h, Some(port))))
     })
     .map_err(kept)?;
     // Everything is done: the install is not unfinished any more.
     let _ = fs::remove_file(Path::new(DIR).join(UNFINISHED));
+    if plan.join.is_none() {
+        // The panel tells by it which addons this host can run.
+        crate::addon::touch(&mut |_| {});
+    }
 
-    let outcome = match creds {
-        Some(c) => Outcome { version, node_port: None, url: c.url, login: c.login, password: c.password.unwrap_or_default(), acme },
-        None => Outcome { version, node_port: api_port, url: String::new(), login: String::new(), password: String::new(), acme },
+    let port80 = match &plan.join {
+        Some(key) => node_port80(system::port_owner(80, Proto::Tcp).as_deref(), node_host(&image, key).as_deref()),
+        None => None,
     };
-    let _ = tx.send(Event::Finished(outcome));
+    let outcome = match creds {
+        Some(c) => {
+            Outcome { version, node_port: None, url: c.url, login: c.login, password: c.password.unwrap_or_default(), acme, hello, port80 }
+        }
+        None => {
+            Outcome { version, node_port: api_port, url: String::new(), login: String::new(), password: String::new(), acme, hello, port80 }
+        }
+    };
+    let _ = tx.send(Event::Finished(Box::new(outcome)));
     Ok(())
 }
 
@@ -588,6 +603,34 @@ pub fn image_version(image: &str) -> Result<String> {
     Ok(v)
 }
 
+/// The node's address as the panel has it, from the join key; None for a key of an older
+/// panel, or an image that does not tell.
+fn node_host(image: &str, key: &str) -> Option<String> {
+    let out = sandboxed()
+        .env("MIKAN_NODE_JOIN", key)
+        .args(["-e", "MIKAN_NODE_JOIN", "--entrypoint", "/usr/local/bin/mikan-node", image, "key-host"])
+        .output()
+        .ok()?;
+    let host = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+    (out.status.success() && !host.is_empty() && !host.contains(char::is_whitespace)).then_some(host)
+}
+
+/// What a node with port 80 held by another program needs for its public certificate: the
+/// node takes the port only while Let's Encrypt checks it. None when the port is free.
+pub fn node_port80(owner: Option<&str>, host: Option<&str>) -> Option<String> {
+    let who = owner.filter(|w| !matches!(*w, "mikan" | "mikan-node"))?;
+    let command = format!("mikan cert proxy {}", host.unwrap_or("<the node's domain>"));
+    Some(match acme::Front::from_process(who) {
+        Some(front) => format!(
+            "Let's Encrypt: {} holds port 80, where it checks this node for its public certificate. To pass those checks on to the node, run: {command}",
+            front.name()
+        ),
+        None => format!(
+            "Let's Encrypt: port 80 is taken ({who}), where it checks this node for its public certificate. Free it and the node gets one by itself; until then it uses a self-signed one."
+        ),
+    })
+}
+
 /// The image checks a node's join key and names the port the panel will connect to. The
 /// key goes through the environment, not the command line.
 pub fn node_port(image: &str, key: &str) -> Result<u16> {
@@ -612,13 +655,12 @@ fn write_files(plan: &Plan, image: &str, version: &str, api_port: Option<u16>, a
     panelfs::seal(root)
 }
 
-/// The files of an install. A first install makes them; a continued one finds .env there
-/// and keeps what it chose, writing only what is missing or has changed. acme_port is
+/// The files of an install. A first install makes them; a continued one finds the settings
+/// there and keeps what it chose, writing only what is missing or has changed. acme_port is
 /// where the panel answers Let's Encrypt when a web server holds port 80.
 fn write_files_in(root: &Path, plan: &Plan, image: &str, version: &str, api_port: Option<u16>, acme_port: Option<u16>) -> Result<()> {
     use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
-    let env_path = root.join(".env");
-    if env_path.exists() && !(plan.resume && unfinished(root)) {
+    if crate::config::installed(root) && !(plan.resume && unfinished(root)) {
         bail!("mikan is already installed in {}", root.display());
     }
     fs::create_dir_all(root)?;
@@ -631,7 +673,7 @@ fn write_files_in(root: &Path, plan: &Plan, image: &str, version: &str, api_port
         }
         Err(e) => return Err(e.into()),
     }
-    let mut env = if plan.resume { EnvFile::load(&env_path)? } else { EnvFile::new(&env_path) };
+    let mut env = if plan.resume { Config::load(root)? } else { Config::new(root) };
     env.set("MIKAN_IMAGE", image)?;
     env.set("MIKAN_VERSION", version)?;
     env.set("MIKAN_UFW", if plan.firewall { "1" } else { "0" })?;
@@ -651,19 +693,16 @@ fn write_files_in(root: &Path, plan: &Plan, image: &str, version: &str, api_port
             false
         }
     };
-    if plan.resume {
-        docker::ensure_compose(root, node)?;
-    } else {
-        write_private(&root.join("compose.yaml"), docker::compose_text(node).as_bytes())?;
-    }
     if !node {
         postgres_env(&mut env)?;
     }
-    env.save()
+    // The settings, then the compose.yaml made of them, which mounts the secrets they wrote.
+    docker::ensure_compose(root, &env)?;
+    env.retire_legacy()
 }
 
 /// Credentials persist across updates and resumed installs; never rotate a live database.
-pub fn postgres_env(env: &mut EnvFile) -> Result<()> {
+pub fn postgres_env(env: &mut Config) -> Result<()> {
     if env.get("MIKAN_POSTGRES_PASSWORD").is_none() {
         env.set("MIKAN_POSTGRES_PASSWORD", &token(48, ALNUM))?;
     }
@@ -678,10 +717,14 @@ pub fn postgres_env(env: &mut EnvFile) -> Result<()> {
 /// Waits for the panel to answer, or for a node's API port to listen.
 pub fn wait_ready(node_port: Option<u16>, limit: Duration) -> Result<()> {
     let start = Instant::now();
+    // A health check is a `docker compose exec` into a container that is just starting:
+    // asked every second at first, then less often, up to every 5 s.
+    let mut pause = Duration::from_secs(1);
     loop {
+        let left = limit.saturating_sub(start.elapsed());
         let ready = match node_port {
             Some(p) => system::port_owner(p, Proto::Tcp).is_some(),
-            None => docker::panel_healthy(),
+            None => docker::panel_healthy_within(left.clamp(Duration::from_secs(1), Duration::from_secs(10))),
         };
         if ready {
             return Ok(());
@@ -693,7 +736,10 @@ pub fn wait_ready(node_port: Option<u16>, limit: Duration) -> Result<()> {
                 .unwrap_or_default();
             return Err(anyhow!("mikan did not start in {} s. Its last logs:\n{}", limit.as_secs(), logs.trim_end()));
         }
-        thread::sleep(Duration::from_secs(1));
+        thread::sleep(pause);
+        if node_port.is_none() {
+            pause = (pause + Duration::from_secs(1)).min(Duration::from_secs(5));
+        }
     }
 }
 
@@ -702,10 +748,17 @@ pub fn wait_ready(node_port: Option<u16>, limit: Duration) -> Result<()> {
 /// with_password it stays out of the terminal's scrollback.
 pub fn summary(o: &Outcome, with_password: bool) -> String {
     let mut text = match o.node_port {
-        Some(p) => format!(
-            "mikan {} node is running and waits for its panel on port {p}.\nThe panel connects within 30 seconds: see its Nodes page.\nCommands on this server: mikan (menu), mikan status, mikan update",
-            o.version
-        ),
+        Some(p) => {
+            // An image that does not report says nothing: the panel is only expected.
+            let contact = match &o.hello {
+                Some(lines) => hello::render(lines).join("\n"),
+                None => "The panel connects within 30 seconds: see its Nodes page.".to_owned(),
+            };
+            format!(
+                "mikan {} node is running and waits for its panel on port {p}.\n{contact}\nCommands on this server: mikan (menu), mikan status, mikan doctor, mikan update",
+                o.version
+            )
+        }
         None => {
             let password = if o.password.is_empty() {
                 "not known: the admin was made by the attempt before this one; set a new password with: mikan reset-password".to_owned()
@@ -715,12 +768,12 @@ pub fn summary(o: &Outcome, with_password: bool) -> String {
                 "shown on the installer's last screen only; a new one: mikan reset-password".to_owned()
             };
             format!(
-                "mikan {} is running.\n\n  Panel     {}\n  Login     {}\n  Password  {password}\n\nCommands on this server: mikan (menu), mikan status, mikan update",
+                "mikan {} is running.\n\n  Panel     {}\n  Login     {}\n  Password  {password}\n\nCommands on this server: mikan (menu), mikan status, mikan doctor, mikan update",
                 o.version, o.url, o.login
             )
         }
     };
-    if let Some(t) = o.acme.as_ref().and_then(acme::Report::text) {
+    for t in o.acme.as_ref().and_then(acme::Report::text).into_iter().chain(o.port80.clone()) {
         text.push_str("\n\n");
         text.push_str(&t);
     }
@@ -735,20 +788,34 @@ pub fn unfinished_install() -> bool {
 /// `mikan install`: the TUI in a terminal, the plain mode with --yes or without one. On
 /// an installed server it opens the menu, or with --yes updates: the one-line install
 /// is also how a server of 0.3.8 and before moves to this installer. An install that
-/// stopped half way is continued, in the plain mode, from what its .env says.
+/// stopped half way is continued, in the plain mode, from what its settings say.
 pub fn install(opts: Options) -> Result<()> {
     let root = Path::new(DIR);
     if unfinished(root) {
         crate::out("An earlier install did not finish: continuing it.");
-        return plain(opts, Some(EnvFile::load(root.join(".env"))?));
+        return plain(opts, Some(Config::load(root)?));
     }
-    if root.join(".env").exists() {
-        if crate::tui::interactive() && !opts.yes {
+    if crate::config::installed(root) {
+        let join = match &opts.join {
+            Some(_) => Some(crate::ops::Install::load()?.node),
+            None => None,
+        };
+        if join == Some(false) {
+            bail!("this server runs a mikan panel: a node of another panel needs a server of its own");
+        }
+        if join.is_none() && crate::tui::interactive() && !opts.yes {
             return crate::tui::menu();
         }
         crate::out(&format!("mikan is already installed in {DIR}: updating it."));
         let args = crate::update::UpdateArgs { target: opts.image_tar.or(opts.image), ..Default::default() };
-        return crate::update::update(&args, &mut crate::out, &mut |_| {});
+        crate::update::update(&args, &mut crate::out, &mut |_| {})?;
+        // The panel's node command run again on a node (a second try, a new key): the key
+        // it carries is the one the panel now waits for, and an update alone would keep the
+        // old one, which the panel refuses.
+        return match opts.join {
+            Some(key) => crate::ops::join(key.trim(), opts.panel_ip),
+            None => Ok(()),
+        };
     }
     if crate::tui::interactive() && !opts.yes {
         return crate::tui::wizard(opts);
@@ -757,7 +824,7 @@ pub fn install(opts: Options) -> Result<()> {
 }
 
 /// The install without the TUI: every step as a line.
-fn plain(opts: Options, earlier: Option<EnvFile>) -> Result<()> {
+fn plain(opts: Options, earlier: Option<Config>) -> Result<()> {
     let mut plan = Plan::from(&opts);
     if let Some(env) = &earlier {
         plan = plan.resumed(env);
@@ -824,7 +891,7 @@ fn plain(opts: Options, earlier: Option<EnvFile>) -> Result<()> {
     bail!("the install stopped")
 }
 
-fn mark(l: system::Level) -> &'static str {
+pub fn mark(l: system::Level) -> &'static str {
     match l {
         system::Level::Ok => "✓",
         system::Level::Warn => "!",
@@ -850,9 +917,9 @@ mod tests {
 
     #[test]
     fn postgres_credentials_survive_resumes_and_updates() {
-        let mut env = EnvFile::new("unused");
+        let mut env = Config::new("unused");
         postgres_env(&mut env).unwrap();
-        let before = env.render();
+        let before = env.to_env_text();
         let password = env.get("MIKAN_POSTGRES_PASSWORD").unwrap();
         assert_eq!(password.len(), 48);
         assert!(password.bytes().all(|b| b.is_ascii_alphanumeric()));
@@ -861,7 +928,7 @@ mod tests {
             Some(format!("postgresql://mikan:{password}@localhost/mikan?host=/run/postgresql").as_str())
         );
         postgres_env(&mut env).unwrap();
-        assert_eq!(env.render(), before, "live credentials must never rotate");
+        assert_eq!(env.to_env_text(), before, "live credentials must never rotate");
     }
 
     #[test]
@@ -911,19 +978,23 @@ mod tests {
         // nginx holds port 80: the panel answers Let's Encrypt on a local port behind it
         write_files_in(&root, &p, "ghcr.io/getsunokaze/kinkan@sha256:aa", "0.4.4", None, Some(18080)).unwrap();
         assert!(unfinished(&root), "the marker is there from the first file");
-        let env = EnvFile::load(root.join(".env")).unwrap();
+        let env = Config::load(&root).unwrap();
         assert_eq!(env.get("PANEL_PORT"), Some("21355"));
         assert_eq!(env.get("MIKAN_ACME_LISTEN"), Some("127.0.0.1:18080"));
         assert!(docker::PANEL_COMPOSE.contains("MIKAN_ACME_LISTEN: \"${MIKAN_ACME_LISTEN:-:80}\""), "compose passes it on");
-        assert_eq!(fs::read_to_string(root.join("compose.yaml")).unwrap(), docker::PANEL_COMPOSE);
+        assert_eq!(fs::read_to_string(root.join("compose.yaml")).unwrap(), docker::compose_text(&env).unwrap());
+        assert!(
+            root.join(crate::config::SECRETS).join("database_url").exists() && !root.join(".env").exists(),
+            "secrets in files, no .env"
+        );
         // a fresh install over it is refused
         assert!(write_files_in(&root, &p, "x", "0.4.4", None, None).is_err(), "an install does not overwrite another");
-        // the continued one takes the port from .env, whatever it would have drawn
+        // the continued one takes the port from the settings, whatever it would have drawn
         p = Plan::from(&Options { port: Some(30000), ..Default::default() }).resumed(&env);
         assert!(p.resume);
         assert_eq!(p.port, 21355);
         write_files_in(&root, &p, "ghcr.io/getsunokaze/kinkan@sha256:bb", "0.4.5", None, None).unwrap();
-        let again = EnvFile::load(root.join(".env")).unwrap();
+        let again = Config::load(&root).unwrap();
         assert_eq!((again.get("PANEL_PORT"), again.get("MIKAN_VERSION")), (Some("21355"), Some("0.4.5")));
         assert_eq!(again.get("MIKAN_ACME_LISTEN"), None, "port 80 is free now: the panel takes it");
         // done: the last step removes the marker, and the server is an installed one
@@ -939,9 +1010,10 @@ mod tests {
         let key = "mikan1.AbC_-9";
         let p = Plan::from(&Options { join: Some(key.into()), ..Default::default() });
         write_files_in(&root, &p, "ghcr.io/getsunokaze/kinkan", "0.4.4", Some(25305), None).unwrap();
-        let env = EnvFile::load(root.join(".env")).unwrap();
+        let env = Config::load(&root).unwrap();
         assert_eq!((env.get("MIKAN_MODE"), env.get("NODE_API_PORT"), env.get("MIKAN_NODE_JOIN")), (Some("node"), Some("25305"), Some(key)));
-        assert_eq!(fs::read_to_string(root.join("compose.yaml")).unwrap(), docker::NODE_COMPOSE);
+        assert_eq!(fs::read_to_string(root.join("compose.yaml")).unwrap(), docker::compose_text(&env).unwrap());
+        assert_eq!(fs::read_to_string(root.join(crate::config::SECRETS).join("node_join")).unwrap(), key);
         let resumed = Plan::from(&Options::default()).resumed(&env);
         assert!(resumed.node() && resumed.join.as_deref() == Some(key));
         fs::remove_dir_all(&root).unwrap();
@@ -958,6 +1030,8 @@ mod tests {
             login: "l".into(),
             password: "p4ssw0rd".into(),
             acme: None,
+            hello: None,
+            port80: None,
         };
         assert!(summary(&shown, true).contains("Password  p4ssw0rd"));
         // after the installer's screen the terminal gets the link and login, not the password
@@ -970,6 +1044,42 @@ mod tests {
         let report = acme::Report::other("apache2");
         let with_acme = summary(&Outcome { acme: Some(report.clone()), ..shown }, false);
         assert!(with_acme.ends_with(&report.text().unwrap()), "the rule is not last");
+    }
+
+    // A node says how its panel's first contact went; an old image says nothing, and the
+    // summary then only expects the panel.
+    #[test]
+    fn the_summary_of_a_node_tells_how_the_panel_connected() {
+        let silent = Outcome {
+            version: "0.5.0.6".into(),
+            node_port: Some(31234),
+            url: String::new(),
+            login: String::new(),
+            password: String::new(),
+            acme: None,
+            hello: None,
+            port80: None,
+        };
+        assert!(summary(&silent, true).contains("The panel connects within 30 seconds"));
+        let ok = Outcome { hello: Some(vec![(system::Level::Ok, "The panel connected to this node.".into())]), ..silent.clone() };
+        let text = summary(&ok, true);
+        assert!(
+            text.contains("\n✓ The panel connected to this node.\n") && !text.contains("within 30 seconds"),
+            "the summary does not tell the panel connected"
+        );
+        let blocked =
+            Outcome { hello: Some(vec![(system::Level::Error, "The panel could not reach port 31234 here".into())]), ..silent.clone() };
+        assert!(summary(&blocked, true).contains("\n✗ The panel could not reach port 31234 here\n"));
+        let behind = Outcome { port80: node_port80(Some("nginx"), Some("node.example.com")), ..silent };
+        assert!(summary(&behind, true).ends_with("To pass those checks on to the node, run: mikan cert proxy node.example.com"));
+    }
+
+    #[test]
+    fn a_node_behind_a_web_server_is_told_the_command() {
+        assert_eq!(node_port80(None, Some("node.example.com")), None);
+        assert_eq!(node_port80(Some("mikan-node"), None), None);
+        assert!(node_port80(Some("caddy"), None).unwrap().ends_with("mikan cert proxy <the node's domain>"));
+        assert!(node_port80(Some("apache2"), None).unwrap().contains("port 80 is taken (apache2)"));
     }
 
     #[test]

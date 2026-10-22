@@ -6,14 +6,15 @@ import (
 	"math"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 
 	"mikan/internal/nodeapi"
+	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/textutil"
 )
 
 // The speed test of a node's own way to the internet: run on the admin's word, the
@@ -47,7 +48,7 @@ func (h *handlers) registerSpeedTests() {
 }
 
 func speedTestView(r db.NodeSpeedtest) SpeedTestView {
-	return SpeedTestView{ID: r.ID, At: time.Unix(r.At, 0).UTC(), PingMs: r.PingMs, JitterMs: r.JitterMs, LossPct: r.LossPct,
+	return SpeedTestView{ID: r.ID, At: store.Time(r.At), PingMs: r.PingMs, JitterMs: r.JitterMs, LossPct: r.LossPct,
 		DownBps: r.DownBps, UpBps: r.UpBps, Error: r.Error}
 }
 
@@ -103,7 +104,7 @@ func (h *handlers) runSpeedTest(ctx context.Context, in *nodeIDInput) (*speedTes
 		var err error
 		row, err = q.AddNodeSpeedTest(saveCtx, db.AddNodeSpeedTestParams{NodeID: in.ID, At: at,
 			PingMs: sane(res.PingMs, 60_000), JitterMs: sane(res.JitterMs, 60_000), LossPct: math.Max(0, sane(res.LossPct, 100)),
-			DownBps: max(0, min(res.DownBps, 1e12)), UpBps: max(0, min(res.UpBps, 1e12)), Error: clipText(res.Error, 300)})
+			DownBps: max(0, min(res.DownBps, 1e12)), UpBps: max(0, min(res.UpBps, 1e12)), Error: textutil.Clip(res.Error, 300)})
 		if err != nil {
 			return err
 		}
@@ -164,12 +165,4 @@ func (h *handlers) listSpeedTests(ctx context.Context, in *speedTestsInput) (*sp
 		out.Body = append(out.Body, speedTestView(r))
 	}
 	return out, nil
-}
-
-// clipText cuts s to at most n bytes without splitting a letter.
-func clipText(s string, n int) string {
-	if len(s) > n {
-		s = s[:n]
-	}
-	return strings.ToValidUTF8(s, "")
 }

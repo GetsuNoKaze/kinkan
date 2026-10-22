@@ -22,6 +22,7 @@ type TuicOption struct {
 	MaxIdleTime           int               `inbound:"max-idle-time,omitempty"`
 	AuthenticationTimeout int               `inbound:"authentication-timeout,omitempty"`
 	ALPN                  []string          `inbound:"alpn,omitempty"`
+	ZeroRTT               bool              `inbound:"zero-rtt,omitempty"`
 	MaxUdpRelayPacketSize int               `inbound:"max-udp-relay-packet-size,omitempty"`
 	CWND                  int               `inbound:"cwnd,omitempty"`
 	BBRProfile            string            `inbound:"bbr-profile,omitempty"`
@@ -61,6 +62,7 @@ func NewTuic(options *TuicOption) (*Tuic, error) {
 			MaxIdleTime:           options.MaxIdleTime,
 			AuthenticationTimeout: options.AuthenticationTimeout,
 			ALPN:                  options.ALPN,
+			ZeroRTT:               options.ZeroRTT,
 			MaxUdpRelayPacketSize: options.MaxUdpRelayPacketSize,
 			CWND:                  options.CWND,
 			BBRProfile:            options.BBRProfile,
@@ -102,3 +104,30 @@ func (t *Tuic) Close() error {
 }
 
 var _ C.InboundListener = (*Tuic)(nil)
+
+// Users implements constant.InboundUserUpdater
+func (t *Tuic) Users() []C.InboundUser {
+	if t.l != nil {
+		return t.l.Users()
+	}
+	return tuic.ConfigUsers(t.config.Users, false)
+}
+
+// SetUsers implements constant.InboundUserUpdater; the names are UUIDs.
+func (t *Tuic) SetUsers(users []C.InboundUser) error {
+	if t.l == nil {
+		return setListenerUsers(t.Name(), nil, users)
+	}
+	return setListenerUsers(t.Name(), t.l, users)
+}
+
+// SameExceptUsers implements constant.InboundUserUpdater
+func (t *Tuic) SameExceptUsers(config C.InboundConfig) bool {
+	return equalExceptUsers(t.config, config)
+}
+
+// InboundUsers implements constant.InboundUserLister
+func (t *Tuic) InboundUsers() []string { return userNames(t.Users()) }
+
+var _ C.InboundUserUpdater = (*Tuic)(nil)
+var _ C.InboundUserLister = (*Tuic)(nil)

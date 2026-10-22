@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	"mikan/internal/proto"
+	"mikan/internal/netaddr"
 )
 
 type Result struct {
@@ -49,8 +49,13 @@ const (
 type Options struct {
 	// LoopbackPort allows 127.0.0.1:<port> alone: the panel's own HTTPS (self-steal).
 	LoopbackPort int
+	SitePort     int // Kinkan: the node's own website on loopback (kinkan.go)
 	// Any allows every address: tests and test setups.
 	Any bool
+	// Wide lets Neighbors go past its own /24: to the other /24s of the /16, the nearest
+	// first, while it finds fewer sites than asked and has time. The admin turns it on: that
+	// many connections may look like a scan of the network to the hoster.
+	Wide bool
 	// Resolve looks a name up; nil asks the system's resolver for IPv4.
 	Resolve func(ctx context.Context, host string) ([]netip.Addr, error)
 }
@@ -64,10 +69,10 @@ func (o Options) lookup(ctx context.Context, host string) ([]netip.Addr, error) 
 
 // allowed: may the check connect to ip on port?
 func (o Options) allowed(ip netip.Addr, port string) bool {
-	if o.Any || proto.PublicAddr(ip) {
+	if o.Any || netaddr.IsPublic(ip) {
 		return true
 	}
-	return o.LoopbackPort > 0 && ip == netip.MustParseAddr("127.0.0.1") && port == strconv.Itoa(o.LoopbackPort)
+	return o.LoopbackPort > 0 && ip == netip.MustParseAddr("127.0.0.1") && port == strconv.Itoa(o.LoopbackPort) || o.kinkanSite(ip, port)
 }
 
 // Check tests dest as a REALITY target for clients sending sni ("" = the host of dest). It
@@ -99,7 +104,7 @@ func Check(ctx context.Context, dest, sni string, o Options) Result {
 		// The first address the check may use: a name with a private address among its
 		// answers is still dialed on a public one, never on the private one.
 		// A name never leads to loopback, not even to the panel's own port: that is for the literal address.
-		i := slices.IndexFunc(addrs, func(a netip.Addr) bool { return o.Any || proto.PublicAddr(a) })
+		i := slices.IndexFunc(addrs, func(a netip.Addr) bool { return o.Any || netaddr.IsPublic(a) })
 		if i < 0 {
 			r.Error = "private"
 			return r
@@ -187,27 +192,94 @@ func classify(err error) string {
 	return "handshake"
 }
 
+// WideEnough is where a wide search stops: this many sites found is plenty to choose from,
+// and every further connection is one more the hoster may count.
+const WideEnough = 20
+
 // Neighbors scans the /24 around ip for usable targets and returns the best ones by RTT.
+// With o.Wide it goes on through the /24s next to it in the /16 (wideBlocks) until it has
+// enough sites (limit, at most WideEnough) or ctx ends.
 func Neighbors(ctx context.Context, ip string, limit int, o Options) (found []Result, scanned int, err error) {
 	self, err := netip.ParseAddr(ip)
 	if err != nil || !self.Is4() {
 		return nil, 0, errors.New("need an IPv4 address")
 	}
 	// It connects to a /24 around ip: never the neighborhood of this host's own network.
-	if !o.Any && !proto.PublicAddr(self) {
+	if !o.Any && !netaddr.IsPublic(self) {
 		return nil, 0, errors.New("need a public IPv4 address")
 	}
-	prefix, _ := self.Prefix(24)
+	own, _ := self.Prefix(24)
+	blocks := []netip.Prefix{own}
+	if o.Wide {
+		blocks = append(blocks, wideBlocks(self)...)
+	}
+	enough := 0 // the own /24 is scanned whole, as it always was
+	if o.Wide {
+		enough = WideEnough
+		if limit > 0 && limit < enough {
+			enough = limit
+		}
+	}
+	seen := map[string]bool{}
+	for i, block := range blocks {
+		if i > 0 && (ctx.Err() != nil || len(found) >= enough) {
+			break
+		}
+		// Past the own /24 a block stops as soon as the search has enough.
+		want := 0
+		if i > 0 {
+			want = enough - len(found)
+		}
+		f, n := scanBlock(ctx, block, self, o, seen, want)
+		found, scanned = append(found, f...), scanned+n
+	}
+	sort.Slice(found, func(i, j int) bool { return found[i].RTTms < found[j].RTTms })
+	if limit > 0 && len(found) > limit {
+		found = found[:limit]
+	}
+	// A wide scan ends on its deadline by design; what it found by then is the answer.
+	if o.Wide && len(blocks) > 1 && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return found, scanned, nil
+	}
+	return found, scanned, ctx.Err()
+}
+
+// wideBlocks are the other /24s of self's /16, the nearest third octet first: c+1, c-1,
+// c+2, c-2 and so on.
+func wideBlocks(self netip.Addr) []netip.Prefix {
+	a := self.As4()
+	c := int(a[2])
+	var out []netip.Prefix
+	for d := 1; d <= 255; d++ {
+		for _, x := range []int{c + d, c - d} {
+			if x < 0 || x > 255 {
+				continue
+			}
+			out = append(out, netip.PrefixFrom(netip.AddrFrom4([4]byte{a[0], a[1], byte(x), 0}), 24))
+		}
+	}
+	return out
+}
+
+// scanBlock checks every host of one /24 for a usable target; seen keeps a name found in
+// another block from coming twice. With want > 0 it starts no more connections once it
+// has found that many.
+func scanBlock(ctx context.Context, prefix netip.Prefix, self netip.Addr, o Options, seen map[string]bool, want int) (found []Result, scanned int) {
+	ctx, stop := context.WithCancel(ctx)
+	defer stop()
 	var (
-		mu   sync.Mutex
-		wg   sync.WaitGroup
-		sem  = make(chan struct{}, 64)
-		seen = map[string]bool{}
+		mu  sync.Mutex
+		wg  sync.WaitGroup
+		sem = make(chan struct{}, 64)
 	)
 	for a := prefix.Addr(); prefix.Contains(a); a = a.Next() {
 		last := a.As4()[3]
-		if a == self || last == 0 || last == 255 {
+		// A /16 may hold addresses that are no one's site (a private or reserved range).
+		if a == self || last == 0 || last == 255 || !o.Any && !netaddr.IsPublic(a) {
 			continue
+		}
+		if ctx.Err() != nil {
+			break
 		}
 		scanned++
 		wg.Add(1)
@@ -231,19 +303,18 @@ func Neighbors(ctx context.Context, ip string, limit int, o Options) (found []Re
 				return
 			}
 			mu.Lock()
-			if !seen[r.SNI] {
+			if !seen[r.SNI] && (want == 0 || len(found) < want) {
 				seen[r.SNI] = true
 				found = append(found, r)
+				if want > 0 && len(found) >= want {
+					stop() // enough: the connections still open end, no new ones start
+				}
 			}
 			mu.Unlock()
 		}(a)
 	}
 	wg.Wait()
-	sort.Slice(found, func(i, j int) bool { return found[i].RTTms < found[j].RTTms })
-	if limit > 0 && len(found) > limit {
-		found = found[:limit]
-	}
-	return found, scanned, ctx.Err()
+	return found, scanned
 }
 
 // certName asks an IP for its default certificate (no SNI) and returns a concrete name

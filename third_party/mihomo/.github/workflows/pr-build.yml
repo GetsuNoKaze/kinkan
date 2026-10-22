@@ -1,0 +1,72 @@
+name: PR Build
+# Cross-compiles the main platforms in one job, so a pull request learns in minutes
+# whether it builds everywhere. The full release build (Build) runs on pushes to
+# dev and main and on tags.
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths-ignore:
+      - "site/**"
+      - "docs/**"
+      - "**.md"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/workflows/pages.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-build-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  cross-build:
+    name: cross-build
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: 0
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up Go
+        run: bash .github/scripts/setup-go.sh 1.26
+
+      # setup-go cached these; the pinned toolchain does not, so restore them here.
+      - name: Locate Go caches
+        id: go-cache
+        run: |
+          echo "build=$(go env GOCACHE)" >>"$GITHUB_OUTPUT"
+          echo "mod=$(go env GOMODCACHE)" >>"$GITHUB_OUTPUT"
+
+      - name: Cache Go modules and build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ steps.go-cache.outputs.build }}
+            ${{ steps.go-cache.outputs.mod }}
+          key: go-pr-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/go-toolchains.txt', 'go.sum') }}
+          restore-keys: go-pr-build-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Build
+        run: |
+          set -e
+          targets="linux/amd64 linux/arm64 linux/arm linux/386 linux/mips linux/mipsle linux/riscv64 linux/loong64 \
+                   windows/amd64 windows/arm64 windows/386 darwin/amd64 darwin/arm64 freebsd/amd64 android/arm64"
+          failed=""
+          for t in $targets; do
+            os=${t%/*}; arch=${t#*/}
+            echo "::group::$t"
+            if GOOS=$os GOARCH=$arch go build -trimpath -tags with_gvisor -o /dev/null .; then
+              echo "ok $t"
+            else
+              failed="$failed $t"
+            fi
+            echo "::endgroup::"
+          done
+          if [ -n "$failed" ]; then
+            echo "::error::build failed for:$failed"
+            exit 1
+          fi

@@ -1,6 +1,7 @@
-import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { UsersSearch } from "../admin/search";
-import { api, rawApi, unwrap, type Schemas, type User } from "./client";
+import { nextOffset } from "../lib/paging";
+import { api, unwrap, type Schemas, type User } from "./client";
 
 export const qk = {
   me: ["me"] as const,
@@ -9,6 +10,7 @@ export const qk = {
   userTraffic: (id: number) => ["users", "traffic", id] as const,
   devices: (id: number) => ["users", "devices", id] as const,
   boundDevices: (id: number) => ["users", "bound", id] as const,
+  deviceBans: (id: number) => ["users", "bans", id] as const,
   tariffs: ["tariffs"] as const,
   inbounds: ["inbounds"] as const,
   presets: ["presets"] as const,
@@ -24,6 +26,12 @@ export const qk = {
   payments: ["payments"] as const,
   paymentSettings: ["payment-settings"] as const,
   addons: ["addons"] as const,
+  marketplace: ["marketplace"] as const,
+  addonSources: ["addon-sources"] as const,
+  botSlot: ["bot-slot"] as const,
+  addonStorage: ["addon-storage"] as const,
+  addonPage: (id: string) => ["addon-page", id] as const,
+  telegramBackup: ["telegram-backup"] as const,
   warp: (node: number) => ["warp", node] as const,
   cascade: (node: number) => ["cascade", node] as const,
   pools: ["pools"] as const,
@@ -34,6 +42,8 @@ export const qk = {
   userGrants: (id: number) => ["users", "grants", id] as const,
   torrent: ["torrent"] as const,
   filters: ["filters"] as const,
+  trafficDetail: ["traffic-detail"] as const,
+  exitDns: ["exit-dns"] as const,
   torrentHits: (user: number) => ["torrent", "hits", user] as const,
   speedTests: (node: number) => ["speedtests", node] as const,
   subPage: ["sub-page"] as const,
@@ -58,23 +68,32 @@ type UsersFilter = Pick<UsersSearch, "q" | "folder" | "source"> & {
   hidden?: "hide" | "show" | "only";
 };
 
-/** The users page lists everyone it can (the API's cap); a card that shows a few asks for just those. */
-const USERS_MAX = 500;
+const usersQuery = (f: UsersFilter) => ({ state: f.state, q: f.q || undefined, folder: f.folder === undefined ? undefined : String(f.folder), source: f.source, hidden: f.hidden });
 
-export function useUsers(f: UsersFilter, o: { limit?: number; refetchInterval?: number } = {}) {
-  const limit = o.limit ?? USERS_MAX;
+/** A card that shows a few users asks for just those. */
+export function useUsers(f: UsersFilter, o: { limit: number; refetchInterval?: number }) {
   return useQuery({
-    queryKey: [...qk.users, "list", f, limit],
-    queryFn: ({ signal }) =>
-      unwrap(
-        api.GET("/api/v1/users", {
-          params: { query: { state: f.state, q: f.q || undefined, folder: f.folder === undefined ? undefined : String(f.folder), source: f.source, hidden: f.hidden, limit } },
-          signal,
-        }),
-      ),
+    queryKey: [...qk.users, "list", f, o.limit],
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users", { params: { query: { ...usersQuery(f), limit: o.limit } }, signal })),
     placeholderData: keepPreviousData,
     // Who is online is the only thing in the list that moves on its own; edits refresh it at once.
     refetchInterval: o.refetchInterval ?? 30_000,
+  });
+}
+
+// The users page asks for as many as the API gives at once, then the next ones ("show more").
+const USERS_PAGE = 500;
+
+/** The users page's list, a page at a time. The poll asks every page loaded again, so it
+ * slows down with them. */
+export function useUsersPages(f: UsersFilter) {
+  return useInfiniteQuery({
+    queryKey: [...qk.users, "pages", f],
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) => unwrap(api.GET("/api/v1/users", { params: { query: { ...usersQuery(f), limit: USERS_PAGE, offset: pageParam } }, signal })),
+    getNextPageParam: nextOffset,
+    placeholderData: keepPreviousData,
+    refetchInterval: (q) => 30_000 * Math.max(1, q.state.data?.pages.length ?? 1),
   });
 }
 
@@ -108,6 +127,14 @@ export function useBoundDevices(id: number) {
     queryKey: qk.boundDevices(id),
     queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}/bound-devices", { params: { path: { id } }, signal })),
     refetchInterval: 30_000,
+  });
+}
+
+/** Devices banned from a user's subscription; they change only from the card. */
+export function useDeviceBans(id: number) {
+  return useQuery({
+    queryKey: qk.deviceBans(id),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}/device-bans", { params: { path: { id } }, signal })),
   });
 }
 
@@ -150,18 +177,55 @@ export function useNode() {
   return useQuery({ queryKey: qk.node, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/node", { signal })), refetchInterval: 10_000 });
 }
 
-export function useNodes() {
+/** The nodes; `watch` polls closely while something waits for a node (a new one joining). */
+export function useNodes(watch?: boolean) {
   return useQuery({
     queryKey: qk.nodes,
     queryFn: ({ signal }) => unwrap(api.GET("/api/v1/nodes", { signal })),
     // Closer while a node updates: it goes down and comes back on the new version.
-    refetchInterval: (q) => (q.state.data?.some((n) => n.update?.state === "running") ? 4_000 : 30_000),
+    refetchInterval: (q) => (watch ? 2_500 : q.state.data?.some((n) => n.update?.state === "running") ? 4_000 : 30_000),
   });
 }
 
 /** Payment settings: also whether selling is on, which shows Payments in the menu. */
 export function usePaymentSettings() {
   return useQuery({ queryKey: qk.paymentSettings, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/payments/settings", { signal })) });
+}
+
+/** The payment methods (protocol 1 adapters): followed every few seconds while the server works on a request. */
+export function useAddons() {
+  return useQuery({
+    queryKey: qk.addons,
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/addons", { signal })),
+    refetchInterval: (q) => (q.state.data?.queue?.length ? 3_000 : false),
+  });
+}
+
+/** The marketplace of protocol 2: followed every few seconds while the server works on a request. */
+export function useMarketplace() {
+  return useQuery({
+    queryKey: qk.marketplace,
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/marketplace", { signal })),
+    refetchInterval: (q) => (q.state.data?.queue?.length ? 3_000 : false),
+  });
+}
+
+/** The sources of third-party addons. The server reads them from their own servers, so it is asked only while the drawer is open. */
+export function useAddonSources(enabled: boolean) {
+  return useQuery({
+    queryKey: qk.addonSources,
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/addon-sources", { signal })),
+    enabled,
+    staleTime: 0,
+  });
+}
+
+/** Which addon answers in the subscribers' bot; empty while none does. */
+export function useBotSlot() {
+  return useQuery({
+    queryKey: qk.botSlot,
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/telegram/bot-addon", { signal })),
+  });
 }
 
 export function useTorrent() {
@@ -171,6 +235,16 @@ export function useTorrent() {
 /** The ingress and egress filters of the nodes. */
 export function useFilters() {
   return useQuery({ queryKey: qk.filters, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/filters", { signal })) });
+}
+
+/** Whether the nodes count the subscriptions' traffic by site, and for how many days. */
+export function useTrafficDetail() {
+  return useQuery({ queryKey: qk.trafficDetail, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/traffic-detail", { signal })) });
+}
+
+/** The DNS at the exit of the nodes. */
+export function useExitDns() {
+  return useQuery({ queryKey: qk.exitDns, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/exit-dns", { signal })) });
 }
 
 /** The torrent blocker's catches, newest first, a page at a time; user 0: everyone's. */
@@ -200,12 +274,24 @@ export function useUpdates() {
   });
 }
 
-/** Mutations that change a user refresh every user-related view. */
-export function useUserMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>) {
+/** What a user mutation can change: "devices" touches only the user's devices (renaming,
+ * unbinding, banning), so the traffic, the dashboard and the folders are not asked again. */
+type UserScope = "all" | "devices";
+
+/** The user views a devices mutation changes: the user (its device count), the list (the
+ * same count) and the device lists. */
+const DEVICE_VIEWS = new Set(["one", "list", "pages", "devices", "bound", "bans"]);
+
+/** Mutations that change a user refresh the user-related views they change. */
+export function useUserMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>, scope: UserScope = "all") {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
     onSettled: () => {
+      if (scope === "devices") {
+        void qc.invalidateQueries({ queryKey: qk.users, predicate: (q) => DEVICE_VIEWS.has(String(q.queryKey[1])) });
+        return;
+      }
       void qc.invalidateQueries({ queryKey: qk.users });
       void qc.invalidateQueries({ queryKey: qk.overview });
       // A user moved in or out of a folder changes its count.
@@ -225,6 +311,10 @@ export const userActions = {
   bulk: (body: Schemas["BulkInputBody"]) => unwrap(api.POST("/api/v1/users/bulk", { body })),
   unbindDevice: ({ id, device }: { id: number; device: number }) =>
     unwrap(api.DELETE("/api/v1/users/{id}/bound-devices/{device}", { params: { path: { id, device } } })),
+  renameDevice: ({ id, device, name }: { id: number; device: number; name: string }) =>
+    unwrap(api.PATCH("/api/v1/users/{id}/bound-devices/{device}", { params: { path: { id, device } }, body: { name } })),
+  banDevice: ({ id, device }: { id: number; device: number }) => unwrap(api.POST("/api/v1/users/{id}/bound-devices/{device}/ban", { params: { path: { id, device } } })),
+  unbanDevice: ({ id, ban }: { id: number; ban: number }) => unwrap(api.DELETE("/api/v1/users/{id}/device-bans/{ban}", { params: { path: { id, ban } } })),
 };
 
 /** One paid period: a month up to the billing day, or 30 days without one. */
@@ -290,70 +380,32 @@ export function useUserGrants(id: number) {
 }
 
 
-export type PromoCode = {
-  id: number;
-  code: string;
-  name: string;
-  description: string;
-  type: "days" | "traffic" | "percent" | "fixed";
-  value: number;
-  currency: string;
-  starts_at?: string;
-  ends_at?: string;
-  max_uses?: number;
-  used_count: number;
-  per_user_limit: number;
-  discount_ttl: number;
-  min_order: number;
-  max_discount: number;
-  tariff_ids: number[];
-  pool_id?: number;
-  first_purchase_only: boolean;
-  new_users_only: boolean;
-  enabled: boolean;
-  status: string;
-  created_at: string;
-  created_by?: number;
-};
+/** Promo codes and their history are what the API's schema says they are. */
+export type PromoCode = Schemas["PromoCodeView"];
+export type PromoRedemption = Schemas["PromoRedemptionView"];
+type PromoBody = Schemas["PromoBody"];
 
-export type PromoRedemption = {
-  id: number;
-  promo_id: number;
-  user_id?: number;
-  tg_id: number;
-  payment_id?: number;
-  status: string;
-  redeemed_at: string;
-  expires_at?: string;
-  days: number;
-  bytes: number;
-  discount_amount: number;
-  original_amount: number;
-  final_amount: number;
-  currency: string;
-  code: string;
-};
-
-type PromoBody = {
-  code: string; name: string; description: string; type: PromoCode["type"]; value: number; currency: string;
-  starts_at?: number; ends_at?: number; max_uses?: number; per_user_limit: number; discount_ttl: number;
-  min_order: number; max_discount: number; tariff_ids: number[]; pool_id?: number; first_purchase_only: boolean; new_users_only: boolean; enabled: boolean;
-};
-
-type PromoList = { items: PromoCode[]; total: number };
-type PromoRedemptionList = { items: PromoRedemption[]; total: number };
+// The promo lists come a page at a time, the next one by its offset ("show more").
+const PROMO_PAGE = 100;
 
 export function usePromocodes() {
-  return useQuery({
-    queryKey: qk.promocodes,
-    queryFn: ({ signal }) => rawJson<PromoList>("/api/v1/promocodes?limit=100", { signal }),
+  return useInfiniteQuery({
+    queryKey: [...qk.promocodes, "list"],
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) => unwrap(api.GET("/api/v1/promocodes", { params: { query: { limit: PROMO_PAGE, offset: pageParam } }, signal })),
+    getNextPageParam: nextOffset,
   });
 }
 
-export function usePromoRedemptions() {
-  return useQuery({
-    queryKey: qk.promocodeRedemptions,
-    queryFn: ({ signal }) => rawJson<PromoRedemptionList>("/api/v1/promocodes/redemptions?limit=100", { signal }),
+/** The activations, newest first; q is searched on the server (a part of the code, a client's id). */
+export function usePromoRedemptions(q: string) {
+  return useInfiniteQuery({
+    queryKey: [...qk.promocodeRedemptions, q],
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) =>
+      unwrap(api.GET("/api/v1/promocodes/redemptions", { params: { query: { limit: PROMO_PAGE, offset: pageParam, q: q || undefined } }, signal })),
+    getNextPageParam: nextOffset,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -364,24 +416,49 @@ export function usePromoMutations() {
     queryClient.invalidateQueries({ queryKey: qk.promocodeRedemptions }),
   ]);
   const create = useMutation({
-    mutationFn: (body: PromoBody) => rawJson<PromoCode>("/api/v1/promocodes", { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } }),
+    mutationFn: (body: PromoBody) => unwrap(api.POST("/api/v1/promocodes", { body })),
     onSuccess: refresh,
   });
   const update = useMutation({
-    mutationFn: ({ id, body }: { id: number; body: PromoBody }) => rawJson<PromoCode>(`/api/v1/promocodes/${id}`, { method: "PUT", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } }),
+    mutationFn: ({ id, body }: { id: number; body: PromoBody }) => unwrap(api.PUT("/api/v1/promocodes/{id}", { params: { path: { id } }, body })),
     onSuccess: refresh,
   });
   const toggle = useMutation({
-    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) => rawJson<PromoCode>(`/api/v1/promocodes/${id}/enabled`, { method: "POST", body: JSON.stringify({ enabled }), headers: { "Content-Type": "application/json" } }),
+    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) => unwrap(api.POST("/api/v1/promocodes/{id}/enabled", { params: { path: { id } }, body: { enabled } })),
     onSuccess: refresh,
   });
   const remove = useMutation({
-    mutationFn: (id: number) => rawJson<Record<string, never>>(`/api/v1/promocodes/${id}`, { method: "DELETE" }),
+    mutationFn: (id: number) => unwrap(api.DELETE("/api/v1/promocodes/{id}", { params: { path: { id } } })),
     onSuccess: refresh,
   });
   return { create, update, toggle, remove };
 }
 
-async function rawJson<T>(path: string, init: RequestInit = {}): Promise<T> {
-  return rawApi(path, init) as Promise<T>;
+/**
+ * A pool changed or went: everything that shows pools is asked again - the tariffs' limits
+ * in it, the protocols that belong to it and the packages bought into it.
+ */
+export function invalidatePoolRelated(qc: QueryClient) {
+  for (const key of [qk.pools, qk.tariffs, qk.inbounds, qk.packages]) void qc.invalidateQueries({ queryKey: key });
+}
+
+/** The bot's settings and state. A broadcast in progress moves every second; otherwise little changes. */
+export function useTelegram() {
+  return useQuery({
+    queryKey: qk.telegram,
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/telegram", { signal })),
+    refetchInterval: (q) => (q.state.data?.broadcast?.active ? 2_000 : 10_000),
+  });
+}
+
+/** How many speed tests of a node are kept and shown; the list and the cache agree on it. */
+export const SPEEDTESTS_LIMIT = 30;
+
+/** A node's speed tests, newest first; nothing is asked until there is a node. */
+export function useSpeedTests(node: number | undefined) {
+  return useQuery({
+    queryKey: qk.speedTests(node ?? 0),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/nodes/{id}/speedtests", { params: { path: { id: node! }, query: { limit: SPEEDTESTS_LIMIT } }, signal })),
+    enabled: !!node,
+  });
 }

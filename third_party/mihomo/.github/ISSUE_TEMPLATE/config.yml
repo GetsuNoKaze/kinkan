@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
-  - name: mihomo Community Support
-    url: https://github.com/MetaCubeX/mihomo/discussions
-    about: Please ask and answer questions about mihomo here.
+  - name: citrus Community Support
+    url: https://github.com/getmikan/Citrus/issues
+    about: Please ask and answer questions about citrus here.

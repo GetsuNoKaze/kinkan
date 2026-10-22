@@ -64,7 +64,7 @@ func NewWithConfig(config LC.AuthServer, lc C.InboundListenConfig, tunnel C.Tunn
 		return nil, err
 	}
 
-	tlsConfig := &tls.Config{Time: ntp.Now}
+	tlsConfig := &tls.Config{Time: ntp.Now, MinVersion: tls.VersionTLS12}
 	var realityBuilder *reality.Builder
 
 	if config.Certificate != "" && config.PrivateKey != "" {
@@ -130,11 +130,12 @@ func NewWithConfig(config LC.AuthServer, lc C.InboundListenConfig, tunnel C.Tunn
 			}
 			store := config.AuthStore
 			if isDefault || store == authStore.Default { // only apply on default listener
-				if !inbound.IsRemoteAddrDisAllowed(c.RemoteAddr()) {
+				allowed, skipAuth := inbound.EvaluateRemoteAddr(c.RemoteAddr())
+				if !allowed {
 					_ = c.Close()
 					continue
 				}
-				if inbound.SkipAuthRemoteAddr(c.RemoteAddr()) {
+				if skipAuth {
 					store = authStore.Nil
 				}
 			}
@@ -147,6 +148,8 @@ func NewWithConfig(config LC.AuthServer, lc C.InboundListenConfig, tunnel C.Tunn
 
 func handleConn(conn net.Conn, tunnel C.Tunnel, store auth.AuthStore, additions ...inbound.Addition) {
 	bufConn := N.NewBufferedConn(conn)
+	// the protocol handlers re-arm it and clear it once the request is parsed
+	authStore.SetHandshakeDeadline(conn)
 	head, err := bufConn.Peek(1)
 	if err != nil {
 		conn.Close()

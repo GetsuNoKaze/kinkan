@@ -31,23 +31,34 @@ export function Editor(props: { value: string; onChange: (v: string) => void; in
 }
 
 /** Badges of a preset that not every app or feature works with. */
-export function LimitBadges({ clashOnly, shared }: { clashOnly: boolean; shared: boolean }) {
-  if (!clashOnly && !shared) return null;
+export function LimitBadges({ clashOnly, shared, nestedTLS = false }: { clashOnly: boolean; shared: boolean; nestedTLS?: boolean }) {
+  if (!clashOnly && !shared && !nestedTLS) return null;
   return (
     <span className="mt-1 flex flex-wrap gap-1.5">
       {clashOnly ? <Pill tone="off">{t("inbounds.clashOnly")}</Pill> : null}
       {shared ? <Pill tone="warn">{t("inbounds.sharedKey")}</Pill> : null}
+      {nestedTLS ? <Pill tone="off">{t("inbounds.nestedTLS")}</Pill> : null}
     </span>
   );
 }
 
 /** What the admin gives up with the chosen preset, said before it is added. */
-export function LimitNotes({ clashOnly, shared, domainCert = false }: { clashOnly: boolean; shared: boolean; domainCert?: boolean }) {
-  if (!clashOnly && !shared && !domainCert) return null;
+export function LimitNotes({
+  clashOnly,
+  shared,
+  domainCert = false,
+  nestedTLS = false,
+}: {
+  clashOnly: boolean;
+  shared: boolean;
+  domainCert?: boolean;
+  nestedTLS?: boolean;
+}) {
+  if (!clashOnly && !shared && !domainCert && !nestedTLS) return null;
   return (
     <div className="mb-4 flex flex-col gap-2" role="note">
       {shared ? (
-        <div className="rounded-2xl border border-[rgba(224,160,33,0.35)] bg-[var(--honey-50)] p-3 text-[13px] text-[var(--ink-700)]">
+        <div className="rounded-2xl border border-[color-mix(in_srgb,var(--honey-500)_35%,transparent)] bg-[var(--honey-50)] p-3 text-[13px] text-[var(--ink-700)]">
           <div className="mb-1 flex items-center gap-2 font-semibold text-[var(--ink-900)]">
             <TriangleAlert size={16} className="text-[var(--honey-600)]" aria-hidden /> {t("inbounds.sharedWarnTitle")}
           </div>
@@ -56,6 +67,7 @@ export function LimitNotes({ clashOnly, shared, domainCert = false }: { clashOnl
       ) : null}
       {clashOnly ? <p className="text-xs text-[var(--ink-500)]">{t("inbounds.clashOnlyNote")}</p> : null}
       {domainCert ? <p className="text-xs text-[var(--ink-500)]">{t("inbounds.domainCertNote")}</p> : null}
+      {nestedTLS ? <p className="text-xs text-[var(--ink-500)]">{t("inbounds.nestedTLSNote")}</p> : null}
     </div>
   );
 }

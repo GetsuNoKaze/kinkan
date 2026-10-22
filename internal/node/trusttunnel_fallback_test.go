@@ -37,6 +37,10 @@ func TestTrustTunnelFallbackOnNode(t *testing.T) {
 	})
 	t.Cleanup(func() { authevent.SetHandler(nil) })
 	cover := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// A site refuses CONNECT, as Caddy does; Citrus turns a 2xx to one into a 502.
+		if r.Method == http.MethodConnect {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
 		_, _ = io.WriteString(w, "cover "+r.Method)
 	}))
 	t.Cleanup(cover.Close)
@@ -105,23 +109,29 @@ func TestTrustTunnelFallbackOnNode(t *testing.T) {
 			if h2 {
 				wantProto = 2
 			}
-			if err != nil || resp.StatusCode != 200 || string(body) != probe.body || resp.ProtoMajor != wantProto || resp.Header.Get("Proxy-Authenticate") != "" {
+			wantStatus := http.StatusOK
+			if probe.method == http.MethodConnect && probe.body != "" {
+				wantStatus = http.StatusMethodNotAllowed
+			}
+			if err != nil || resp.StatusCode != wantStatus || string(body) != probe.body || resp.ProtoMajor != wantProto || resp.Header.Get("Proxy-Authenticate") != "" {
 				t.Fatalf("h2=%v %s: status=%d proto=%s body=%q err=%v", h2, probe.method, resp.StatusCode, resp.Proto, body, err)
 			}
-			if probe.auth == "" || probe.auth == "Basic invalid" {
+			// Citrus reports no cover-site visit; a CONNECT without credentials is a scan.
+			if probe.auth == "Basic invalid" || probe.auth == "" && probe.method == http.MethodConnect {
 				select {
 				case ev := <-events:
 					if ev.Remote == "" || ev.Local == "" || ev.Protocol != "trusttunnel" || ev.Method != probe.method {
 						t.Fatalf("wrong auth event: %+v", ev)
 					}
-				default:
+				// Citrus hands events to the handler from its own goroutine, after the reply.
+				case <-time.After(2 * time.Second):
 					t.Fatal("missing unauthenticated event")
 				}
 			} else {
 				select {
 				case ev := <-events:
 					t.Fatalf("successful user logged: %+v", ev)
-				default:
+				case <-time.After(200 * time.Millisecond):
 				}
 			}
 		}
@@ -134,6 +144,8 @@ func TestTrustTunnelFallbackOnNode(t *testing.T) {
 	}
 	reference := httptest.NewUnstartedServer(cover.Config.Handler)
 	reference.EnableHTTP2 = true
+	// The node's own site front (and Caddy) limit headers to 16 KiB, which HTTP/2 SETTINGS show.
+	reference.Config.MaxHeaderBytes = siteMaxHeaderBytes
 	reference.TLS = &tls.Config{Certificates: []tls.Certificate{certificate}, NextProtos: []string{"h2", "http/1.1"}}
 	reference.StartTLS()
 	t.Cleanup(reference.Close)

@@ -6,16 +6,17 @@ import { qk, useTorrent, useTorrentHits } from "../../../api/hooks";
 import { QueryBoundary } from "../../../components/query";
 import { Switch } from "../../../components/switch";
 import { useToast } from "../../../components/toast";
-import { Button, ErrorState, Pill, Skeleton } from "../../../components/ui";
+import { Button, Pill, Skeleton } from "../../../components/ui";
 import { t } from "../../../i18n";
 import { dateShort, num, time } from "../../../lib/format";
+import { CardHead } from "../../../components/layout";
 
 type Hit = Schemas["TorrentHitView"];
 
 // Ban lengths offered, in minutes; 0 only drops what was caught.
 const BANS = [0, 15, 60, 360, 1440, 10080];
 
-export function banLabel(m: number): string {
+function banLabel(m: number): string {
   if (m === 0) return t("settings.torrent.banNone");
   if (m % 1440 === 0) return t("settings.torrent.banDays", { n: m / 1440 });
   if (m % 60 === 0) return t("settings.torrent.banHours", { n: m / 60 });
@@ -42,13 +43,7 @@ export function TorrentCard() {
   const save = useSaveTorrent();
   return (
     <section className="card glass reveal" style={{ "--i": 3 } as React.CSSProperties}>
-      <div className="card-head">
-        <div>
-          <h2 className="card-title">{t("settings.torrent.title")}</h2>
-          <div className="card-sub">{t("settings.torrent.sub")}</div>
-        </div>
-        {q.data ? <Switch checked={q.data.enabled} label={t("settings.torrent.enable")} disabled={save.isPending} onChange={(enabled) => save.mutate({ enabled })} /> : null}
-      </div>
+      <CardHead title={t("settings.torrent.title")} sub={t("settings.torrent.sub")} aside={q.data ? <Switch checked={q.data.enabled} label={t("settings.torrent.enable")} disabled={save.isPending} onChange={(enabled) => save.mutate({ enabled })} /> : null} />
       <QueryBoundary query={q} pending={<Skeleton style={{ height: 120 }} />}>
         {(v) => (
           <>
@@ -108,36 +103,36 @@ export function TorrentHitsCard() {
   const items = list.data?.pages.flat() ?? [];
   return (
     <section className="card glass reveal min-w-0" style={{ "--i": 4 } as React.CSSProperties}>
-      <div className="card-head">
-        <div>
-          <h2 className="card-title">{t("settings.torrent.hits")}</h2>
-          <div className="card-sub">{t("settings.torrent.hitsSub")}</div>
-        </div>
-      </div>
-      {list.isPending ? (
-        <div className="flex flex-col gap-2">
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} style={{ height: 48 }} />
-          ))}
-        </div>
-      ) : !list.data ? (
-        <ErrorState text={errorText(list.error)} onRetry={() => void list.refetch()} />
-      ) : items.length === 0 ? (
-        <p className="text-[13px] text-[var(--ink-500)]">{t("settings.torrent.hitsEmpty")}</p>
-      ) : (
-        <>
-          <ul className="row-list" aria-busy={list.isFetching}>
-            {items.map((h) => (
-              <HitRow key={h.id} h={h} showUser />
+      <CardHead title={t("settings.torrent.hits")} sub={t("settings.torrent.hitsSub")} />
+      <QueryBoundary
+        query={list}
+        pending={
+          <div className="flex flex-col gap-2">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} style={{ height: 48 }} />
             ))}
-          </ul>
-          {list.hasNextPage ? (
-            <Button className="mt-3" size="sm" loading={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
-              {t("settings.torrent.more")}
-            </Button>
-          ) : null}
-        </>
-      )}
+          </div>
+        }
+      >
+        {() =>
+          items.length === 0 ? (
+            <p className="text-[13px] text-[var(--ink-500)]">{t("settings.torrent.hitsEmpty")}</p>
+          ) : (
+            <>
+              <ul className="row-list" aria-busy={list.isFetching}>
+                {items.map((h) => (
+                  <HitRow key={h.id} h={h} showUser />
+                ))}
+              </ul>
+              {list.hasNextPage ? (
+                <Button className="mt-3" size="sm" loading={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
+                  {t("settings.torrent.more")}
+                </Button>
+              ) : null}
+            </>
+          )
+        }
+      </QueryBoundary>
     </section>
   );
 }

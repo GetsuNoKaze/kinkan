@@ -38,7 +38,7 @@ const (
 // something already holds on the node's server: the first port of domain.PortPool free
 // over its network on ports, the node's port map, and not in left, the ports inbounds of
 // the node left lately. It returns the port, or "" and why the inbound stays.
-func BusyMove(ports domain.PortMap, x db.Inbound, failed string, portOn bool, left map[string]bool) (port, why string) {
+func BusyMove(ports domain.PortMap, x db.Inbound, failed string, portOn, anyPort bool, left map[string]bool) (port, why string) {
 	switch {
 	case x.Enabled == 0 || x.Port != failed:
 		return "", BusyStale
@@ -54,7 +54,7 @@ func BusyMove(ports domain.PortMap, x db.Inbound, failed string, portOn bool, le
 	for p := range left {
 		skip[p] = true
 	}
-	free := FreePorts(ports, network, skip)
+	free := FreePorts(ports, network, skip, anyPort)
 	if len(free) == 0 {
 		return "", BusyNoPort
 	}
@@ -99,19 +99,6 @@ func (t *Tuner) leftPorts(events []db.InboundEvent, node int64, network string, 
 	return left
 }
 
-func (t *Tuner) runBusy(ctx context.Context) {
-	tick := time.NewTicker(t.o.Busy)
-	defer tick.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-tick.C:
-			t.MoveBusy(ctx)
-		}
-	}
-}
-
 // MoveBusy moves every inbound whose listener failed because another program holds its
 // port. It reads the nodes' last health, so it costs nothing while every listener is up.
 // A new port that is busy too fails on the node's next apply and is moved from in turn;
@@ -149,6 +136,11 @@ func (t *Tuner) MoveBusy(ctx context.Context) {
 		t.log.Error("autotune: busy ports: settings", "err", err)
 		return
 	}
+	anyPort, err := t.set.On(ctx, settings.AnyPort)
+	if err != nil {
+		t.log.Error("autotune: busy ports: settings", "err", err)
+		return
+	}
 	events, err := t.st.Q.ListInboundEventsSince(ctx, now.Add(-t.o.Abandon).Unix())
 	if err != nil {
 		t.log.Error("autotune: busy ports: events", "err", err)
@@ -180,7 +172,7 @@ func (t *Tuner) MoveBusy(ctx context.Context) {
 			x := inbounds[i]
 			seen[x.ID] = true
 			network := domain.InboundNetwork(x)
-			port, why := BusyMove(ports, x, f.port, portOn, t.leftPorts(events, n.ID, network, now))
+			port, why := BusyMove(ports, x, f.port, portOn, anyPort, t.leftPorts(events, n.ID, network, now))
 			if why != "" {
 				t.noteBusy(n, x.ID, x.Name, f.port, why)
 				continue

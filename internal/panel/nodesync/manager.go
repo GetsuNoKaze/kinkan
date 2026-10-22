@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"maps"
+	"net/netip"
 	"slices"
 	"sort"
 	"strconv"
@@ -17,6 +18,8 @@ import (
 
 	"mikan/internal/nodeapi"
 	"mikan/internal/panel/domain"
+	"mikan/internal/panel/events"
+	"mikan/internal/panel/model"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
@@ -32,6 +35,8 @@ type Target struct {
 	TLS  TLSSource
 	// Local is the panel's own node: only it may use the panel as its REALITY target.
 	Local bool
+	// Address is the node's API host:port, for the words of a failure; "" for the local node.
+	Address string
 }
 
 // Connect builds the client for a node row; the app knows the socket and certificates.
@@ -54,6 +59,7 @@ type Manager struct {
 	now     func() time.Time
 
 	nodesDirty chan struct{}
+	hub        *events.Hub // woken after a node was told down or up (liveness.go); nil: no one waits
 
 	mu        sync.Mutex
 	running   map[int64]*running
@@ -61,6 +67,7 @@ type Manager struct {
 	lastPrune time.Time
 
 	generation atomic.Uint64 // moves whenever a node is added, changed or removed
+	tlsGen     atomic.Uint64 // moves whenever a node took a certificate with another pin
 
 	// The snapshot the syncers share (snapshot.go): changes moves with every change it
 	// may not hold any more, batches counts the traffic batches stored per node.
@@ -83,6 +90,17 @@ type Manager struct {
 
 	// storeInterval is storeEvery; tests that pull batch after batch set it to 0.
 	storeInterval time.Duration
+
+	// The nodes' last hellos (check.go).
+	helloMu sync.Mutex
+	hellos  map[int64]HelloView
+
+	// The panel's own addresses for the nodes' API locks (apilock.go), looked up at most
+	// every panelAddrsTTL; lookup is the resolver, which tests replace.
+	addrMu sync.Mutex
+	addrs  []string
+	addrAt time.Time
+	lookup func(ctx context.Context, host string) ([]netip.Addr, error)
 }
 
 type running struct {
@@ -96,6 +114,9 @@ func NewManager(st *store.Store, set *settings.Settings, pool *domain.Pool, conn
 	return &Manager{st: st, set: set, pool: pool, connect: connect, log: log, now: now,
 		nodesDirty: make(chan struct{}, 1), running: map[int64]*running{}, batches: map[int64]uint64{}, storeInterval: storeEvery}
 }
+
+// SetEvents connects the hub that wakes the addons reading the feed; call it before Run.
+func (m *Manager) SetEvents(h *events.Hub) { m.hub = h }
 
 func (m *Manager) Run(ctx context.Context) {
 	m.reconcile(ctx)
@@ -136,9 +157,20 @@ func (m *Manager) NodesChanged() {
 	signal(m.nodesDirty)
 }
 
-// Generation moves with every NodesChanged: what is built from the nodes (the subscription's
-// server list) is built again when it has moved.
-func (m *Manager) Generation() uint64 { return m.generation.Load() }
+// Generation moves with every NodesChanged, and when a node took a certificate with another
+// pin: what is built from the nodes (the subscription's server list) is built again when it
+// has moved.
+func (m *Manager) Generation() uint64 { return m.generation.Load() + m.tlsGen.Load() }
+
+// ServedPin is the pin of the certificate node id serves ("" for a public one), as of the
+// last state it took; ok is false while that is not known (no syncer, or none taken yet).
+func (m *Manager) ServedPin(id int64) (pin string, ok bool) {
+	s, found := m.Syncer(id)
+	if !found {
+		return "", false
+	}
+	return s.ServedPin()
+}
 
 // Syncers returns the running syncers ordered by node id.
 func (m *Manager) Syncers() []*Syncer {
@@ -373,6 +405,17 @@ func (m *Manager) SpeedTest(ctx context.Context, id int64) (nodeapi.SpeedTest, e
 	return c.SpeedTest(ctx)
 }
 
+// ServiceRegions asks the sites from the node what they make of its address.
+func (m *Manager) ServiceRegions(ctx context.Context, id int64) (nodeapi.ServiceRegions, error) {
+	c, err := clientOf[interface {
+		ServiceRegions(context.Context) (nodeapi.ServiceRegions, error)
+	}](m, id)
+	if err != nil {
+		return nodeapi.ServiceRegions{}, err
+	}
+	return c.ServiceRegions(ctx)
+}
+
 // clientOf returns a node's client as T: methods beyond Node are optional, and tests
 // stand in for nodes with fakes that have only some of them.
 func clientOf[T any](m *Manager, id int64) (T, error) {
@@ -392,6 +435,7 @@ func clientOf[T any](m *Manager, id int64) (T, error) {
 // Call it after the node's row is deleted: its syncer stops first, so it cannot push the
 // old state back, and reconcile does not start it again.
 func (m *Manager) Retire(ctx context.Context, id int64) error {
+	m.forgetHello(id)
 	m.mu.Lock()
 	r, ok := m.running[id]
 	delete(m.running, id)
@@ -460,7 +504,8 @@ func (m *Manager) prune(ctx context.Context, now time.Time) {
 }
 
 func (m *Manager) resetPeriods(ctx context.Context, now time.Time) error {
-	users, err := m.st.Q.ListUsers(ctx)
+	// Every 30 s: only the users whose period may be over, and only what decides it.
+	users, err := m.st.Q.ListUsersToReset(ctx, now.Unix())
 	if err != nil {
 		return err
 	}
@@ -470,7 +515,7 @@ func (m *Manager) resetPeriods(ctx context.Context, now time.Time) error {
 		switch u.ResetStrategy {
 		case "month_start":
 			// Monthly on the billing day, or the 1st without one.
-			monthStart := domain.MonthPeriodStart(now, u.BillingDay).Unix()
+			monthStart := model.MonthPeriodStart(now, u.BillingDay).Unix()
 			if start >= monthStart {
 				continue
 			}

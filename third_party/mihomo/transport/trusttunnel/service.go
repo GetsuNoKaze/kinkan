@@ -5,10 +5,12 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
-	"github.com/metacubex/mihomo/component/authevent"
+	"fmt"
 	"io"
 	"net"
 	"net/netip"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -16,6 +18,8 @@ import (
 
 	"github.com/metacubex/mihomo/common/httputils"
 	N "github.com/metacubex/mihomo/common/net"
+	C "github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/listener/inbounduser"
 
 	"github.com/metacubex/http"
 	"github.com/metacubex/http/httputil"
@@ -48,6 +52,7 @@ type ServiceOptions struct {
 	QUICCongestionControl string
 	QUICCwnd              int
 	QUICBBRProfile        string
+	QUICZeroRTT           bool
 	// Fallback is an optional backend (host:port) that unauthenticated requests are
 	// served from, so active probing sees an ordinary web server instead of a proxy.
 	Fallback string
@@ -56,12 +61,13 @@ type ServiceOptions struct {
 type Service struct {
 	ctx                   context.Context
 	logger                logger.ContextLogger
-	users                 map[string][sha256.Size]byte
+	users                 *inbounduser.Set[string]
 	handler               Handler
 	icmpHandler           ICMPHandler
 	quicCongestionControl string
 	quicCwnd              int
 	quicBBRProfile        string
+	quicZeroRTT           bool
 	httpServer            *http.Server
 	h3Server              *http3.Server
 	tcpListener           net.Listener
@@ -71,14 +77,52 @@ type Service struct {
 	fallbackTransport     *http.Transport
 	fallbackSlots         chan struct{}
 	fallbackIdleTimeout   time.Duration
-	fallbackSourceAccess  sync.Mutex
-	fallbackSources       map[netip.Prefix]int
-	authFailureLog        logLimiter
+	// fallbackStuckTimeout is how long a request may keep running after the
+	// idle stage before its writes are aborted; zero means fallbackIdleTimeout.
+	// Only tests set it, to give the 502 for a stalled upload room to be written
+	// regardless of scheduling, without stretching the idle limit itself.
+	fallbackStuckTimeout time.Duration
+	fallbackSourceAccess sync.Mutex
+	fallbackSources      map[netip.Prefix]int
+	authFailureLog       logLimiter
 	// fallbackCtx is cancelled on Close so in-flight fallback requests stop too,
 	// including upgraded connections that the HTTP servers no longer track.
 	fallbackCtx    context.Context
 	fallbackCancel context.CancelFunc
 }
+
+// handshakeTimeout bounds the TLS handshake of a TCP connection and, for
+// HTTP/1, the request header, so that a client that connects and sends
+// nothing (or trickles bytes) does not hold the conn before authentication.
+// HTTP/2 conns without streams are closed by IdleTimeout. It matches the
+// VLESS and Trojan listeners; Go's server clears it once the header is read.
+// A variable only so that tests can shorten it.
+var handshakeTimeout = 15 * time.Second
+
+// A client that vanishes without closing its connection (a phone that switched
+// networks or went into airplane mode) sends no FIN or RST. Before, an HTTP/2
+// conn with an open tunnel then stayed until TCP gave up retransmitting, about
+// 15 minutes, together with its upstream connection and user session. TCP
+// keepalive does not help while unacknowledged data is queued, and is absent on
+// a unix socket listener, so the server checks the peer itself.
+//
+// h2PingAfter is how long an HTTP/2 conn may go without receiving any frame
+// before the server sends a PING; h2PingTimeout is how long it then waits for
+// the ACK before it closes the conn. Any frame resets the clock, so a busy
+// upload never sees a ping, and a live client answers it even on an idle
+// tunnel; a dead one is dropped at most h2PingAfter+h2PingTimeout after it
+// last sent something. The timeout leaves room for an ACK delayed behind a
+// full downlink. Variables only so that tests can shorten them.
+var (
+	h2PingAfter   = 30 * time.Second
+	h2PingTimeout = 30 * time.Second
+)
+
+// quicKeepAlivePeriod makes the HTTP/3 server ping a quiet connection, so a
+// live client with an idle tunnel stays within DefaultQuicMaxIdleTimeout. A
+// dead client answers nothing and is dropped by that idle timeout, which QUIC
+// counts from the last packet received.
+const quicKeepAlivePeriod = 30 * time.Second
 
 const (
 	// fallbackIdleTimeout bounds how long a fallback request may go without any
@@ -104,6 +148,26 @@ const (
 )
 
 var errFallbackAddress = errors.New("fallback address is link-local, multicast, unspecified or a cloud metadata service")
+
+// ValidateFallback rejects malformed configuration before a listener is opened.
+// DNS and metadata-address checks remain in the dialer, where names are resolved.
+func ValidateFallback(address string) error {
+	if address == "" {
+		return nil
+	}
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return fmt.Errorf("invalid TrustTunnel fallback %q: expected host:port: %w", address, err)
+	}
+	if host == "" || strings.ContainsAny(host, " /\\\t\r\n?#@") {
+		return fmt.Errorf("invalid TrustTunnel fallback %q: host is required, without a URL scheme or path", address)
+	}
+	number, err := strconv.ParseUint(port, 10, 16)
+	if err != nil || number == 0 {
+		return fmt.Errorf("invalid TrustTunnel fallback %q: port must be an integer from 1 to 65535", address)
+	}
+	return nil
+}
 
 // cloudMetadata are metadata services outside the link-local range, which the check
 // below covers already (169.254.169.254 and fe80::/10).
@@ -180,6 +244,7 @@ func NewService(options ServiceOptions) *Service {
 		quicCongestionControl: options.QUICCongestionControl,
 		quicCwnd:              options.QUICCwnd,
 		quicBBRProfile:        options.QUICBBRProfile,
+		quicZeroRTT:           options.QUICZeroRTT,
 	}
 	if options.Fallback != "" {
 		// A dedicated transport with timeouts for connecting and for the response
@@ -202,15 +267,29 @@ func NewService(options ServiceOptions) *Service {
 			Rewrite: func(r *httputil.ProxyRequest) {
 				r.Out.URL.Scheme = "http"
 				r.Out.URL.Host = target
-				// Keep the client's Host header: named virtual hosts keep working and
-				// the internal backend address is not leaked in redirects. The backend
-				// therefore routes on a Host the client chose: point the fallback at a
-				// server that serves only the cover site, not at one whose other virtual
-				// hosts are meant to stay internal.
-				r.Out.Host = r.In.Host
+				// Bind virtual-host routing to the configured cover backend. An
+				// unauthenticated client must not select a sibling internal vhost.
+				r.Out.Host = target
 				r.SetXForwarded()
+				if strings.EqualFold(r.In.Method, http.MethodConnect) { // any spelling: a lenient backend would take it
+					// Keep the site's rejection, but never give a backend a live
+					// client stream that it could turn into a CONNECT tunnel.
+					r.Out.Body = nil
+					r.Out.GetBody = nil
+					r.Out.ContentLength = 0
+					r.Out.TransferEncoding = nil
+					r.Out.Trailer = nil
+					r.Out.Header.Del("Content-Length")
+					r.Out.Header.Del("Transfer-Encoding")
+				}
 			},
 			ModifyResponse: func(response *http.Response) error {
+				if strings.EqualFold(response.Request.Method, http.MethodConnect) &&
+					((response.StatusCode >= 200 && response.StatusCode < 300) || response.StatusCode == http.StatusSwitchingProtocols) {
+					// ReverseProxy closes the backend body before ErrorHandler
+					// returns 502. A CONNECT upgrade must not bypass this check.
+					return errors.New("fallback backend accepted an unauthenticated CONNECT")
+				}
 				// Let this server stamp Date itself, as a Go front server such as Caddy
 				// does: it then comes last in an HTTP/2 response, instead of sorted among
 				// the backend's headers, where it would set the fallback apart.
@@ -263,11 +342,19 @@ func (s *Service) Start(tcpListener net.Listener, udpConn net.PacketConn, tlsCon
 		s.httpServer = &http.Server{
 			Handler:     s,
 			IdleTimeout: DefaultSessionTimeout,
+			// a client that connects and sends nothing (or trickles a header)
+			// must not hold the conn before it is authenticated; this also
+			// bounds the TLS handshake. Cleared once the header is read.
+			ReadHeaderTimeout: handshakeTimeout,
 			BaseContext: func(net.Listener) context.Context {
 				return s.ctx
 			},
 			MaxHeaderBytes: maxHeaderBytes,
 			Protocols:      protocols,
+			HTTP2: &http.HTTP2Config{
+				SendPingTimeout: h2PingAfter,
+				PingTimeout:     h2PingTimeout,
+			},
 		}
 		listener := tcpListener
 		s.tcpListener = tcpListener
@@ -299,12 +386,21 @@ func (s *Service) Start(tcpListener net.Listener, udpConn net.PacketConn, tlsCon
 	return nil
 }
 
+// UpdateUsers sets the users (username -> password) before Start.
 func (s *Service) UpdateUsers(users map[string]string) {
-	hashedUsers := make(map[string][sha256.Size]byte, len(users))
-	for username, password := range users {
-		hashedUsers[username] = sha256.Sum256([]byte(password))
-	}
-	s.users = hashedUsers
+	s.users, _ = inbounduser.New(UserKey, inbounduser.FromMap(users)) // UserKey never fails
+}
+
+// SetUserSet makes the service authenticate against set, which the caller
+// may replace at runtime (and share between services). Call it before Start.
+func (s *Service) SetUserSet(set *inbounduser.Set[string]) {
+	s.users = set
+}
+
+// UserKey keys the users of a set by name: every request carries its
+// username and password.
+func UserKey(user C.InboundUser) (string, error) {
+	return user.Name, nil
 }
 
 func (s *Service) Close() error {
@@ -336,17 +432,8 @@ func (s *Service) Close() error {
 
 func (s *Service) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	authorization := request.Header.Get("Proxy-Authorization")
-	username, loaded := s.verify(authorization)
+	entry, loaded := s.verifyRequest(request, authorization)
 	if !loaded {
-		reason := "no_credentials"
-		if authorization != "" {
-			reason = "wrong_credentials"
-		}
-		local := ""
-		if s.tcpListener != nil {
-			local = s.tcpListener.Addr().String()
-		}
-		authevent.Emit(authevent.Event{Protocol: "trusttunnel", Local: local, Remote: request.RemoteAddr, Reason: reason, Method: request.Method})
 		if s.serveFallback(writer, request) {
 			// A request with credentials that do not match is most likely a misconfigured
 			// client, so it is logged as before; one without credentials is a browser or a
@@ -375,6 +462,19 @@ func (s *Service) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		s.badRequest(request.Context(), request, E.New("unexpected HTTP method ", request.Method))
 		return
 	}
+	username := entry.Name()
+	// every tunnel (stream) of the request dies with the user: removing or
+	// re-keying it closes the tunnel; a new request authenticates again
+	var release func()
+	defer func() {
+		if release != nil {
+			release()
+		}
+	}()
+	bind := func(c io.Closer) (bound bool) {
+		release, bound = s.users.Bind(entry, c)
+		return bound
+	}
 	ctx := request.Context()
 	ctx = auth.ContextWithUser(ctx, username)
 	s.logger.DebugContext(ctx, "[", username, "] ", "request from ", request.RemoteAddr)
@@ -397,6 +497,10 @@ func (s *Service) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		}
 		httputils.SetAddrFromRequest(&conn.NetAddr, request)
 		conn.setup(request.Body, nil)
+		if !bind(conn) {
+			_ = conn.Close()
+			return
+		}
 		firstPacket := buf.NewPacket()
 		destination, err := conn.ReadPacket(firstPacket)
 		if err != nil {
@@ -434,6 +538,10 @@ func (s *Service) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 			}
 			httputils.SetAddrFromRequest(&conn.NetAddr, request)
 			conn.setup(request.Body, nil)
+			if !bind(conn) {
+				_ = conn.Close()
+				return
+			}
 			s.icmpHandler.NewICMPConnection(ctx, conn)
 		}
 	case HealthCheckMagicAddress:
@@ -460,6 +568,10 @@ func (s *Service) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		wrapper := &h2ConnWrapper{
 			ExtendedConn: N.NewDeadlineConn(conn),
 		}
+		if !bind(wrapper) {
+			wrapper.CloseWrapper()
+			return
+		}
 		_ = s.handler.NewConnection(ctx, wrapper, M.Metadata{
 			Protocol:    "trusttunnel",
 			Source:      M.ParseSocksaddr(request.RemoteAddr),
@@ -469,20 +581,24 @@ func (s *Service) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	}
 }
 
-func (s *Service) verify(authorization string) (username string, loaded bool) {
+func (s *Service) verify(authorization string) (entry *inbounduser.Entry, loaded bool) {
 	username, password, loaded := parseBasicAuth(authorization)
-	if !loaded {
-		return "", false
+	if !loaded || s.users == nil {
+		return nil, false
 	}
-	recordedHash, known := s.users[username]
+	entry, known := s.users.Lookup(username)
+	var recordedHash [sha256.Size]byte
+	if known {
+		recordedHash = sha256.Sum256([]byte(entry.Secret()))
+	}
 	passwordHash := sha256.Sum256([]byte(password))
 	// Compare fixed-size digests even for unknown users: comparing raw passwords
 	// would return immediately when their lengths differ. This does not make the
 	// entire authentication path (including the map lookup) constant-time.
 	if subtle.ConstantTimeCompare(passwordHash[:], recordedHash[:]) != 1 || !known {
-		return "", false
+		return nil, false
 	}
-	return username, true
+	return entry, true
 }
 
 func (s *Service) badRequest(ctx context.Context, request *http.Request, err error) {
@@ -496,8 +612,9 @@ func (s *Service) badRequest(ctx context.Context, request *http.Request, err err
 // returns true when it has handled the request.
 //
 // Every method goes to the backend, CONNECT included, so the backend's own
-// answer (status, headers, body) is what a prober sees for it too, instead of a
-// response the backend would never produce.
+// rejection (status, headers, body) is what a prober sees for it too. CONNECT
+// bodies are not forwarded, and successful or upgraded CONNECT responses become
+// 502 so a backend cannot accidentally provide an unauthenticated tunnel.
 //
 // The reverse proxy strips hop-by-hop headers, carries WebSocket upgrades, and
 // flushes streaming responses. A backend that fails to connect or to send
@@ -533,7 +650,11 @@ func (s *Service) serveFallback(writer http.ResponseWriter, request *http.Reques
 		}
 	}()
 	controller := http.NewResponseController(writer)
-	watchdog := newIdleWatchdog(s.fallbackIdleTimeout, func() {
+	stuckTimeout := s.fallbackStuckTimeout
+	if stuckTimeout <= 0 {
+		stuckTimeout = s.fallbackIdleTimeout
+	}
+	watchdog := newIdleWatchdog(s.fallbackIdleTimeout, stuckTimeout, func() {
 		// Stop the backend side and release a read stuck on a client that stopped
 		// uploading. Writes are left alone here: an HTTP/1 server may still be
 		// draining the request body before it sends an early answer such as 413.
@@ -613,11 +734,12 @@ func newFallbackRequestBody(ctx context.Context, body io.ReadCloser, watchdog *i
 }
 
 // idleWatchdog calls onIdle once no body data has moved for timeout, and
-// onStuck if the request is still running a further timeout after that.
+// onStuck if the request is still running stuckTimeout after that.
 type idleWatchdog struct {
 	access       sync.Mutex
 	timer        *time.Timer
 	timeout      time.Duration
+	stuckTimeout time.Duration
 	onIdle       func()
 	onStuck      func()
 	responding   bool
@@ -627,8 +749,8 @@ type idleWatchdog struct {
 	stuck        bool
 }
 
-func newIdleWatchdog(timeout time.Duration, onIdle func(), onStuck func()) *idleWatchdog {
-	w := &idleWatchdog{timeout: timeout, onIdle: onIdle, onStuck: onStuck}
+func newIdleWatchdog(timeout, stuckTimeout time.Duration, onIdle func(), onStuck func()) *idleWatchdog {
+	w := &idleWatchdog{timeout: timeout, stuckTimeout: stuckTimeout, onIdle: onIdle, onStuck: onStuck}
 	w.timer = time.AfterFunc(timeout, w.fire)
 	return w
 }
@@ -642,7 +764,7 @@ func (w *idleWatchdog) fire() {
 	if !w.fired {
 		w.fired = true
 		w.onIdle()
-		w.timer.Reset(w.timeout)
+		w.timer.Reset(w.stuckTimeout)
 		return
 	}
 	w.stuck = true

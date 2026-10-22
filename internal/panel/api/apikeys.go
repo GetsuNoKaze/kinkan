@@ -14,8 +14,11 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"mikan/internal/panel/auth"
 	"mikan/internal/panel/secure"
+	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/panel/support"
 )
 
 // API keys let scripts call the API with "Authorization: Bearer <key>" instead of an
@@ -33,7 +36,7 @@ const (
 
 // sessionOnlyTags are the endpoints an API key cannot use, with the operations marked
 // sessionOnly (payment keys and refunds: whoever sets them decides where money goes).
-var sessionOnlyTags = []string{"auth", "api-keys"}
+var sessionOnlyTags = []string{"auth", "api-keys", supportAdminTag}
 
 var (
 	sessionOnly    = map[string]any{"sessionOnly": true}
@@ -84,16 +87,16 @@ func (h *handlers) registerAPIKeys() {
 }
 
 func viewAPIKey(k db.ApiKey) APIKeyView {
-	v := APIKeyView{ID: k.ID, Name: k.Name, Prefix: k.Prefix, Scope: k.Scope, CreatedAt: time.Unix(k.CreatedAt, 0).UTC(), LastIP: k.LastIp}
-	if k.ExpiresAt.Valid {
-		t := time.Unix(k.ExpiresAt.Int64, 0).UTC()
-		v.ExpiresAt = &t
+	return APIKeyView{
+		ID:         k.ID,
+		Name:       k.Name,
+		Prefix:     k.Prefix,
+		Scope:      k.Scope,
+		CreatedAt:  store.Time(k.CreatedAt),
+		LastIP:     k.LastIp,
+		ExpiresAt:  store.TimePtr(k.ExpiresAt),
+		LastUsedAt: store.TimePtr(k.LastUsedAt),
 	}
-	if k.LastUsedAt.Valid {
-		t := time.Unix(k.LastUsedAt.Int64, 0).UTC()
-		v.LastUsedAt = &t
-	}
-	return v
 }
 
 func hashAPIKey(key string) string {
@@ -116,7 +119,7 @@ func (h *handlers) listAPIKeys(ctx context.Context, _ *struct{}) (*apiKeysOutput
 func (h *handlers) createAPIKey(ctx context.Context, in *createAPIKeyInput) (*createAPIKeyOutput, error) {
 	name := strings.TrimSpace(in.Body.Name)
 	if name == "" {
-		return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.name", Message: "name_blank"})
+		return nil, fieldErr("body.name", "name_blank")
 	}
 	admin, err := h.d.Store.Q.GetAdmin(ctx, sessionOf(ctx).AdminID)
 	if err != nil {
@@ -164,7 +167,7 @@ func (h *handlers) deleteAPIKey(ctx context.Context, in *apiKeyIDInput) (*struct
 // bearer authenticates a request by API key; the caller has seen an Authorization header.
 func (h *handlers) bearer(ctx huma.Context, next func(huma.Context), mutating bool) {
 	c := clientOf(ctx.Context())
-	ipKey, now := "key:"+limitIP(c.IP), h.d.Now()
+	ipKey, now := "key:"+auth.ClientKey(c.IP), h.d.Now()
 	if ok, wait := h.d.IPLimit.Allowed(ipKey, now); !ok {
 		ctx.SetHeader("Retry-After", strconv.Itoa(max(1, int(wait.Round(time.Second)/time.Second))))
 		_ = huma.WriteErr(h.api, ctx, http.StatusTooManyRequests, "rate_limited")
@@ -172,6 +175,11 @@ func (h *handlers) bearer(ctx huma.Context, next func(huma.Context), mutating bo
 	}
 	token, ok := strings.CutPrefix(ctx.Header("Authorization"), "Bearer ")
 	token = strings.TrimSpace(token)
+	// A support grant's token (ms_…) is no API key: it has its own levels and its own refusals.
+	if ok && strings.HasPrefix(token, support.TokenPrefix) {
+		h.supportBearer(ctx, next, mutating, token, ipKey)
+		return
+	}
 	var key db.ApiKey
 	var err error
 	if ok && strings.HasPrefix(token, apiKeyPrefix) && len(token) <= len(apiKeyPrefix)+apiKeyLen+8 {
