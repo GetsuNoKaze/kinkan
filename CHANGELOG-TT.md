@@ -9,11 +9,13 @@ Beta: the beta channel only, like rc.1. Mikan's author expects rc.15 to become t
 - The marketplace is checked with its own keys again, as Mikan now signs its catalog and the community registry apart from its releases; the fork's copy of Mikan's release key for the catalog is gone. Kinkan's releases are signed by Kinkan's key alone, the only one in `ReleaseKeys`, the installer and `install.sh`.
 - The fork's patches to the core (the JA4 fingerprint in REALITY auth events, CONNECT without credentials behind a fallback) apply on Citrus ca8204d9 unchanged.
 - The fork's buttons and update notice on a node's card follow the card to its own file (`nodes/card.tsx`).
+- Installer: rustls-webpki 0.103.15 → 0.103.16 (RUSTSEC-2026-0382) and webpki-roots 1.0.9 → 1.0.10 (RUSTSEC-2026-0381): distrusted intermediate certificates are no longer accepted.
 ### ru
 - Слит Mikan 0.5.1.1-rc.15 (rc.11–rc.15): группы серверов и состав тарифа, Shadowsocks-2022 с ключом на клиента, ограничение скорости в самом ядре, общий порт 443, API ноды только для панели, страница для чужих, журнал действий, панель как приложение, ядро нод — Citrus ca8204d9. Полный список — в заметках Mikan; перед обновлением прочитайте там «Update the nodes together with the panel» и «Shadowsocks-2022 (AES): refresh the subscriptions».
 - Маркетплейс снова проверяется своими ключами: Mikan теперь подписывает каталог и реестр сообщества отдельно от релизов, поэтому копия релизного ключа Mikan для каталога в форке больше не нужна. Релизы Kinkan подписаны только ключом Kinkan — он единственный в `ReleaseKeys`, установщике и `install.sh`.
 - Патчи форка к ядру (отпечаток JA4 в событиях REALITY, CONNECT без учётных данных за fallback) ложатся на Citrus ca8204d9 без изменений.
 - Кнопки форка и сообщение об обновлении в карточке ноды переехали вместе с карточкой в отдельный файл (`nodes/card.tsx`).
+- Установщик: rustls-webpki 0.103.15 → 0.103.16 (RUSTSEC-2026-0382) и webpki-roots 1.0.9 → 1.0.10 (RUSTSEC-2026-0381): недоверенные промежуточные сертификаты больше не принимаются.
 
 ## 0.5.1.1-tt.1-rc.1
 Beta: the beta channel only. Servers on the stable channel stay on 0.5.0.5-tt.13 until Mikan 0.5.1.1 is released and Kinkan follows it as 0.5.1.1-tt.1.
