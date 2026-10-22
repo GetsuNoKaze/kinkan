@@ -3,7 +3,7 @@ title: Журнал изменений
 description: Все влитые в Citrus pull request’ы по темам, со ссылками, и версии форков utls, tls и http.
 ---
 
-Всё, что влито в ветку `dev` с начала проекта (127 pull request’ов), по темам. Внутри темы — по номеру PR. Ссылки ведут на PR в [getmikan/Citrus](https://github.com/getmikan/Citrus/pulls?q=is%3Apr+is%3Amerged); там описано, что было не так, что поменялось и как проверяли.
+Всё, что влито в ветку `dev` с начала проекта (146 pull request’ов), по темам. Внутри темы — по номеру PR. Ссылки ведут на PR в [getmikan/Citrus](https://github.com/getmikan/Citrus/pulls?q=is%3Apr+is%3Amerged); там описано, что было не так, что поменялось и как проверяли.
 
 Первый бета-релиз [`v1.0.0-beta.1`](https://github.com/getmikan/Citrus/releases/tag/v1.0.0-beta.1) собран из `dev` до [#112](https://github.com/getmikan/Citrus/pull/112). Второй, `v1.0.0-beta.2`, — из `dev` в том состоянии, что описано на этой странице.
 
@@ -31,6 +31,11 @@ description: Все влитые в Citrus pull request’ы по темам, с
 - [#121](https://github.com/getmikan/Citrus/pull/121) CI: задача `-race` для 30 пакетов без гонок.
 - [#126](https://github.com/getmikan/Citrus/pull/126) Сравнение четырёх серверов: Xray, sing-box, mihomo и Citrus, восемь протоколов.
 - [#127](https://github.com/getmikan/Citrus/pull/127) Стенд: стабильный замер загрузки REALITY с TLS внутри туннеля; ночная проверка производительности в CI против mihomo.
+- [#144](https://github.com/getmikan/Citrus/pull/144) Отдельные серверные профили без root: пользователь systemd с конфигом только для чтения и ограниченными capabilities, Docker-образ с UID 65532. CI запускает реальный unit и проверяет проксирование в Docker без capabilities.
+- [#132](https://github.com/getmikan/Citrus/pull/132) Журнал изменений дополнен до второй беты v1.0.0-beta.2.
+- [#134](https://github.com/getmikan/Citrus/pull/134) Новость о второй бете, дорожная карта после неё.
+- [#135](https://github.com/getmikan/Citrus/pull/135) Зависимости тестов и сайта: клиент Docker в тестах переведён на `moby/moby`, обновлён `postcss-selector-parser` — закрыты предупреждения Dependabot.
+- [#150](https://github.com/getmikan/Citrus/pull/150) Добавлена отдельная Linux CI-проверка полного inbound-набора с race detector, включая конкурентные подтесты в одном процессе. Логи сохраняются как артефакты; раздельные проверки протоколов сохранены.
 
 ## Удалённое наследие
 
@@ -47,6 +52,7 @@ description: Все влитые в Citrus pull request’ы по темам, с
 - [#20](https://github.com/getmikan/Citrus/pull/20) Сервер XHTTP принимает packet-up любым методом и с любым размещением данных, как Xray; `server-max-header-bytes`.
 - [#21](https://github.com/getmikan/Citrus/pull/21) HTTP/2-входящие шлют такой же первый кадр SETTINGS, как Caddy (getmikan/http).
 - [#34](https://github.com/getmikan/Citrus/pull/34) XHTTP: XMUX по умолчанию как в Xray при пустом `reuse-settings`, исправления менеджера переиспользования.
+- [#139](https://github.com/getmikan/Citrus/pull/139) XDrive для клиентов и серверов VLESS: локальное хранилище, Google Drive и шаблоны API, VLESS Encryption, Mux.Cool и XUDP; тесты совместимости с Xray и проверки гонок в CI.
 
 ## Возможности для VPN-сервиса
 
@@ -64,6 +70,10 @@ description: Все влитые в Citrus pull request’ы по темам, с
 - [#70](https://github.com/getmikan/Citrus/pull/70) `GET /events`: поток событий ядра.
 - [#71](https://github.com/getmikan/Citrus/pull/71) TrustTunnel: таймеры HTTP/2-сессии на каждом прокси.
 - [#73](https://github.com/getmikan/Citrus/pull/73) Группы `type: chain` для каскадов с проверкой, которая называет сломавшийся хоп.
+- [#136](https://github.com/getmikan/Citrus/pull/136) PROXY protocol v1 и v2 на TCP-входящих (`proxy-protocol`, `proxy-protocol-trusted`): адрес клиента из заголовка фронтенда, например SNI-роутера на 443.
+- [#146](https://github.com/getmikan/Citrus/pull/146) User-Agent по умолчанию `clash.meta/<версия> citrus/<версия>`: панели по-прежнему узнают mihomo по началу строки, Citrus отличается по токену `citrus/`.
+- [#147](https://github.com/getmikan/Citrus/pull/147) Контроллер `GET /version` возвращает `core: "citrus"`, сохраняя прежние поля `meta` и `version` для панелей.
+- [#151](https://github.com/getmikan/Citrus/pull/151) Лимиты: `speed-group` — общая скорость для нескольких пользователей на любых входящих; смена скорости без сброса «корзины»; `SetLimits` для многих лимитов за раз и `SetOnLeave` для трафика по адресам назначения у встраивающего приложения.
 
 ## Производительность
 
@@ -76,6 +86,7 @@ description: Все влитые в Citrus pull request’ы по темам, с
 - [#125](https://github.com/getmikan/Citrus/pull/125) Hysteria2 и TUIC: меньше работы на поток, буфер чтения создаётся только при необходимости, без горутины ожидания первых байтов для DIRECT.
 - [#129](https://github.com/getmikan/Citrus/pull/129) Память простаивающего туннеля: Trojan −36%, AnyTLS −18%, REALITY −12% (getmikan/tls: буфер чтения по размеру данных, `WaitRead`).
 - [#131](https://github.com/getmikan/Citrus/pull/131) Пинг под нагрузкой: цикл пересылки уступает процессор после 256 КиБ и 1 мс; эхо рядом с восемью закачками 55–63 → 20 мс.
+- [#130](https://github.com/getmikan/Citrus/pull/130) AnyTLS: принятые кадры в очереди потока, кадры для отправки собираются на месте; в 32 потока скачивание вдвое быстрее, загрузка +23%, CPU на гигабайт почти вдвое меньше; гонка в клиенте устранена.
 
 ## Укрепление ядра
 
@@ -124,6 +135,12 @@ description: Все влитые в Citrus pull request’ы по темам, с
 - [#107](https://github.com/getmikan/Citrus/pull/107) CI: закреплены оставшиеся actions и fpm, тулчейны Go проверяются по SHA-256.
 - [#111](https://github.com/getmikan/Citrus/pull/111) AnyTLS: версия собеседника из настроек сессии разбирается с проверкой границ, значение `-1` больше не включает режим v2 (найдено CodeQL).
 - [#113](https://github.com/getmikan/Citrus/pull/113) AnyTLS: ограничены схема паддинга и разбор чисел; обновлены `compress` и `dhcp`.
+- [#140](https://github.com/getmikan/Citrus/pull/140) Ограничены replay-cache VLESS и общий бюджет загрузок Sudoku HTTP-mask; запись Sudoku порциями по 64 КиБ; неверный ML-DSA seed не попадает в ошибки.
+- [#141](https://github.com/getmikan/Citrus/pull/141) Обновлены форки uTLS и ResTLS во всех трёх модулях: дедлайны REALITY до классификации, точный порог fallback limiter, отсутствие AuthKey/short ID в логах, кэш X25519/буферов, callbacks проверки JLS и атомарные счётчики ResTLS.
+- [#142](https://github.com/getmikan/Citrus/pull/142) Ограничены незавершённые handshake REALITY/ShadowTLS/JLS/ResTLS, записи ShadowTLS, Sudoku fallback и сессии/потоки KCPTun; серверный QUIC 0-RTT для TUIC/TrustTunnel включается явно. Добавлены регрессионные и раздельные inbound race-тесты; ограничения совместимости описаны без заявления о закрытии Sudoku key-auth.
+- [#143](https://github.com/getmikan/Citrus/pull/143) WebSocket контроллера использует одноразовые билеты с привязкой к запросу (30 секунд, ограниченное хранилище); основной secret в URL разрешается только явной опцией совместимости. Добавлены инструкции для панелей и hub в race-проверку.
+- [#145](https://github.com/getmikan/Citrus/pull/145) Инструкции контроллера и событий переведены на одноразовые WS-билеты; для серверного профиля без root описано обновление через пакет или замену образа.
+- [#148](https://github.com/getmikan/Citrus/pull/148) Обновлён ResTLS во всех трёх модулях: устранён panic debug-вызова при возобновлении QUIC/TLS; форк теперь проверяет полный TLS/ResTLS-набор на Go 1.20/1.24/1.26, Windows и под race detector.
 
 ## Перенесено из mihomo и сообщества
 
@@ -163,12 +180,16 @@ description: Все влитые в Citrus pull request’ы по темам, с
 - [#122](https://github.com/getmikan/Citrus/pull/122) Тест UDP SOCKS с пользователем берёт свободный TCP-порт (Windows).
 - [#123](https://github.com/getmikan/Citrus/pull/123) smux заменён форком getmikan/smux: после возврата `Write` буфер вызывающего больше не читается (его данные могли уйти в чужое соединение).
 - [#125](https://github.com/getmikan/Citrus/pull/125) TUIC: `CONNECT` с доменом длиной 255 байт больше не роняет сервер до авторизации.
+- [#137](https://github.com/getmikan/Citrus/pull/137) PROXY protocol: строка v1 короче сигнатуры отклоняется сразу, без чтения данных клиента.
+- [#138](https://github.com/getmikan/Citrus/pull/138) Тест UDP SOCKS с пользователем берёт порт, свободный и для TCP, и для UDP (Windows).
 
 ## Форки
 
-Citrus подменяет четыре библиотеки mihomo своими форками через `replace` в `go.mod`. Путь модулей не меняется, у каждого форка есть ветки `main` (релизы) и `dev` с CI.
+Citrus подменяет пять библиотек mihomo своими форками через `replace` в `go.mod`. Пути модулей не меняются; изменения проходят PR и CI в `dev`, релизы выпускаются отдельно.
 
 ### [getmikan/utls](https://github.com/getmikan/utls)
+
+- `v1.8.9-0.20261020173537-32502cba39f4`: исправления REALITY/JLS из [PR 3 форка](https://github.com/getmikan/utls/pull/3), подключены в [#141](https://github.com/getmikan/Citrus/pull/141); это коммит `dev`, не релизный тег.
 
 - `v1.8.8-citrus.1`: серверная сторона пост-квантового REALITY (подпись ML-DSA-65, требование X25519MLKEM768), отпечатки Firefox 148 и Safari 26.3 ([#10](https://github.com/getmikan/Citrus/pull/10)).
 - `v1.8.8-citrus.2`: исправления ошибок после ревью кода: возобновление сессий, ECH, минимальная версия сервера, сжатые сертификаты, HKDF ([#55](https://github.com/getmikan/Citrus/pull/55)).
@@ -188,3 +209,8 @@ Citrus подменяет четыре библиотеки mihomo своими 
 ### [getmikan/smux](https://github.com/getmikan/smux)
 
 - Коммит `dev`: `Write` не возвращается, пока цикл отправки может читать буфер вызывающего; брошенный кадр не отправляется ([#123](https://github.com/getmikan/Citrus/pull/123)).
+
+### [getmikan/restls-client-go](https://github.com/getmikan/restls-client-go)
+
+- `v0.1.10-0.20261020174520-8a87bfbeac8c`: атомарные счётчики двусторонней передачи и уведомление о переходе в fallback из [PR 1 форка](https://github.com/getmikan/restls-client-go/pull/1), подключены в [#141](https://github.com/getmikan/Citrus/pull/141). CI форка проверяет протокол ResTLS; старые сбои общего набора TLS-тестов не считаются исправленными.
+- `v0.1.10-0.20261020200739-f74a25fc969b`: исправление panic при QUIC/TLS resumption и восстановление полного TLS/ResTLS-набора из [PR 2 форка](https://github.com/getmikan/restls-client-go/pull/2), подключены в [#148](https://github.com/getmikan/Citrus/pull/148). Прежние сбои общего набора устранены; тесты для зелёного результата не отключаются.

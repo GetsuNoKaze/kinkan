@@ -1,6 +1,7 @@
 package inbound
 
 import (
+	"github.com/metacubex/mihomo/transport/xdrive"
 	"strings"
 
 	C "github.com/metacubex/mihomo/constant"
@@ -10,12 +11,14 @@ import (
 )
 
 type VlessOption struct {
+	XDriveConfig *xdrive.Config `inbound:"xdrive-config,omitempty" yaml:"xdrive-config,omitempty" json:"xdrive-config,omitempty"`
 	BaseOption
 	Users              []VlessUser   `inbound:"users"`
 	Decryption         string        `inbound:"decryption,omitempty"`
 	WsPath             string        `inbound:"ws-path,omitempty"`
 	XHTTPConfig        XHTTPConfig   `inbound:"xhttp-config,omitempty"`
 	GrpcServiceName    string        `inbound:"grpc-service-name,omitempty"`
+	FallbackPage       string        `inbound:"fallback-page,omitempty"`
 	Certificate        string        `inbound:"certificate,omitempty"`
 	PrivateKey         string        `inbound:"private-key,omitempty"`
 	ClientAuthType     string        `inbound:"client-auth-type,omitempty"`
@@ -118,12 +121,14 @@ func NewVless(options *VlessOption) (*Vless, error) {
 		config: options,
 		vs: LC.VlessServer{
 			Enable:             true,
+			XDriveConfig:       options.XDriveConfig,
 			Listen:             base.RawAddress(),
 			Users:              users,
 			Decryption:         options.Decryption,
 			WsPath:             options.WsPath,
 			XHTTPConfig:        options.XHTTPConfig.Build(),
 			GrpcServiceName:    options.GrpcServiceName,
+			FallbackPage:       options.FallbackPage,
 			Certificate:        options.Certificate,
 			PrivateKey:         options.PrivateKey,
 			ClientAuthType:     options.ClientAuthType,
