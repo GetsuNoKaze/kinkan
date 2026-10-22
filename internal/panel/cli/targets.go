@@ -91,7 +91,7 @@ func targetsCmd(ctx context.Context, st *store.Store, set *settings.Settings, cf
 		if err != nil {
 			return fmt.Errorf("no node %d", *node)
 		}
-		r := checkTarget(ctx, set, cfg, n, strings.TrimSpace(*dest), strings.TrimSpace(*sni))
+		r := checkTarget(ctx, st, set, cfg, n, strings.TrimSpace(*dest), strings.TrimSpace(*sni))
 		if *asJSON {
 			return json.NewEncoder(stdout).Encode(r)
 		}
@@ -134,7 +134,7 @@ func targetsCmd(ctx context.Context, st *store.Store, set *settings.Settings, cf
 			}
 		}
 		if !*force {
-			r := checkTarget(ctx, set, cfg, n, *dest, *sni)
+			r := checkTarget(ctx, st, set, cfg, n, *dest, *sni)
 			if !r.OK {
 				return fmt.Errorf("%s does not suit REALITY: %s; --force applies it anyway", *dest, targetProblem(r))
 			}
@@ -203,8 +203,8 @@ func scanTargets(ctx context.Context, st *store.Store, set *settings.Settings, c
 // checkTarget tests a site from the node that would dial it, or from here when the node
 // cannot tell. A destination the panel must not dial is a result like any other, with the
 // check's own error code.
-func checkTarget(ctx context.Context, set *settings.Settings, cfg config.Config, n db.Node, dest, sni string) scan.Result {
-	r, err := targetDeps(set, cfg, n).Check(ctx, dest, sni)
+func checkTarget(ctx context.Context, st *store.Store, set *settings.Settings, cfg config.Config, n db.Node, dest, sni string) scan.Result {
+	r, err := kinkanSiteDeps(ctx, st, n, targetDeps(set, cfg, n)).Check(ctx, dest, sni) // Kinkan: the node's site
 	switch {
 	case errors.Is(err, targets.ErrBadDest):
 		return scan.Result{Dest: dest, SNI: sni, Error: "bad_dest"}

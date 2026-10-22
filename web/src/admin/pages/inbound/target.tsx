@@ -34,7 +34,7 @@ export function TargetPicker({ dest, sni, nodeId, onPick }: { dest: string; sni:
   // An IP dest is checked with the site name clients send: a TLS handshake needs one.
   const name = destIsIP(dest) ? sni.trim() : "";
   const check = useMutation({
-    mutationFn: () => unwrap(api.POST("/api/v1/inbounds/check-target", { body: { dest: dest.trim(), ...(name ? { sni: name } : {}) } })),
+    mutationFn: () => unwrap(api.POST("/api/v1/inbounds/check-target", { params: { query: { node_id: nodeId } }, body: { dest: dest.trim(), ...(name ? { sni: name } : {}) } })),
   });
   const resetCheck = check.reset;
   // A result is about what was checked; an edit makes it stale.

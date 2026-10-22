@@ -6,12 +6,13 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/danielgtaylor/huma/v2"
+	"mikan/internal/netaddr"
 	"mikan/internal/nodeapi"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
-	"mikan/internal/proto"
+
+	"github.com/danielgtaylor/huma/v2"
 )
 
 type scannerInput struct {
@@ -64,7 +65,7 @@ func (h *handlers) scannersOf(ctx context.Context, in *scannerInput) (*scannerOu
 		ip = ip.Unmap()
 		// Whatever the node says, only the panel knows its own address.
 		r.Own = own[ip]
-		if h.d.GeoIP != nil && (r.Country == "" || r.ASN == "") && proto.PublicAddr(ip) {
+		if h.d.GeoIP != nil && (r.Country == "" || r.ASN == "") && netaddr.IsPublic(ip) {
 			info := h.d.GeoIP.Lookup(ip)
 			if r.Country == "" {
 				r.Country = info.Country

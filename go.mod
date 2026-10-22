@@ -9,13 +9,16 @@ require (
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/lib/pq v1.12.3
 	github.com/metacubex/age v0.0.0-20260603010618-28d156b4ea78
+	github.com/metacubex/http v0.1.8
 	github.com/metacubex/mihomo v1.19.32
+	github.com/metacubex/quic-go v0.61.1-0.20260727080200-2548683b76f4
+	github.com/metacubex/tls v0.1.8
+	github.com/oschwald/maxminddb-golang v1.12.0
 	github.com/pquerna/otp v1.5.0
 	github.com/pressly/goose/v3 v3.29.0
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/crypto v0.58.0
 	golang.org/x/net v0.61.0
-	golang.org/x/time v0.16.0
 )
 
 require (
@@ -76,7 +79,6 @@ require (
 	github.com/metacubex/gvisor v0.0.0-20260922041103-e2cbcd6e7400 // indirect
 	github.com/metacubex/hkdf v0.1.0 // indirect
 	github.com/metacubex/hpke v0.1.0 // indirect
-	github.com/metacubex/http v0.1.8 // indirect
 	github.com/metacubex/jls-quic-go v0.0.0-20260727080412-732f2fc9a34d // indirect
 	github.com/metacubex/jls-tls v0.0.0-20260723084315-67adc0e2f796 // indirect
 	github.com/metacubex/jsonv2 v0.0.0-20260721082349-16b4998c8f89 // indirect
@@ -87,7 +89,6 @@ require (
 	github.com/metacubex/mlkem v0.1.0 // indirect
 	github.com/metacubex/nftables v0.0.0-20260426003805-208c2c1ba2cb // indirect
 	github.com/metacubex/qpack v0.6.0 // indirect
-	github.com/metacubex/quic-go v0.61.1-0.20260727080200-2548683b76f4 // indirect
 	github.com/metacubex/randv2 v0.2.0 // indirect
 	github.com/metacubex/restls-client-go v0.1.9 // indirect
 	github.com/metacubex/sevenzip v1.6.4 // indirect
@@ -104,7 +105,6 @@ require (
 	github.com/metacubex/tailscale v0.0.0-20260821153257-ff0ecd818181 // indirect
 	github.com/metacubex/tailscale-wireguard-go v0.0.0-20260725073821-e61ab99cede2 // indirect
 	github.com/metacubex/tfo-go v0.0.0-20260623020846-376a77860b8c // indirect
-	github.com/metacubex/tls v0.1.8 // indirect
 	github.com/metacubex/utls v1.8.8 // indirect
 	github.com/metacubex/wazero v0.0.0-20260628025728-9ae6bdcf2a7d // indirect
 	github.com/metacubex/wireguard-go v0.0.0-20250820062549-a6cecdd7f57f // indirect
@@ -116,7 +116,6 @@ require (
 	github.com/mroth/weightedrand/v2 v2.1.0 // indirect
 	github.com/oasisprotocol/deoxysii v0.0.0-20220228165953-2091330c22b7 // indirect
 	github.com/openacid/low v0.1.21 // indirect
-	github.com/oschwald/maxminddb-golang v1.12.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.33 // indirect
 	github.com/pires/go-proxyproto v0.8.0 // indirect
 	github.com/rasky/go-lzo v0.0.0-20200203143853-96a758eda86e // indirect
@@ -151,6 +150,7 @@ require (
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/term v0.47.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
+	golang.org/x/time v0.16.0 // indirect
 	golang.org/x/tools v0.52.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
@@ -160,10 +160,12 @@ replace google.golang.org/protobuf => github.com/metacubex/protobuf-go v0.0.0-20
 
 replace github.com/metacubex/mihomo => ./third_party/mihomo
 
-replace github.com/metacubex/utls => github.com/getmikan/utls v1.8.9-0.20261017232116-b76689d5c62f
+replace github.com/metacubex/utls => github.com/getmikan/utls v1.8.9-0.20261020173537-32502cba39f4
 
 replace github.com/metacubex/http => ./third_party/metacubex-http
 
 replace github.com/metacubex/tls => github.com/getmikan/tls v0.1.9-0.20261018054601-0a54a49f00e8
 
 replace github.com/metacubex/smux => github.com/getmikan/smux v0.0.0-20261017193300-1d830d820876
+
+replace github.com/metacubex/restls-client-go => github.com/getmikan/restls-client-go v0.1.10-0.20261020200739-f74a25fc969b

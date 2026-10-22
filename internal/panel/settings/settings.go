@@ -86,6 +86,9 @@ const (
 	// Branding and support: the bot's and the subscription page's name and the support link.
 	KeyBrand      = "brand"
 	KeySupportURL = "support_url"
+	// KeyPanelAppName is the admin panel's name as an installed app (server.AppName): ""
+	// for the brand, "mikan" without one.
+	KeyPanelAppName = "panel_app_name"
 	// The announcement apps show over the profile (the announce and announce-url headers),
 	// for maintenance or news; empty: none.
 	KeyAnnounce    = "sub_announce"
@@ -96,7 +99,7 @@ const (
 	// (subs.Config.InactiveServer), with the admin's words or the built-in ones.
 	KeyInactiveServer = "sub_inactive_server"
 	// KeySiteTemplate is the built-in front page a stranger sees at the panel's address
-	// (server.Templates); "" for none.
+	// (frontpage.Templates); "" for none.
 	KeySiteTemplate = "site_template"
 	// KeyTrafficDetail: the nodes sum each subscription's bytes by site (user_sites), kept
 	// KeyTrafficDetailDays days.

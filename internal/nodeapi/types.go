@@ -54,6 +54,11 @@ type DesiredState struct {
 	// (SNIRouter); nil: none. Nodes older than it ignore it, and their routed inbounds stay
 	// on their own ports.
 	Router *SNIRouter `json:"sni_router,omitempty"`
+	// FrontPage is the built-in page (frontpage.Templates) a stranger gets: from the inbounds
+	// on an HTTP transport for a request that is not theirs (the core's fallback-page), and
+	// on the names of Router.Stub over TLS with the node's certificate (TLS); "": none. Nodes
+	// older than it ignore it.
+	FrontPage string `json:"front_page,omitempty"`
 	// APIAllow: the node's API answers only these networks ("203.0.113.5/32"), loopback and
 	// the addresses the panel has reached it from; nil: anyone (the panel's certificate
 	// still guards it). Empty but not nil is on too, with the panel's addresses alone. The
@@ -75,6 +80,10 @@ type SNIRouter struct {
 	Listen  string     `json:"listen,omitempty"`
 	Routes  []SNIRoute `json:"routes"`
 	Default string     `json:"default,omitempty"`
+	// Stub: the names that get the node's front page (DesiredState.FrontPage) instead, ""
+	// for a ClientHello with no name; with no Default it takes any other name too. Nodes
+	// older than it ignore it.
+	Stub []string `json:"stub,omitempty"`
 }
 
 type SNIRoute struct {
@@ -130,10 +139,6 @@ type Inbound struct {
 	Listen string          `json:"listen"`
 	Port   string          `json:"port"`             // "443" or a range "20000-20100"
 	Config json.RawMessage `json:"config,omitempty"` // proto.Template as JSON
-	// Preset and Settings are the format of mikan ≤ 0.1.2; the node still reads them
-	// from a saved state, the panel no longer sends them.
-	Preset   string          `json:"preset,omitempty"`
-	Settings json.RawMessage `json:"settings,omitempty"`
 	// Pool is the traffic pool the inbound counts to ("" = the main quota): its own
 	// limit per user, separate from the rest (GitHub issue #6).
 	Pool string `json:"pool,omitempty"`
@@ -159,8 +164,9 @@ type Policy struct {
 	// OtherIPs are the slot's devices on the panel's other nodes: they count against
 	// DeviceLimit here too, and may connect here without taking another device.
 	OtherIPs []string `json:"other_ips,omitempty"`
-	// Pools are the slot's quotas in traffic pools; a pool not listed has no limit.
-	// QuotaRemaining is then the quota of the inbounds outside every pool.
+	// Pools are the slot's quotas in traffic pools (server groups); a pool not listed has
+	// no limit, one listed with Main counts to QuotaRemaining like the inbounds outside every
+	// pool, which QuotaRemaining is the quota of.
 	Pools []PoolQuota `json:"pools,omitempty"`
 	// TorrentExempt: the torrent blocker leaves the slot alone.
 	TorrentExempt bool `json:"torrent_exempt,omitempty"`
@@ -208,12 +214,19 @@ const (
 type Counters struct {
 	Epoch string                        `json:"epoch"`
 	Seq   int64                         `json:"seq"`
-	Slots map[string]Traffic            `json:"slots"`           // outside every pool
+	Slots map[string]Traffic            `json:"slots"`           // the main traffic: outside every group, and the groups in it
 	Pools map[string]map[string]Traffic `json:"pools,omitempty"` // slot → pool → traffic
 	// Sites are the slots' bytes by site (DesiredState.Detail): slot → site → traffic, a
 	// part of the batch like the rest. Nodes older than it send none.
-	Sites  map[string]map[string]Traffic `json:"sites,omitempty"`
-	Online map[string]Online             `json:"online"` // live view, not part of the batch
+	Sites map[string]map[string]Traffic `json:"sites,omitempty"`
+	// Relay is what the node's relay carried for the other nodes' cascades, by the source
+	// node's relay user (relay-<id>): a part of the batch like the rest, which counts for
+	// this node's load alone, as the source node counted the same bytes for its users.
+	// Nodes older than it send none.
+	Relay  map[string]Traffic `json:"relay,omitempty"`
+	Online map[string]Online  `json:"online"` // live view, not part of the batch
+	// RelayOnline is the relay's open connections by source, a live view like Online.
+	RelayOnline map[string]int `json:"relay_online,omitempty"`
 	// Idle: no batch was cut because there was no traffic to report. There is nothing to
 	// store and nothing to acknowledge; only Online is of use. Nodes before 0.4.4 cut an
 	// empty batch instead, which must be acknowledged like any other.
@@ -496,10 +509,14 @@ func ExitName(id int64) string { return "NODE-" + strconv.FormatInt(id, 10) }
 // ProbeResult is the internet as seen through one outbound of the node.
 type ProbeResult = WarpStatus
 
-// PoolQuota is what is left of one traffic pool for a slot, as of the policy's BaseSeq.
+// PoolQuota is what is left of one traffic pool (a server group) for a slot, as of the
+// policy's BaseSeq. With Main the group counts to the slot's main quota instead: the
+// node counts its traffic there and turns the slot away from it when the main quota is
+// out; Remaining then repeats QuotaRemaining for nodes that do not know Main.
 type PoolQuota struct {
 	Pool      string `json:"pool"`
 	Remaining int64  `json:"remaining"` // bytes; -1 = unlimited
+	Main      bool   `json:"main,omitempty"`
 }
 
 // TorrentBlock is the torrent blocker: the node looks at the first bytes a user sends

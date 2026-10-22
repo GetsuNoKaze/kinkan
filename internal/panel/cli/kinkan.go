@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"mikan/internal/nodeapi"
 	"mikan/internal/panel/store"
+	"mikan/internal/panel/store/db"
+	"mikan/internal/panel/targets"
 )
 
 // kinkanSchemaReport reads the fork's schema version before a migration; the function it
@@ -21,4 +24,13 @@ func kinkanSchemaReport(ctx context.Context, dsn string) func() {
 		}
 		fmt.Printf("Kinkan schema version: %d -> %d\n", before, after)
 	}
+}
+
+// kinkanSiteDeps lets the target checks know the node's own website (Kinkan's node site):
+// REALITY may aim at it on the node's loopback, and the node checks it itself.
+func kinkanSiteDeps(ctx context.Context, st *store.Store, n db.Node, d targets.Deps) targets.Deps {
+	if _, _, ok, err := st.NodeSite(ctx, n.ID); err != nil || !ok {
+		return d
+	}
+	return d.WithSite(nodeapi.SiteHTTPSPort, d.CheckTarget)
 }

@@ -3,7 +3,7 @@ title: Changelog
 description: Every pull request merged into Citrus, by area, with links, and the versions of the utls, tls and http forks.
 ---
 
-Everything merged into `dev` since the project started (127 pull requests), by area. Within an area the order is by PR number. Links go to the PRs in [getmikan/Citrus](https://github.com/getmikan/Citrus/pulls?q=is%3Apr+is%3Amerged), which describe what was wrong, what changed and how it was tested.
+Everything merged into `dev` since the project started (146 pull requests), by area. Within an area the order is by PR number. Links go to the PRs in [getmikan/Citrus](https://github.com/getmikan/Citrus/pulls?q=is%3Apr+is%3Amerged), which describe what was wrong, what changed and how it was tested.
 
 The first beta release, [`v1.0.0-beta.1`](https://github.com/getmikan/Citrus/releases/tag/v1.0.0-beta.1), is built from `dev` up to [#112](https://github.com/getmikan/Citrus/pull/112). The second, `v1.0.0-beta.2`, is built from `dev` as described on this page.
 
@@ -31,6 +31,11 @@ What changes behaviour for existing configs is collected on [Migrating from miho
 - [#121](https://github.com/getmikan/Citrus/pull/121) CI: a `-race` job for the 30 race-clean packages.
 - [#126](https://github.com/getmikan/Citrus/pull/126) Four-server comparison: Xray, sing-box, mihomo and Citrus, eight protocols.
 - [#127](https://github.com/getmikan/Citrus/pull/127) Bench: deterministic REALITY upload with TLS inside the tunnel; a nightly performance check against mihomo in CI.
+- [#144](https://github.com/getmikan/Citrus/pull/144) Optional non-root server profiles: dedicated systemd account with read-only config and bounded capabilities, and a Docker image using UID 65532. CI runs the real systemd unit and a zero-capability Docker relay test.
+- [#132](https://github.com/getmikan/Citrus/pull/132) Changelog brought up to the second beta, v1.0.0-beta.2.
+- [#134](https://github.com/getmikan/Citrus/pull/134) News post on the second beta, the roadmap after it.
+- [#135](https://github.com/getmikan/Citrus/pull/135) Test and site dependencies: the Docker client in tests moved to `moby/moby`, `postcss-selector-parser` bumped — the Dependabot alerts are closed.
+- [#150](https://github.com/getmikan/Citrus/pull/150) Added an independent Linux CI job for the complete inbound suite with the race detector, including concurrent subtests in one process. Logs are preserved as artifacts; protocol-isolated checks remain enabled.
 
 ## Removed legacy
 
@@ -47,6 +52,7 @@ What changes behaviour for existing configs is collected on [Migrating from miho
 - [#20](https://github.com/getmikan/Citrus/pull/20) XHTTP server accepts packet-up with any method and data placement like Xray; `server-max-header-bytes`.
 - [#21](https://github.com/getmikan/Citrus/pull/21) HTTP/2 inbounds send the same first SETTINGS frame as Caddy (getmikan/http).
 - [#34](https://github.com/getmikan/Citrus/pull/34) XHTTP: Xray's default XMUX when `reuse-settings` is empty, reuse manager fixes.
+- [#139](https://github.com/getmikan/Citrus/pull/139) XDrive for VLESS clients and servers: local, Google Drive and template API storage, VLESS Encryption, Mux.Cool and XUDP; Xray interoperability and race checks in CI.
 
 ## VPN service features
 
@@ -64,6 +70,10 @@ What changes behaviour for existing configs is collected on [Migrating from miho
 - [#70](https://github.com/getmikan/Citrus/pull/70) `GET /events`, a push stream of core events.
 - [#71](https://github.com/getmikan/Citrus/pull/71) TrustTunnel: per-proxy HTTP/2 session timers.
 - [#73](https://github.com/getmikan/Citrus/pull/73) `type: chain` groups for cascades, with a health check that names the failed hop.
+- [#136](https://github.com/getmikan/Citrus/pull/136) PROXY protocol v1 and v2 on the TCP inbounds (`proxy-protocol`, `proxy-protocol-trusted`): the client address from the header of a front end such as an SNI router on 443.
+- [#146](https://github.com/getmikan/Citrus/pull/146) Default User-Agent `clash.meta/<version> citrus/<version>`: panels still recognise mihomo by the start of the string, Citrus stands out by the `citrus/` token.
+- [#147](https://github.com/getmikan/Citrus/pull/147) Added `core: "citrus"` to controller `GET /version`, preserving the existing `meta` and `version` fields for panels.
+- [#151](https://github.com/getmikan/Citrus/pull/151) Limits: `speed-group`, one speed shared by several users on any inbounds; a new speed without resetting the bucket; `SetLimits` for many limits at once and `SetOnLeave` for traffic by destination in an embedding application.
 
 ## Performance
 
@@ -76,6 +86,7 @@ What changes behaviour for existing configs is collected on [Migrating from miho
 - [#125](https://github.com/getmikan/Citrus/pull/125) Hysteria2 and TUIC: less work per stream, the read buffer only when needed, no first-bytes wait goroutine for DIRECT.
 - [#129](https://github.com/getmikan/Citrus/pull/129) Idle tunnel memory: Trojan −36%, AnyTLS −18%, REALITY −12% (getmikan/tls: read buffer sized by what is moving, `WaitRead`).
 - [#131](https://github.com/getmikan/Citrus/pull/131) Latency under load: the relay loop yields after 256 KiB and 1 ms; an echo next to eight downloads 55–63 → 20 ms.
+- [#130](https://github.com/getmikan/Citrus/pull/130) AnyTLS: received frames queued on their stream, outgoing frames built in place; with 32 streams download is twice as fast, upload +23%, CPU per GB nearly halved; the client race is gone.
 
 ## Hardening
 
@@ -124,6 +135,12 @@ What changes behaviour for existing configs is collected on [Migrating from miho
 - [#107](https://github.com/getmikan/Citrus/pull/107) CI: the remaining actions and fpm pinned; Go toolchains checked against SHA-256.
 - [#111](https://github.com/getmikan/Citrus/pull/111) AnyTLS: the peer version from session settings is parsed with a bounds check, so `-1` no longer turns on v2 behaviour (found by CodeQL).
 - [#113](https://github.com/getmikan/Citrus/pull/113) AnyTLS: bounded padding scheme and number parsing; `compress` and `dhcp` bumped.
+- [#140](https://github.com/getmikan/Citrus/pull/140) Bounded VLESS replay history and aggregate Sudoku HTTP-mask upload buffers; 64 KiB Sudoku write chunks; invalid ML-DSA seeds are omitted from errors.
+- [#141](https://github.com/getmikan/Citrus/pull/141) Updated uTLS and ResTLS forks in all three modules: REALITY deadlines until classification, exact fallback limiter threshold, no AuthKey/short ID in logs, cached X25519 keys/buffers, JLS verification callbacks and atomic ResTLS counters.
+- [#142](https://github.com/getmikan/Citrus/pull/142) Bounded pending REALITY/ShadowTLS/JLS/ResTLS handshakes, ShadowTLS records, Sudoku fallback and KCPTun sessions/streams; server QUIC 0-RTT for TUIC/TrustTunnel is opt-in. Added regression and protocol-isolated inbound race tests; documented compatibility limitations without claiming Sudoku key-auth fixed.
+- [#143](https://github.com/getmikan/Citrus/pull/143) Controller WebSockets use scoped single-use tickets (30 seconds, bounded storage); reusable URL secrets require an explicit compatibility option. Added migration instructions and hub race coverage.
+- [#145](https://github.com/getmikan/Citrus/pull/145) Updated controller/events guides for one-time WebSocket tickets and documented package/image updates for the non-root server profile.
+- [#148](https://github.com/getmikan/Citrus/pull/148) Updated ResTLS in all three modules: fixed a generic QUIC/TLS resumption debug-call panic; the fork now runs its complete TLS/ResTLS regression suite on Go 1.20/1.24/1.26, Windows and under the race detector.
 
 ## Ported from mihomo and the community
 
@@ -163,12 +180,16 @@ What changes behaviour for existing configs is collected on [Migrating from miho
 - [#122](https://github.com/getmikan/Citrus/pull/122) SOCKS UDP user test takes a free TCP port (Windows).
 - [#123](https://github.com/getmikan/Citrus/pull/123) smux replaced by the getmikan/smux fork: the caller's buffer is no longer read after `Write` returns (its bytes could go out on another connection).
 - [#125](https://github.com/getmikan/Citrus/pull/125) TUIC: a `CONNECT` to a 255-byte domain no longer crashes the server before authentication.
+- [#137](https://github.com/getmikan/Citrus/pull/137) PROXY protocol: a v1 line shorter than the signature is rejected at once, without reading client data.
+- [#138](https://github.com/getmikan/Citrus/pull/138) The SOCKS UDP user test takes a port free for both TCP and UDP (Windows).
 
 ## Forks
 
-Citrus replaces four mihomo libraries with its own forks through `replace` in `go.mod`. The module paths stay the same, and each fork has `main` (releases) and `dev` branches with CI.
+Citrus replaces five mihomo libraries with its own forks through `replace` in `go.mod`. Module paths stay the same; changes go through PRs and CI on `dev`, and releases are published separately.
 
 ### [getmikan/utls](https://github.com/getmikan/utls)
+
+- `v1.8.9-0.20261020173537-32502cba39f4`: REALITY/JLS fixes from [fork PR 3](https://github.com/getmikan/utls/pull/3), pinned in [#141](https://github.com/getmikan/Citrus/pull/141); a `dev` commit, not a release tag.
 
 - `v1.8.8-citrus.1`: the server side of post-quantum REALITY (ML-DSA-65 signature, X25519MLKEM768 requirement), Firefox 148 and Safari 26.3 fingerprints ([#10](https://github.com/getmikan/Citrus/pull/10)).
 - `v1.8.8-citrus.2`: bug fixes from a code review: session resumption, ECH, server minimum version, compressed certificates, HKDF ([#55](https://github.com/getmikan/Citrus/pull/55)).
@@ -188,3 +209,8 @@ Citrus replaces four mihomo libraries with its own forks through `replace` in `g
 ### [getmikan/smux](https://github.com/getmikan/smux)
 
 - A `dev` commit: `Write` does not return while the send loop may still read the caller's buffer; an abandoned frame is not sent ([#123](https://github.com/getmikan/Citrus/pull/123)).
+
+### [getmikan/restls-client-go](https://github.com/getmikan/restls-client-go)
+
+- `v0.1.10-0.20261020174520-8a87bfbeac8c`: atomic full-duplex counters and fallback classification notification from [fork PR 1](https://github.com/getmikan/restls-client-go/pull/1), pinned in [#141](https://github.com/getmikan/Citrus/pull/141). Fork CI covers the ResTLS protocol; existing failures in the generic TLS suite are not claimed fixed.
+- `v0.1.10-0.20261020200739-f74a25fc969b`: generic QUIC/TLS resumption panic fix and restored full TLS/ResTLS tests from [fork PR 2](https://github.com/getmikan/restls-client-go/pull/2), pinned in [#148](https://github.com/getmikan/Citrus/pull/148). The earlier generic-suite failures are now addressed; no tests are skipped to obtain a pass.

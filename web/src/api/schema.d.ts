@@ -1507,7 +1507,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Вернуть Stars покупателю */
+        /** Вернуть деньги покупателю: Stars, на баланс или через способ оплаты, если он умеет */
         post: operations["refund-payment"];
         delete?: never;
         options?: never;
@@ -1526,7 +1526,7 @@ export interface paths {
         put?: never;
         /**
          * Отметить, что деньги возвращены вручную
-         * @description Оплата через способ оплаты из маркетплейса, оплаченная, но не применённая (например, пробный период, который уже нельзя выдать): админ вернул деньги в кабинете платёжной системы, платёж становится возвращённым, покупателю приходит сообщение. Stars возвращаются через refund.
+         * @description Оплата через способ оплаты из маркетплейса: админ вернул деньги в кабинете платёжной системы (или прошёл чарджбэк). Платёж становится возвращённым, выданное им снимается, покупателю приходит сообщение. Stars и баланс возвращаются через refund.
          */
         post: operations["mark-payment-refunded"];
         delete?: never;
@@ -1542,10 +1542,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Пулы трафика */
+        /** Группы серверов */
         get: operations["list-pools"];
         put?: never;
-        /** Создать пул трафика */
+        /** Создать группу серверов */
         post: operations["create-pool"];
         delete?: never;
         options?: never;
@@ -1563,12 +1563,46 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Удалить пул: его подключения вернутся в основной трафик; пока в нём есть оплаченный трафик, пул остаётся */
+        /** Удалить группу серверов: её подключения вернутся к основным серверам; пока в ней есть оплаченный трафик, группа остаётся */
         delete: operations["delete-pool"];
         options?: never;
         head?: never;
-        /** Переименовать пул */
+        /** Переименовать группу серверов */
         patch: operations["rename-pool"];
+        trace?: never;
+    };
+    "/api/v1/pools/{id}/inbounds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Подключения группы серверов */
+        put: operations["set-pool-inbounds"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pools/{id}/tariffs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Как тарифы держат группу серверов */
+        put: operations["set-pool-tariffs"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/presets": {
@@ -2060,7 +2094,7 @@ export interface paths {
         put?: never;
         /**
          * Открыть доступ для поддержки
-         * @description Только для официальной поддержки: панель проверяет код из обращения у бота поддержки, открывает доступ и сама передаёт ссылку боту, админу она не показывается. Одновременно активен один доступ: новый отзывает прежний. Уровень terminal требует пароль и код 2FA.
+         * @description Только для официальной поддержки: панель проверяет код из обращения у бота поддержки, открывает доступ и сама передаёт ссылку боту, админу она не показывается. Одновременно активен один доступ: новый отзывает прежний. Уровень terminal и расширенный режим требуют пароль и код 2FA.
          */
         post: operations["create-support-grant"];
         delete?: never;
@@ -2302,7 +2336,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/tariffs/{id}/apply-pools": {
+    "/api/v1/tariffs/{id}/apply": {
         parameters: {
             query?: never;
             header?: never;
@@ -2311,8 +2345,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Применить лимиты пулов тарифа к уже выданным подпискам: свои лимиты пулов у клиентов заменятся, израсходованное останется */
-        post: operations["apply-tariff-pools"];
+        /** Применить тариф к уже выданным подпискам: выбранные части тарифа заменят свои значения клиентов, срок и израсходованное останутся */
+        post: operations["apply-tariff"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2874,9 +2908,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Пулы трафика пользователя */
+        /** Группы серверов пользователя */
         get: operations["user-pools"];
-        /** Лимиты пулов пользователя */
+        /** Как подписка пользователя держит группы серверов */
         put: operations["set-user-pools"];
         post?: never;
         delete?: never;
@@ -3215,10 +3249,20 @@ export interface components {
             public_enabled?: boolean;
             public_summary?: boolean;
         };
-        ApplyPoolsOutputBody: {
+        ApplyTariffInputBody: {
+            /** @description Лимит устройств (докупленные остаются сверху) и как он считается */
+            devices?: boolean;
+            /** @description Группы серверов: режимы и лимиты */
+            groups?: boolean;
+            /** @description Скорость */
+            speed?: boolean;
+            /** @description Трафик за период и когда он обнуляется */
+            traffic?: boolean;
+        };
+        ApplyTariffOutputBody: {
             /**
              * Format: int64
-             * @description У скольких клиентов тарифа обновлены лимиты пулов
+             * @description Скольким подпискам тарифа применены его части
              */
             applied: number;
         };
@@ -3517,6 +3561,12 @@ export interface components {
             /** Format: int64 */
             revenue_stars: number;
         };
+        CascadeConns: {
+            /** Format: int64 */
+            conns: number;
+            /** Format: int64 */
+            node_id: number;
+        };
         CascadeExit: {
             /** @description Подключения этой ноды, которые выходят через ту ноду */
             inbounds: string[];
@@ -3779,6 +3829,8 @@ export interface components {
         CreateSupportGrantInputBody: {
             /** @description Одноразовый код из обращения в боте поддержки: без него доступ не открывается */
             code: string;
+            /** @description Расширенный режим, уровни change и terminal: ещё и ключи нод, адрес и домен ноды, свои сертификаты и WireGuard, оплата и балансы, бот, аддоны не из каталога mikan. Нужен пароль */
+            extended?: boolean;
             /**
              * Format: int64
              * @description Срок доступа в часах
@@ -3789,13 +3841,13 @@ export interface components {
             level: "view" | "change" | "terminal";
             /** @description Пометка для себя, например номер обращения */
             note?: string;
-            /** @description Пароль админа: нужен для уровня terminal */
+            /** @description Пароль админа: нужен для уровня terminal и для расширенного режима */
             password?: string;
             /** @description Показывать оператору имена, Telegram и ссылки подписчиков */
             show_people?: boolean;
             /** @description Уровень terminal: где разрешён терминал, panel и/или node:<id>. Полный доступ к этим серверам */
             terminal_targets?: string[];
-            /** @description Код из приложения, если включена 2FA: нужен для уровня terminal */
+            /** @description Код из приложения, если включена 2FA: нужен для уровня terminal и для расширенного режима */
             totp?: string;
         };
         CreateSupportGrantOutputBody: {
@@ -4065,7 +4117,7 @@ export interface components {
             note?: string;
             /**
              * Format: int64
-             * @description Пул трафика; не передан — основной трафик
+             * @description Группа серверов; не передана — основной трафик
              */
             pool_id?: number;
         };
@@ -4089,13 +4141,35 @@ export interface components {
             payment_id: number | null;
             /**
              * Format: int64
-             * @description Пул трафика; null — основной трафик
+             * @description Группа серверов; null — основной трафик
              */
             pool_id: number | null;
             /** Format: int64 */
             remaining: number;
+            /**
+             * @description purchase — куплен, admin — начислен вручную, gift — подарок тарифа к оплате
+             * @enum {string}
+             */
+            source: "purchase" | "admin" | "gift";
+        };
+        GroupInTariff: {
             /** @enum {string} */
-            source: "purchase" | "admin";
+            mode: "main" | "own" | "unlimited" | "closed";
+            /** Format: int64 */
+            tariff_id: number;
+            /**
+             * Format: int64
+             * @description Байты за период; только с mode=own
+             */
+            traffic_limit?: number;
+        };
+        GroupInboundsInputBody: {
+            /** @description Все подключения группы: перечисленные переходят в неё из других групп, остальные её подключения возвращаются к основным серверам */
+            inbound_ids: number[];
+        };
+        GroupTariffsInputBody: {
+            /** @description Тарифы, в которых группа меняется; остальные тарифы держат её как раньше. Закрытие и открытие группы действует сразу на клиентов тарифа */
+            tariffs: components["schemas"]["GroupInTariff"][];
         };
         H2Comparison: {
             reference: components["schemas"]["H2Fingerprint"];
@@ -4159,7 +4233,7 @@ export interface components {
             password?: string;
             /**
              * Format: int64
-             * @description Тариф, на котором появятся пользователи; лимит, срок и устройства берутся из старой панели, сброс трафика, протоколы и пулы — из тарифа
+             * @description Тариф, на котором появятся пользователи; лимит, срок и устройства берутся из старой панели, сброс трафика, протоколы и группы серверов — из тарифа
              */
             tariff_id: number;
             token?: string;
@@ -4235,7 +4309,7 @@ export interface components {
             outbound: "direct" | "warp" | "node";
             /**
              * Format: int64
-             * @description Пул трафика, в который считается подключение; нет — основной трафик
+             * @description Группа серверов подключения: какой трафик оно тратит; нет — основной трафик
              */
             pool_id?: number;
             port: string;
@@ -4266,6 +4340,7 @@ export interface components {
             default_port: string;
             domain_cert?: boolean;
             id: string;
+            nested_tls?: boolean;
             network: string;
             shared?: boolean;
             sub_name: string;
@@ -4433,6 +4508,11 @@ export interface components {
             };
             /** @description Дайджест образа неофициальной записи */
             digest?: string;
+            /**
+             * Format: int64
+             * @description Сколько раз скачан образ, по странице пакета на GitHub, с точностью до двух знаков (community)
+             */
+            downloads?: number;
             /** @description Отпечаток ключа автора, которым подписан релиз (community) */
             fingerprint?: string;
             homepage: string;
@@ -4640,6 +4720,13 @@ export interface components {
              * @description Мест для клиентов в группе; null — без ограничения
              */
             capacity: number | null;
+            /** @description Открытые сейчас подключения каскада других нод через эту, по ноде-источнику; пусто без каскада и у нод до 0.5.1.1-rc.14 */
+            cascade: components["schemas"]["CascadeConns"][];
+            /**
+             * Format: int64
+             * @description Сколько нода унесла за сутки для каскада других нод (вверх и вниз вместе), байты; в traffic_24h не входит: этих пользователей считает нода-источник
+             */
+            cascade_24h: number;
             certificate?: components["schemas"]["NodeCertView"];
             /**
              * Format: int64
@@ -4680,9 +4767,14 @@ export interface components {
             error_since?: string;
             /** @description Канал ноды делится поровну между теми, кто сейчас качает */
             fair_share: boolean;
+            /**
+             * @description Заглушка для посторонних: её отдают протоколы VLESS и Trojan с XHTTP, WebSocket или gRPC на чужие запросы вместо пустого 404, а с общим портом 443 и домен ноды; пусто — нет, maintenance — технические работы, cats — котики-кликер
+             * @enum {string}
+             */
+            front_page: "" | "maintenance" | "cats";
             /** @description Последний hello ноды после запуска: достучалась ли панель в ответ */
             hello?: components["schemas"]["NodeHello"];
-            /** @description Адрес для клиентов */
+            /** @description Адрес для клиентов: домен ноды, без него server_host */
             host: string;
             /** @description HTTP на порту 80 получает 301 на https */
             http_redirect: boolean;
@@ -4718,6 +4810,8 @@ export interface components {
             redirect_error?: string;
             /** @description Почему нода не смогла занять порт 443 */
             router_error?: string;
+            /** @description IP или имя сервера, как его задали: по нему панель ходит в API ноды; пусто у своей ноды */
+            server_host: string;
             /** @description Порт 443 ноды делят подключения по имени TLS (SNI-роутер) */
             sni_router: boolean;
             /** @enum {string} */
@@ -4769,6 +4863,11 @@ export interface components {
              * @description up + down
              */
             bytes: number;
+            /**
+             * Format: int64
+             * @description Сколько нода унесла для каскада других нод (вверх и вниз вместе): их пользователей считает нода-источник, поэтому в bytes и total не входит
+             */
+            cascade: number;
             /** Format: int64 */
             down: number;
             /** Format: int64 */
@@ -4852,6 +4951,27 @@ export interface components {
             /** @description Ссылки закрепляют самоподписанный сертификат: в sing-box приложениях (SFA, SFI) протоколы ноды на TLS не появятся, TUIC без проверки сертификата */
             pinned: boolean;
         };
+        NodeTrafficOutputBody: {
+            points: components["schemas"]["NodeTrafficPoint"][];
+        };
+        NodeTrafficPoint: {
+            /**
+             * Format: int64
+             * @description Скачано для каскада других нод: в down не входит
+             */
+            cascade_down: number;
+            /**
+             * Format: int64
+             * @description Отдано для каскада других нод: в up не входит
+             */
+            cascade_up: number;
+            /** Format: int64 */
+            down: number;
+            /** Format: date-time */
+            t: string;
+            /** Format: int64 */
+            up: number;
+        };
         NodeView: {
             /** Format: date-time */
             checked_at: string;
@@ -4924,7 +5044,7 @@ export interface components {
             on_sale?: boolean;
             /**
              * Format: int64
-             * @description Пул трафика; не передан — основной трафик
+             * @description Группа серверов; не передана — основной трафик
              */
             pool_id?: number;
             /**
@@ -4936,6 +5056,8 @@ export interface components {
             price_stars?: number;
             /** Format: int64 */
             sort?: number;
+            /** @description Тарифы, которым продаётся пакет; не переданы или пусто — всем, к квоте которых он подходит */
+            tariffs?: number[];
         };
         PackageView: {
             /** Format: int64 */
@@ -4956,7 +5078,7 @@ export interface components {
             on_sale: boolean;
             /**
              * Format: int64
-             * @description Пул трафика; null — основной трафик
+             * @description Группа серверов; null — основной трафик
              */
             pool_id: number | null;
             /**
@@ -4971,6 +5093,8 @@ export interface components {
             price_stars: number | null;
             /** Format: int64 */
             sort: number;
+            /** @description Тарифы, которым продаётся пакет; пусто — всем, к квоте которых он подходит */
+            tariffs: number[];
         };
         Page: {
             apps: components["schemas"]["PageApps"];
@@ -5167,7 +5291,7 @@ export interface components {
             outbound?: "direct" | "warp" | "node";
             /**
              * Format: int64
-             * @description Пул трафика; 0 — основной трафик
+             * @description Группа серверов; 0 — без группы, основной трафик
              */
             pool_id?: number;
             port?: string;
@@ -5199,6 +5323,11 @@ export interface components {
             enabled?: boolean;
             /** @description Делить канал ноды поровну между теми, кто сейчас качает; нужен channel_mbps */
             fair_share?: boolean;
+            /**
+             * @description Заглушка для посторонних: протоколы с XHTTP, WebSocket или gRPC отдают её на чужие запросы вместо пустого 404, общий порт 443 — на домене ноды и на запросах без имени (сертификат ноды, TLS 1.2+, HSTS); пусто — нет
+             * @enum {string}
+             */
+            front_page?: "" | "maintenance" | "cats";
             host?: string;
             /** @description Отвечать на HTTP (порт 80) редиректом 301 на https; не для ноды панели */
             http_redirect?: boolean;
@@ -5276,6 +5405,8 @@ export interface components {
             /** @description happ://routing/…, auto — собрать из маршрутизации; пусто — не отдавать */
             happ_routing?: string;
             link_reissue?: components["schemas"]["ReissueRules"];
+            /** @description Пусто — по бренду */
+            panel_app_name?: string;
             public_host?: string;
             /** Format: int64 */
             quiet_hour_utc?: number;
@@ -5402,7 +5533,7 @@ export interface components {
             free_plans: number;
             /**
              * Format: int64
-             * @description Тариф бесплатного тарифа: кнопка в боте и Mini App, снова взять можно, когда прошлая бесплатная подписка аккаунта закончилась; null: бесплатного тарифа нет. Работает и при выключенной продаже
+             * @description Тариф бесплатного тарифа: кнопка в боте и Mini App, снова взять можно, когда прошлая бесплатная подписка аккаунта закончилась, и не пока идёт его пробный период; null: бесплатного тарифа нет. Работает и при выключенной продаже
              */
             free_tariff_id: number | null;
             /**
@@ -5501,24 +5632,29 @@ export interface components {
         PoolInputBody: {
             name: string;
         };
-        PoolLimit: {
-            /** @description Пул закрыт: его подключений нет в подписке, ноды их не пускают, пакеты трафика пула не продаются; traffic_limit тогда не важен */
-            excluded?: boolean;
+        PoolPatchInputBody: {
+            name: string;
+        };
+        PoolSetting: {
+            /**
+             * @description main — входит, трафик считается в основной; own — входит со своим лимитом traffic_limit; unlimited — входит без лимита, отдельно от основного; closed — не входит: подключений группы нет в подписке, ноды их не пускают, пакеты группы не продаются
+             * @enum {string}
+             */
+            mode: "main" | "own" | "unlimited" | "closed";
             /** Format: int64 */
             pool_id: number;
             /**
              * Format: int64
-             * @description Байты; null — без лимита
+             * @description Байты за период; только с mode=own
              */
-            traffic_limit: number | null;
-        };
-        PoolPatchInputBody: {
-            name: string;
+            traffic_limit?: number;
         };
         PoolView: {
             /** Format: int64 */
             id: number;
-            /** @description Подключения, которые считаются в этот пул */
+            /** @description Подключения группы */
+            inbound_ids: number[];
+            /** @description Имена подключений группы */
             inbounds: string[];
             name: string;
         };
@@ -5607,7 +5743,7 @@ export interface components {
             per_user_limit: number;
             /**
              * Format: int64
-             * @description Пул для бонусного трафика; без значения — основной трафик
+             * @description Группа серверов для бонусного трафика; без значения — основной трафик
              */
             pool_id?: number;
             /**
@@ -5843,6 +5979,12 @@ export interface components {
              * @description Сколько клиентов распределится заново при следующем обновлении подписки
              */
             moved: number;
+        };
+        Refused: {
+            /** Format: int64 */
+            at: number;
+            error: string;
+            target: string;
         };
         RegionAnswer: {
             country?: string;
@@ -6087,6 +6229,22 @@ export interface components {
             interval?: number;
             no_countries?: boolean;
         };
+        ServersBody: {
+            /** @description Все серверы; false — только выбранные, хотя бы одна нода или протокол */
+            all: boolean;
+            /** @description Отдельные протоколы */
+            inbounds?: number[];
+            /** @description Ноды целиком, с протоколами, которые на них появятся потом */
+            nodes?: number[];
+        };
+        ServersView: {
+            /** @description Все серверы; false — только выбранные ноды и протоколы */
+            all: boolean;
+            /** @description Отдельные протоколы */
+            inbounds: number[];
+            /** @description Ноды целиком, с протоколами, которые на них появятся потом */
+            nodes: number[];
+        };
         ServiceRegion: {
             /** @description Ответ — пускает ли сайт адрес (open), а не страна */
             access: boolean;
@@ -6197,6 +6355,8 @@ export interface components {
             happ_routing: string;
             /** @description Как часто подписчик может сменить свою ссылку подписки сам (бот и Mini App) */
             link_reissue: components["schemas"]["ReissueRules"];
+            /** @description Название панели, установленной как приложение (ярлык на рабочем столе, в меню, на главном экране); пусто — бренд, без бренда — mikan */
+            panel_app_name: string;
             /** Format: int64 */
             panel_port: number;
             public_host: string;
@@ -6467,6 +6627,8 @@ export interface components {
             entered_at: string | null;
             /** Format: date-time */
             expires_at: string;
+            /** @description Расширенный режим: ещё и то, что иначе может только сессия админа: ключи нод, адрес и домен ноды, свои сертификаты и WireGuard, оплата и балансы, бот, аддоны не из каталога mikan */
+            extended: boolean;
             /** Format: int64 */
             id: number;
             /** @description Адрес, с которого оператор был в последний раз */
@@ -6512,6 +6674,8 @@ export interface components {
             csrf_token?: string;
             /** Format: date-time */
             expires_at: string;
+            /** @description Расширенный режим: ещё и то, что иначе может только сессия админа */
+            extended: boolean;
             /** @enum {string} */
             level: "view" | "change" | "terminal";
             nodes: components["schemas"]["SupportNode"][];
@@ -6579,11 +6743,13 @@ export interface components {
             duration_days: number;
             /** @description Докупка устройств; не передана — без изменений (у нового тарифа — нет). Нужен лимит устройств */
             extra_devices?: components["schemas"]["ExtraDevices"];
+            /** @description Пакеты трафика в подарок при каждой оплате тарифа; каждый должен добавлять к квоте, которую тариф даёт: к основному трафику с лимитом или к группе со своим лимитом. Не передан — без изменений */
+            gifts?: number[];
             name: string;
             /** @description Продавать в боте и Mini App; нужна хотя бы одна цена */
             on_sale?: boolean;
-            /** @description Лимиты пулов трафика; не передан — без изменений */
-            pools?: components["schemas"]["PoolLimit"][];
+            /** @description Как тариф держит группы серверов; не названная группа — в основном трафике. Не передан — без изменений */
+            pools?: components["schemas"]["PoolSetting"][];
             price_label?: string;
             /**
              * Format: int64
@@ -6600,6 +6766,8 @@ export interface components {
              * @enum {string}
              */
             reset_strategy: "none" | "month_start" | "period";
+            /** @description Какие серверы входят в тариф: все или выбранные ноды и протоколы. Не передан — без изменений (у нового тарифа — все) */
+            servers?: components["schemas"]["ServersBody"];
             /** Format: int64 */
             sort?: number;
             /**
@@ -6634,13 +6802,15 @@ export interface components {
             duration_days: number;
             /** @description Докупка устройств в боте и Mini App: цена одного и сколько можно докупить */
             extra_devices: components["schemas"]["ExtraDevices"];
+            /** @description Пакеты трафика в подарок при каждой оплате тарифа: покупке и продлении */
+            gifts: number[];
             /** Format: int64 */
             id: number;
             name: string;
             /** @description Продаётся в боте и Mini App */
             on_sale: boolean;
-            /** @description Лимиты пулов трафика и закрытые пулы; пул не в списке — без лимита. Лимиты действуют на новых пользователей и при продлении или смене тарифа; закрытие и открытие пула действуют сразу на всех пользователей тарифа: при открытии на них ставится лимит тарифа, ручной лимит пользователя затирается */
-            pools: components["schemas"]["PoolLimit"][];
+            /** @description Как тариф держит каждую группу серверов; группа без настройки тарифа — в основном трафике. Режим и лимит действуют на новых клиентов, при продлении, смене тарифа и по «Применить к выданным подпискам»; закрытие и открытие группы действует сразу на всех клиентов тарифа */
+            pools: components["schemas"]["PoolSetting"][];
             price_label: string;
             /**
              * Format: int64
@@ -6654,6 +6824,8 @@ export interface components {
             price_stars: number | null;
             /** @enum {string} */
             reset_strategy: "none" | "month_start" | "period";
+            /** @description Какие серверы входят в тариф: все или выбранные. Действует сразу на всех клиентов тарифа; клиент со своим списком протоколов в карточке остаётся при нём */
+            servers: components["schemas"]["ServersView"];
             /** Format: int64 */
             sort: number;
             /**
@@ -6661,6 +6833,11 @@ export interface components {
              * @description Мбит/с в каждую сторону; null — без ограничения
              */
             speed_limit: number | null;
+            /**
+             * Format: int64
+             * @description Сколько подписок выдано на этом тарифе
+             */
+            subscribers: number;
             /** @description Сроки, на которые продаётся тариф, по порядку; первый — тот же, что duration_days, price_stars и price_rub */
             terms: components["schemas"]["TermView"][];
             /**
@@ -6730,6 +6907,8 @@ export interface components {
              */
             accounts: number;
             admin_chat_set: boolean;
+            /** @description Последнее уведомление, которое Telegram отверг насовсем (бот заблокирован, чат или канал недоступен): оно не доставлено и не повторяется */
+            alerts_refused?: components["schemas"]["Refused"];
             bot?: components["schemas"]["TelegramBot"];
             /** @description Последняя рассылка с запуска панели */
             broadcast?: components["schemas"]["TelegramBroadcast"];
@@ -7057,21 +7236,21 @@ export interface components {
             limited: number;
         };
         UserPoolView: {
-            /** @description Пул закрыт для пользователя: его подключений нет в подписке, ноды их не пускают */
-            excluded: boolean;
-            /** @description Лимит пула и его пакеты исчерпаны: подключения пула не работают до сброса */
+            /** @description Свой лимит группы и её пакеты исчерпаны: подключения группы не работают до сброса */
             exhausted: boolean;
             /**
              * Format: int64
-             * @description Байты, оставшиеся в пакетах трафика пула: тратятся после лимита
+             * @description Байты, оставшиеся в пакетах трафика группы: тратятся после лимита
              */
             extra: number;
+            /** @enum {string} */
+            mode: "main" | "own" | "unlimited" | "closed";
             name: string;
             /** Format: int64 */
             pool_id: number;
             /**
              * Format: int64
-             * @description Байты за период; null — без лимита
+             * @description Байты за период с mode=own; иначе null
              */
             traffic_limit: number | null;
             /** Format: int64 */
@@ -7080,7 +7259,8 @@ export interface components {
             used_up: number;
         };
         UserPoolsInputBody: {
-            pools: components["schemas"]["PoolLimit"][];
+            /** @description Группы, которые меняются; остальные остаются как есть */
+            pools: components["schemas"]["PoolSetting"][];
         };
         UserSitesOutputBody: {
             enabled: boolean;
@@ -7181,6 +7361,11 @@ export interface components {
         };
         ValidateInboundInputBody: {
             config: string;
+            /**
+             * Format: int64
+             * @description Подключение, чей шаблон проверяется: скрытые от читателя секреты (<hidden>) берутся из него
+             */
+            inbound_id?: number;
             /** Format: int64 */
             node_id?: number;
             port?: string;
@@ -8902,7 +9087,10 @@ export interface operations {
     };
     "check-target": {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Kinkan: нода, чей собственный сайт (127.0.0.1:17443) проверить её же силами; 0 — без ноды */
+                node_id?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -10387,7 +10575,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TrafficOutputBody"];
+                    "application/json": components["schemas"]["NodeTrafficOutputBody"];
                 };
             };
             /** @description Error */
@@ -11047,6 +11235,76 @@ export interface operations {
             };
         };
     };
+    "set-pool-inbounds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupInboundsInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PoolView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "set-pool-tariffs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupTariffsInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PoolView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "list-presets": {
         parameters: {
             query?: never;
@@ -11146,6 +11404,8 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                /** @description Часть кода (без учёта регистра) или ID клиента либо его Telegram ID целиком */
+                q?: string;
             };
             header?: never;
             path?: never;
@@ -12755,7 +13015,7 @@ export interface operations {
             };
         };
     };
-    "apply-tariff-pools": {
+    "apply-tariff": {
         parameters: {
             query?: never;
             header?: never;
@@ -12764,7 +13024,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplyTariffInputBody"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {
@@ -12772,7 +13036,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApplyPoolsOutputBody"];
+                    "application/json": components["schemas"]["ApplyTariffOutputBody"];
                 };
             };
             /** @description Error */
@@ -13127,6 +13391,8 @@ export interface operations {
         parameters: {
             query?: {
                 status?: "pending" | "approved" | "rejected" | "";
+                /** @description Следующая страница: заявки старше этой (id последней показанной) */
+                before?: number;
                 limit?: number;
             };
             header?: never;

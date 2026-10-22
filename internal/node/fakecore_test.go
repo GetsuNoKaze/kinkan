@@ -11,14 +11,16 @@ import (
 type fakeCore struct {
 	mu     sync.Mutex
 	users  map[userKey]*userStat
-	limits map[userKey]fakeLimit
+	held   map[userKey]fakeLimit
 	fresh  int // budgets set to count from now
-	closed []userKey
+	passes int // calls of limits
 }
 
 type fakeLimit struct {
-	out    bool
-	budget int64
+	out      bool
+	budget   int64
+	group    string
+	up, down int64
 }
 
 func (f *fakeCore) user(inbound, user string) *userStat {
@@ -76,27 +78,24 @@ func (f *fakeCore) drain() []userStat {
 	return out
 }
 
-func (f *fakeCore) limit(inbound, user string, out bool, budget int64, fresh bool) {
+func (f *fakeCore) limits(set map[userKey]coreLimit, remove, fresh []userKey) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.limits == nil {
-		f.limits = map[userKey]fakeLimit{}
+	if f.held == nil {
+		f.held = map[userKey]fakeLimit{}
 	}
-	k := userKey{inbound, user}
-	if !out && budget <= 0 {
-		delete(f.limits, k)
-		return
+	f.passes++
+	f.fresh += len(fresh)
+	for _, k := range remove {
+		delete(f.held, k)
 	}
-	if fresh {
-		f.fresh++
+	for k, l := range set {
+		fl := fakeLimit{out: l.out, budget: l.budget, up: l.up, down: l.down}
+		if l.up > 0 || l.down > 0 {
+			fl.group = l.group
+		}
+		f.held[k] = fl
 	}
-	f.limits[k] = fakeLimit{out, budget}
-}
-
-func (f *fakeCore) closeUser(inbound, user string) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.closed = append(f.closed, userKey{inbound, user})
 }
 
 // keptOut lists the users the core keeps out, as "inbound/user", sorted.
@@ -104,7 +103,7 @@ func (f *fakeCore) keptOut() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := []string{}
-	for k, l := range f.limits {
+	for k, l := range f.held {
 		if l.out {
 			out = append(out, k.inbound+"/"+k.user)
 		}

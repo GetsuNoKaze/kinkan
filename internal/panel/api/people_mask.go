@@ -58,13 +58,21 @@ func (w *maskWriter) WriteHeader(code int) {
 }
 
 func (w *maskWriter) Write(b []byte) (int, error) {
+	rw := w.ResponseWriter
 	if !w.decided {
+		// An answer written without a status of its own goes out with its type said: the
+		// handler's own, or what net/http would sniff from these first bytes, and nosniff.
+		h := rw.Header()
+		if h.Get("Content-Type") == "" {
+			h.Set("Content-Type", http.DetectContentType(b))
+		}
+		h.Set("X-Content-Type-Options", "nosniff")
 		w.WriteHeader(http.StatusOK)
 	}
 	if w.hold {
 		return w.buf.Write(b)
 	}
-	return w.ResponseWriter.Write(b)
+	return rw.Write(b)
 }
 
 func (w *maskWriter) Flush() {
@@ -86,16 +94,28 @@ func (w *maskWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 
 func (w *maskWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
-// finish sends what was held: the JSON masked, anything else as it is.
+// finish sends what was held: the JSON masked, anything else as it is. No answer that is
+// not JSON names a person: the metrics hold no user, the pictures are the page's own, and a
+// transfer's screenshot refuses such a reader itself (topupPhoto).
 func (w *maskWriter) finish() {
 	if !w.hold {
 		return
 	}
 	body := w.buf.Bytes()
 	h := w.ResponseWriter.Header()
-	if ct := h.Get("Content-Type"); strings.Contains(ct, "json") && len(body) > 0 {
+	ct := h.Get("Content-Type")
+	if strings.Contains(ct, "json") && len(body) > 0 {
 		body = maskPeople(body)
 	}
+	// The held answer goes out whole, so its type is said, not left to the browser: the
+	// handler's own, or what net/http would have sniffed from the same bytes.
+	if ct == "" && len(body) > 0 {
+		ct = http.DetectContentType(body)
+	}
+	if ct != "" {
+		h.Set("Content-Type", ct)
+	}
+	h.Set("X-Content-Type-Options", "nosniff")
 	h.Del("Content-Length")
 	if len(body) > 0 {
 		h.Set("Content-Length", strconv.Itoa(len(body)))

@@ -23,6 +23,9 @@ type ClientInput struct {
 	// or unknown means DefaultFingerprint.
 	Fingerprint string
 	Slot        Slot
+	// SSOneKey: the node runs Shadowsocks-2022 with one key for everyone (older than the key
+	// per user, ssMultiUser): the link carries the server's key alone, as that node expects.
+	SSOneKey bool
 }
 
 // Fingerprints are the uTLS profiles that mihomo (component/tls/utls.go, v1.19.31), Xray
@@ -230,7 +233,13 @@ func (c *clientBuilder) security() error {
 		c.y["tls"] = true
 		c.y[c.sniKey()] = sni
 		c.y["client-fingerprint"] = c.fingerprint()
-		c.y["reality-opts"] = map[string]any{"public-key": pbk, "short-id": sid}
+		opts := map[string]any{"public-key": pbk, "short-id": sid}
+		// A server that requires the post-quantum key exchange lets in only clients that
+		// offer it, and mihomo does only when told.
+		if r["require-x25519mlkem768"] == true {
+			opts["support-x25519mlkem768"] = true
+		}
+		c.y["reality-opts"] = opts
 		for k, v := range map[string]string{"security": "reality", "sni": sni, "fp": c.fingerprint(), "pbk": pbk, "sid": sid} {
 			c.q.Set(k, v)
 		}
@@ -367,8 +376,8 @@ func (c *clientBuilder) transport() {
 		c.y["network"] = "tcp"
 		c.q.Set("type", "tcp")
 	}
-	// mihomo carries UDP over VLESS/Trojan streams, but not over XHTTP in v1.19.31.
-	c.y["udp"] = transport(c.t) != "xhttp"
+	// UDP goes over every VLESS/Trojan transport, XHTTP too, to the Citrus server.
+	c.y["udp"] = true
 }
 
 func (c *clientBuilder) finish() (Client, error) {

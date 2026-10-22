@@ -43,6 +43,12 @@ geox-url:
   geoip: "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
   geosite: "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
   mmdb: "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb"
+# Optional: pin the exact file, a database with another SHA-256 is rejected.
+geox-sha256:
+  geoip: ""   # 64 hex characters
+  geosite: ""
+  mmdb: ""
+  asn: ""
 
 geo-auto-update: false # 是否自动更新 geodata
 geo-update-interval: 24 # 更新间隔，单位：小时
@@ -87,21 +93,24 @@ tls:
 external-controller: 0.0.0.0:9093 # RESTful API 监听地址
 external-controller-tls: 0.0.0.0:9443 # RESTful API HTTPS 监听地址，需要配置 tls 部分配置文件
 secret: "123456" # `Authorization:Bearer ${secret}`
-# The controller refuses to start external-controller or external-controller-tls
-# on a non-loopback address (0.0.0.0, :9090, a LAN address) while secret is empty:
-# anyone who reaches it would get the whole API. Loopback addresses
-# (127.0.0.1, [::1], localhost), external-controller-unix and
-# external-controller-pipe work without a secret. external-controller-tls also
-# starts without a secret when tls.client-auth-type is require-and-verify (or
-# client-auth-cert is set): the client certificate is the credential.
+# TCP controllers require a secret even on loopback. Plain HTTP is restricted
+# to loopback by default, because a remote bearer secret would travel in clear
+# text. external-controller-unix and external-controller-pipe may work without
+# a secret; external-controller-tls may do so with verified client certificates.
 # A tcp/tls controller without a secret only answers requests whose Host is an
 # IP address or localhost, and refuses browser requests from other origins
 # (Origin header) unless they are listed literally in
 # external-controller-cors.allow-origins ("*" does not count).
 # PUT /configs applies a changed secret, address, TLS or CORS setting: the
 # controller listeners restart and open websocket streams are closed.
-# 内核拒绝在非回环地址上无 secret 启动 external-controller / external-controller-tls。
-# external-controller-allow-insecure: false # true: accept a non-loopback controller without a secret (not recommended); env CLASH_OVERRIDE_EXTERNAL_CONTROLLER_ALLOW_INSECURE=true or -ext-ctl-allow-insecure
+# TCP 控制器即使在回环地址也需要 secret；远程明文 HTTP 默认拒绝。
+# external-controller-allow-insecure: false # dangerous legacy opt-in: allow secretless TCP or remote plaintext bearer HTTP; env CLASH_OVERRIDE_EXTERNAL_CONTROLLER_ALLOW_INSECURE=true or -ext-ctl-allow-insecure
+
+# WebSocket: POST /auth/ws-ticket with Authorization: Bearer <secret> and
+# JSON {"path":"/events?types=auth"}, then connect to that exact path with
+# &ticket=<ticket>. Tickets expire after 30 seconds and can be redeemed once.
+# Main-secret URLs (?token=<secret>) are rejected by default. For old dashboards only:
+# external-controller-allow-legacy-websocket-token: false # true restores the URI-secret risk and emits a warning
 
 # RESTful API CORS标头配置
 external-controller-cors:
@@ -138,12 +147,15 @@ external-controller-routing-mark: 0
 # user: "*" 为该入站所有未单独配置用户的默认限制。0 或不写表示不限制。
 # 速度单位为字节/秒：10M = 10 MB/s；小写 b 表示比特：80Mbps = 10 MB/s。
 # 大小单位：K/M/G/T 为 1000 的幂，Ki/Mi/Gi/Ti 为 1024 的幂。
+# speed-group：同名分组的用户（可跨入站）共享同一组速度令牌桶，组内成员应设置相同的 speed-up/speed-down。
 # 运行时可通过 /limits/users 修改；重新加载配置会替换 API 设置的限制，配额用量保留。
 # Per-user limits of inbound users: speed, concurrent connections, online
 # addresses, traffic quota, expiry. user: "*" is the default of every user of
 # the inbound without a limit of its own. 0 or absent is no limit.
 # speed-up/speed-down are bytes per second: 10M = 10 MB/s; a lowercase b means
 # bits: 80Mbps = 10 MB/s. Sizes: K/M/G/T are powers of 1000, Ki/Mi/Gi/Ti of 1024.
+# speed-group: the users naming the same group, on any inbounds, share one
+# speed (one pair of buckets); give its members the same speed-up/speed-down.
 # quota counts upload plus download; expire-at is unix seconds or RFC 3339.
 # Runtime API: GET/PUT/DELETE /limits/users, POST /limits/users/reset-quota.
 # A reload replaces the limits set through the API; the quota usage is kept.
@@ -188,6 +200,8 @@ external-ui: /path/to/ui/folder/
 external-ui-name: xd
 # 目前支持下载zip,tgz格式的压缩包
 external-ui-url: "https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip"
+# external-ui-sha256: "..." # required for network downloads unless the dangerous compatibility option below is set
+# external-ui-allow-insecure: false # permits an unpinned or plaintext dashboard source; downloaded JS runs on the controller origin
 
 # 在RESTful API端口上开启DOH服务器
 # ！！！该URL不会验证secret， 如果开启请自行保证安全问题 ！！！
@@ -1004,6 +1018,53 @@ proxies: # socks5
         Connection:
           - keep-alive
     # ip-version: ipv4 # 设置使用 IP 类型偏好，可选：ipv4，ipv6，dual，默认值：dual
+
+  # XDRIVE carries VLESS through a shared storage folder, compatible with Xray.
+  # The UUID, encryption/decryption keys, backend and folder must match the peer.
+  # Mux.Cool for TCP and XUDP for UDP are internal; do not enable smux or flow.
+  # API URLs select the actual network endpoints; server/port are node metadata.
+  # HTTPS APIs use certificate verification and the client TLS options below.
+  - name: "vless-xdrive"
+    type: vless
+    server: storage-node
+    port: 443
+    uuid: 27848739-7e62-4138-9fd3-098a63964b6b
+    network: xdrive
+    udp: true
+    encryption: "mlkem768x25519plus.native.0rtt.REPLACE_WITH_SERVER_PUBLIC_KEY"
+    client-fingerprint: chrome
+    # alpn: [h2, http/1.1]
+    # skip-cert-verify: false
+    # dialer-proxy: another-proxy # applies to all storage API requests
+    xdrive-opts:
+      service: google-drive # google-drive, template, local
+      remote-folder: GOOGLE_DRIVE_FOLDER_ID
+      secrets: [CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN]
+      # fronting: "api-connection.example:443" # optional connection address override; preserves API Host/SNI
+      # segment-bytes: 524288 # default 512 KiB; maximum 16 MiB
+      # flush-interval-ms: 20
+      # poll-interval-ms: 50
+      # max-poll-interval-ms: 500
+      # eager-window-ms: 2000
+      # hole-timeout-ms: 30000
+      # session-ttl-seconds: 300
+      # concurrency: 8 # parallel segment requests; maximum 64
+      # local uses a shared filesystem path as remote-folder and needs no secrets.
+      # template uses the same template object and placeholders as Xray:
+      # template:
+      #   flatten: true
+      #   auth:
+      #     type: basic
+      #     username: "{secret0}"
+      #     password: "{secret1}"
+      #   put: { method: PUT, url: "https://storage.example/{folder}/{name}" }
+      #   get: { method: GET, url: "https://storage.example/{folder}/{name}" }
+      #   delete: { method: DELETE, url: "https://storage.example/{folder}/{name}" }
+      #   list:
+      #     method: PROPFIND
+      #     url: "https://storage.example/{folder}/"
+      #     namesRegex: '<d:href>/folder/([^<]+)</d:href>'
+      #   retry: { status: [429, 500, 502, 503, 504] }
 
   - name: "vless-xhttp"
     type: vless
@@ -2267,8 +2328,10 @@ listeners:
     #   # proxy: ""
     #   # rate-limit: 0 # 转发限速，单位 bit/s，0 表示不限速
     # kcp-tun:
+    #   key: use-a-unique-random-key # Omission keeps the public legacy key and emits a warning.
+    #   max-sessions: 256 # Concurrent KCP sessions per server.
+    #   max-streams: 256 # Open streams per KCP session.
     #   enable: false
-    #   key: it's a secrect # pre-shared secret between client and server
     #   crypt: aes # aes, aes-128, aes-128-gcm, aes-192, salsa20, blowfish, twofish, cast5, 3des, tea, xtea, xor, none, null
     #   mode: fast # profiles: fast3, fast2, fast, normal, manual
     #   conn: 1 # set num of UDP connections to server
@@ -2332,6 +2395,7 @@ listeners:
 
   - name: tuic-in-1
     type: tuic
+    # zero-rtt: false # Opt in only when replayable QUIC early data is acceptable.
     port: 10815 # 支持使用ports格式，例如200,302 or 200,204,401-429,501-503
     listen: 0.0.0.0
     # routing-mark: 0 # 为监听socket设置routing-mark（仅支持linux）
@@ -2378,7 +2442,7 @@ listeners:
     # alpn:
     #   - h3
     # quic-versions: [v1] # 本机支持的 QUIC 版本；支持 v1/v2
-    # zero-rtt: true
+    # zero-rtt: false # Explicit opt-in; QUIC early data can be replayed.
     # congestion-controller: bbr # Available: "cubic", "new_reno", "bbr". Default: "cubic"
     # up: 100 Mbps # enables brutal negotiation via a citrus private extension; server upload/client download speed cap; falls back to congestion-controller when unsupported
     # down: 100 Mbps # enables brutal negotiation via a citrus private extension; requested server download/client upload speed; falls back to congestion-controller when unsupported
@@ -2401,6 +2465,23 @@ listeners:
     network: [tcp, udp]
     target: target.com
 
+  # XDRIVE inbound: polls storage rather than opening a listening TCP socket.
+  # Do not combine xdrive-config with ws/grpc/xhttp, certificates or REALITY.
+  # Generate the paired encryption/decryption strings with `xray vlessenc`.
+  # - name: vless-xdrive-in
+  #   type: vless
+  #   listen: 127.0.0.1
+  #   port: 443 # one logical listener identifier; no socket is bound here
+  #   decryption: "mlkem768x25519plus.native.600s.REPLACE_WITH_SERVER_PRIVATE_KEY"
+  #   users:
+  #     - username: user
+  #       uuid: 27848739-7e62-4138-9fd3-098a63964b6b
+  #   xdrive-config:
+  #     service: google-drive
+  #     remote-folder: GOOGLE_DRIVE_FOLDER_ID
+  #     secrets: [CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN]
+  # All storage options from xdrive-opts are also accepted in xdrive-config.
+
   - name: vless-in-1
     type: vless
     port: 10817 # 支持使用ports格式，例如200,302 or 200,204,401-429,501-503
@@ -2414,6 +2495,9 @@ listeners:
         flow: xtls-rprx-vision
     # ws-path: "/" # 如果不为空则开启 websocket 传输层
     # grpc-service-name: "GunService" # 如果不为空则开启 grpc 传输层
+    # fallback-page: ./page.html # 有 websocket/grpc/xhttp 传输层时，不属于该入站的请求在 "/" 得到此 HTML 页面，其他路径为 404
+    #   A request that is not the inbound's own gets this HTML page at "/" (404 elsewhere)
+    #   instead of a bare 404; only with an HTTP transport (ws/grpc/xhttp)
     # xhttp-config: # 如果不为空则开启 xhttp 传输层
     #   path: "/"
     #   host: ""
@@ -2636,6 +2720,7 @@ listeners:
         password: 9d0cb9d0-964f-4ef6-897d-6c6b3ccf9e68
     # ws-path: "/" # 如果不为空则开启 websocket 传输层
     # grpc-service-name: "GunService" # 如果不为空则开启 grpc 传输层
+    # fallback-page: ./page.html # 有 websocket/grpc 传输层时，不属于该入站的请求在 "/" 得到此 HTML 页面，其他路径为 404
     # 下面两项如果填写则开启 tls（需要同时填写）
     certificate: ./server.crt # 证书 PEM 格式，或者 证书的路径
     private-key: ./server.key # 证书对应的私钥 PEM 格式，或者私钥路径
@@ -2793,6 +2878,7 @@ listeners:
 
   - name: trusttunnel-in-1
     type: trusttunnel
+    # zero-rtt: false # Applies to HTTP/3; early data can be replayed.
     # Optional plain HTTP cover backend (TLS terminates at this listener).
     # Serve only the cover site here: clients control the forwarded Host.
     # With fallback, HTTP/2 clients must negotiate ALPN h2; prior knowledge
@@ -2878,6 +2964,7 @@ listeners:
 
 # tuic 服务器入口（传入流量将和 socks,mixed 等入口一样按照 mode 所指定的方式进行匹配处理）
 # tuic-server:
+#  zero-rtt: false # Opt in only when replayable QUIC early data is acceptable.
 #  enable: true
 #  listen: 127.0.0.1:10443
 #  users:    # 仅支持 TUIC v5（v4 的 token 已不再支持）

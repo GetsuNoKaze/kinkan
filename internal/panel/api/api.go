@@ -24,6 +24,7 @@ import (
 	"mikan/internal/panel/auth"
 	"mikan/internal/panel/autotune"
 	"mikan/internal/panel/billing"
+	"mikan/internal/panel/botpanel"
 	"mikan/internal/panel/certcheck"
 	"mikan/internal/panel/dnscheck"
 	"mikan/internal/panel/domain"
@@ -41,7 +42,6 @@ import (
 	"mikan/internal/panel/support"
 	"mikan/internal/panel/tgate"
 	"mikan/internal/panel/tgbackup"
-	"mikan/internal/panel/tgbot"
 	"mikan/internal/panel/tlscert"
 	"mikan/internal/panel/updates"
 	"mikan/internal/panel/warp"
@@ -100,7 +100,7 @@ type Deps struct {
 	}
 	// Telegram is the admin's setup of the subscription owners' bot: its menu, texts and
 	// broadcasts.
-	Telegram *tgbot.Panel
+	Telegram *botpanel.Panel
 	// Gateway is the panel's side of Telegram: the token, the route, the bot's status, the
 	// admin's chat and the channel.
 	Gateway *tgate.Gateway
@@ -248,6 +248,10 @@ func Config(version string) huma.Config {
 		"Ссылка подписки (`sub_url` пользователя) отдаёт конфиг и заголовки, которые читают приложения: " +
 		"`profile-title` — название профиля (настройка `sub_title`, пусто — бренд), `announce` — строка над профилем или под его названием (`sub_announce`), " +
 		"`subscription-userinfo` — трафик и срок, `support-url`, `profile-web-page-url`. Настраиваются в `PATCH /api/v1/settings`.\n\n" +
+		"Приложение Mikan, приславшее `X-Mikan-Features: groups`, получает ещё `X-Mikan-Groups`: `base64:` и JSON групп серверов подписки — " +
+		"`v` (1), `resets_at` (когда трафик периода начнётся заново, unix), `groups[]`: `id`, `name`, `mode` (`own` — свой лимит, `unlimited` — отдельно без лимита, `main` — общий трафик), " +
+		"`used`, `limit`, `extra` (осталось в пакетах группы), `left`, `state` (`active` или `exhausted` — лимит кончился, серверов группы нет в профиле) и `proxies` — имена серверов группы в этом же профиле " +
+		"(`null`, если имена не уместились: заголовок держится в 1,5 КБ). Закрытые для клиента группы не передаются. Другим приложениям ответ не меняется.\n\n" +
 		"В `sub_title` и `sub_announce` подставляются переменные каждого пользователя: `{brand}` — бренд, `{name}` — имя, " +
 		"`{date}` — дата окончания (ДД.ММ.ГГГГ, МСК), `{days}` — дней осталось, `{used}` — израсходовано, `{left}` — осталось трафика, " +
 		"`{total}` — лимит с пакетами, `{devices}` — привязанные устройства (`2/3`; без лимита `2`; `∞`, когда привязки нет и лимита тоже). Без срока или лимита — `∞`. Неизвестное слово в фигурных скобках остаётся текстом. Если название после подстановки пустое, берётся бренд. Пример: `{brand} · до {date}`."

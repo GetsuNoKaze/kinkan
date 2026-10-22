@@ -196,7 +196,8 @@ impl Config {
             }
             let value = self.get(s.key).unwrap_or_default();
             write_private(&path, value.as_bytes())?;
-            // Kinkan: only root can hand it over; a test keeps it, as panelfs::hand_over does.
+            // Only root can give the file to its reader: the installer is root, a test run by
+            // anyone else keeps it.
             if rustix::process::geteuid().is_root() {
                 std::os::unix::fs::chown(&path, Some(s.owner), Some(s.owner)).with_context(|| format!("chown {}", path.display()))?;
             }
@@ -323,7 +324,6 @@ mod tests {
         let pw = d.join(SECRETS).join("postgres_password");
         let meta = fs::metadata(&pw).unwrap();
         assert_eq!(meta.mode() & 0o777, 0o400);
-        // Kinkan: the owners change only as root (save skips chown otherwise, as panelfs tests do).
         if rustix::process::geteuid().is_root() {
             assert_eq!(meta.uid(), POSTGRES_UID);
             assert_eq!(fs::metadata(d.join(SECRETS).join("database_url")).unwrap().uid(), APP_UID);

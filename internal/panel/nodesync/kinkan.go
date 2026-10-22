@@ -30,7 +30,7 @@ func (s *Syncer) runKinkan(ctx context.Context) (wait func()) {
 	done := make(chan struct{}, 2)
 	go func() {
 		defer func() { done <- struct{}{} }()
-		every(ctx, 30*time.Second, s.pullScanners)
+		kinkanEvery(ctx, 30*time.Second, s.pullScanners)
 	}()
 	go func() {
 		defer func() { done <- struct{}{} }()
@@ -110,4 +110,18 @@ func (m *Manager) ClearScanners(ctx context.Context, id int64) error {
 		return err
 	}
 	return m.st.DeleteScanners(ctx, id)
+}
+
+// kinkanEvery runs fn every d until ctx is done (Mikan's own helper of this name is gone).
+func kinkanEvery(ctx context.Context, d time.Duration, fn func(context.Context)) {
+	t := time.NewTicker(d)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			fn(ctx)
+		}
+	}
 }

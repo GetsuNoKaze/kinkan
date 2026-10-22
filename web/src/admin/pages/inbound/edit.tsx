@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, unwrap, type Inbound, type Schemas } from "../../../api/client";
+import { useFields } from "../../../lib/draft";
 import { fieldErrors, onFormError } from "../../../lib/fields";
 import { qk, useNodes, usePools, usePresets, useSettings } from "../../../api/hooks";
 import { Disclosure } from "../../../components/layout";
@@ -21,34 +22,67 @@ import { TargetPicker } from "./target";
 import { CdnSettings, cdnClient, cdnFormOf, type CdnForm } from "./cdn";
 import { KinkanTTConnections } from "./kinkan-tt-connections"; // Kinkan
 
+/** The inbound form's fields as its inputs hold them. */
+type InboundForm = {
+  port: string;
+  dest: string;
+  sni: string; // the site name clients send when dest is an IP
+  fp: string; // the inbound's own fingerprint, "" for the settings' one
+  obfs: string; // Hysteria2: salamander or gecko
+  xhttp: XHTTP; // the masking tab, XHTTP only
+  outbound: Inbound["outbound"];
+  exitNode: number;
+  poolId: number;
+  name: string;
+  config: string;
+  autoPort: boolean;
+  autoSni: boolean;
+  listenMode: ListenAt;
+  listenIP: string; // the address of its own for "custom"
+  clientServer: string; // what clients get: "" = as now
+  clientPort: string;
+  clientSni: string;
+  cdn: CdnForm | null;
+  sni443: boolean;
+};
+
+/** The form of inbound i; with none, an empty one. The one place that maps an inbound to the form. */
+function inboundFormOf(i: Inbound | null): InboundForm {
+  return {
+    port: i?.port ?? "",
+    dest: i?.dest ?? "",
+    sni: i?.server_names?.[0] ?? "",
+    fp: i?.fingerprint ?? "",
+    obfs: i?.obfs ?? "",
+    xhttp: { ...XHTTP_DEFAULT, ...i?.xhttp },
+    outbound: i?.outbound ?? "direct",
+    exitNode: i?.exit_node_id ?? 0,
+    poolId: i?.pool_id ?? 0,
+    name: i?.display_name ?? "",
+    config: i?.config ?? "",
+    autoPort: i?.auto_port ?? true,
+    autoSni: i?.auto_sni ?? true,
+    listenMode: i ? listenAt(i.listen) : "all",
+    listenIP: i && listenAt(i.listen) === "custom" ? i.listen : "",
+    clientServer: i?.client.server ?? "",
+    clientPort: i?.client.port ? String(i.client.port) : "",
+    clientSni: i?.client.sni ?? "",
+    cdn: i ? cdnFormOf(i) : null,
+    sni443: i?.sni443 ?? false,
+  };
+}
+
 export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onClose: () => void }) {
   const qc = useQueryClient();
   const toast = useToast();
   const presets = usePresets();
   const validate = useValidate();
+  const { reset: resetValidate } = validate;
   const [tab, setTab] = useState<"main" | "xhttp" | "config">("main");
-  const [port, setPort] = useState("");
-  const [dest, setDest] = useState("");
-  const [sni, setSni] = useState(""); // the site name clients send when dest is an IP
-  const [fp, setFp] = useState(""); // the inbound's own fingerprint, "" for the settings' one
-  const [obfs, setObfs] = useState(""); // Hysteria2: salamander or gecko
-  const [xhttp, setXhttp] = useState<XHTTP>(XHTTP_DEFAULT); // the masking tab, XHTTP only
-  const [outbound, setOutbound] = useState<Inbound["outbound"]>("direct");
-  const [exitNode, setExitNode] = useState<number>(0);
-  const [poolId, setPoolId] = useState<number>(0);
+  const [form, set, replace] = useFields(() => inboundFormOf(null));
+  const { port, dest, sni, fp, obfs, xhttp, outbound, exitNode, poolId, name, config, autoPort, autoSni, listenMode, listenIP, clientServer, clientPort, clientSni, cdn, sni443 } = form;
   const pools = usePools();
   const allNodes = useNodes();
-  const [name, setName] = useState("");
-  const [config, setConfig] = useState("");
-  const [autoPort, setAutoPort] = useState(true);
-  const [autoSni, setAutoSni] = useState(true);
-  const [listenMode, setListenMode] = useState<ListenAt>("all");
-  const [listenIP, setListenIP] = useState(""); // the address of its own for "custom"
-  const [clientServer, setClientServer] = useState(""); // what clients get: "" = as now
-  const [clientPort, setClientPort] = useState("");
-  const [clientSni, setClientSni] = useState("");
-  const [cdn, setCdn] = useState<CdnForm | null>(null);
-  const [sni443, setSni443] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const settings = useSettings();
   const warp = useWarp(inbound?.node_id ?? null, !!inbound);
@@ -56,30 +90,10 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
   useEffect(() => {
     if (!inbound) return;
     setTab("main");
-    setPort(inbound.port);
-    setDest(inbound.dest ?? "");
-    setSni(inbound.server_names?.[0] ?? "");
-    setFp(inbound.fingerprint ?? "");
-    setObfs(inbound.obfs ?? "");
-    setXhttp({ ...XHTTP_DEFAULT, ...inbound.xhttp });
-    setOutbound(inbound.outbound);
-    setExitNode(inbound.exit_node_id ?? 0);
-    setPoolId(inbound.pool_id ?? 0);
-    setName(inbound.display_name);
-    setConfig(inbound.config);
-    setAutoPort(inbound.auto_port);
-    setAutoSni(inbound.auto_sni);
-    setListenMode(listenAt(inbound.listen));
-    setListenIP(listenAt(inbound.listen) === "custom" ? inbound.listen : "");
-    setClientServer(inbound.client.server);
-    setClientPort(inbound.client.port ? String(inbound.client.port) : "");
-    setClientSni(inbound.client.sni);
-    setCdn(cdnFormOf(inbound));
-    setSni443(inbound.sni443);
+    replace(inboundFormOf(inbound));
     setErrors({});
-    validate.reset();
-    // `validate` changes identity on every render; reset only for another inbound.
-  }, [inbound]);
+    resetValidate();
+  }, [inbound, replace, resetValidate]);
   // The config tab is a click away: have its editor on the way once the drawer has settled.
   useEffect(() => {
     if (!inbound) return;
@@ -88,7 +102,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
   }, [inbound]);
   const defaultName = presets.data?.find((p) => p.id === inbound?.preset)?.sub_name ?? "";
   const editConfig = (v: string) => {
-    setConfig(v);
+    set.config(v);
     setErrors(({ config: _, ...rest }) => rest);
     validate.reset();
   };
@@ -232,10 +246,10 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                 {t("inbounds.reconnectWarning")}
               </p>
               <Field label={t("inbounds.subName")} htmlFor="ed-name" hint={t("inbounds.subNameHint")} error={errors.display_name}>
-                <input id="ed-name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={defaultName} maxLength={48} aria-invalid={!!errors.display_name} autoComplete="off" />
+                <input id="ed-name" className="input" value={name} onChange={(e) => set.name(e.target.value)} placeholder={defaultName} maxLength={48} aria-invalid={!!errors.display_name} autoComplete="off" />
               </Field>
               <Field label={t("inbounds.portLabel")} htmlFor="ed-port" error={errors.port} hint={inbound?.type === "hysteria2" ? t("inbounds.portHopHint") : undefined}>
-                <input id="ed-port" className="input max-w-[200px]" inputMode="numeric" value={port} onChange={(e) => setPort(e.target.value)} aria-invalid={!!errors.port} />
+                <input id="ed-port" className="input max-w-[200px]" inputMode="numeric" value={port} onChange={(e) => set.port(e.target.value)} aria-invalid={!!errors.port} />
               </Field>
               {inbound?.dest !== undefined ? (
                 <>
@@ -249,7 +263,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                       id="ed-dest"
                       className="input mono"
                       value={dest}
-                      onChange={(e) => setDest(e.target.value)}
+                      onChange={(e) => set.dest(e.target.value)}
                       placeholder="www.microsoft.com:443"
                       aria-invalid={!!errors.dest}
                       spellCheck={false}
@@ -263,7 +277,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                         className="input mono"
                         value={sni}
                         onChange={(e) => {
-                          setSni(e.target.value);
+                          set.sni(e.target.value);
                           setErrors(({ server_name: _, ...rest }) => rest);
                         }}
                         placeholder="example.com"
@@ -280,8 +294,8 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                       sni={sni}
                       nodeId={inbound.node_id}
                       onPick={(d, s) => {
-                        setDest(d);
-                        setSni(s);
+                        set.dest(d);
+                        set.sni(s);
                       }}
                     />
                   ) : null}
@@ -294,7 +308,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                     label={t("inbounds.obfs")}
                     onChange={(v) => {
                       if (configChanged) return;
-                      setObfs(v);
+                      set.obfs(v);
                       setErrors(({ obfs: _, ...rest }) => rest);
                     }}
                     options={[
@@ -311,7 +325,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                     id="ed-fp"
                     value={fp}
                     onChange={(v) => {
-                      setFp(v);
+                      set.fp(v);
                       setErrors(({ fingerprint: _, ...rest }) => rest);
                     }}
                     defaultLabel={t("inbounds.fingerprintDefault", { fp: fingerprintLabel(settings.data?.client_fingerprint ?? "chrome") })}
@@ -338,7 +352,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                   label={t("inbounds.outbound")}
                   value={outbound}
                   onChange={(v) => {
-                    setOutbound(v);
+                    set.outbound(v);
                     setErrors(({ exit_node_id: _, ...rest }) => rest);
                   }}
                   options={[
@@ -352,7 +366,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                     className="input mt-2 max-w-[320px]"
                     value={exitNode}
                     onChange={(e) => {
-                      setExitNode(Number(e.target.value));
+                      set.exitNode(Number(e.target.value));
                       setErrors(({ exit_node_id: _, ...rest }) => rest);
                     }}
                     aria-label={t("inbounds.exitNode")}
@@ -374,8 +388,8 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
               </Field>
               {pools.data?.length ? (
                 <Field label={t("pools.inbound")} htmlFor="ed-pool" hint={t("pools.inboundHint")}>
-                  <select id="ed-pool" className="input max-w-[320px]" value={poolId} onChange={(e) => setPoolId(Number(e.target.value))}>
-                    <option value={0}>{t("pools.mainTraffic")}</option>
+                  <select id="ed-pool" className="input max-w-[320px]" value={poolId} onChange={(e) => set.poolId(Number(e.target.value))}>
+                    <option value={0}>{t("pools.mainServers")}</option>
                     {pools.data.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}
@@ -391,12 +405,12 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                   warn={sni443 && !nodeRouter}
                   checked={sni443}
                   disabled={configChanged}
-                  onChange={setSni443}
+                  onChange={set.sni443}
                 />
               ) : null}
               {inbound?.cdn_possible && cdn ? (
                 <Disclosure title={t("inbounds.cdn.title")} sub={t("inbounds.cdn.sub")} open={cdn.on || Object.keys(errors).some((k) => k.startsWith("client.cdn"))}>
-                  <CdnSettings value={cdn} onChange={setCdn} errors={errors} clearError={clearError} inbound={inbound} disabled={configChanged} />
+                  <CdnSettings value={cdn} onChange={set.cdn} errors={errors} clearError={clearError} inbound={inbound} disabled={configChanged} />
                 </Disclosure>
               ) : null}
               <Disclosure
@@ -421,7 +435,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                     label={t("inbounds.listen")}
                     value={listenMode}
                     onChange={(v) => {
-                      setListenMode(v);
+                      set.listenMode(v);
                       clearError("listen");
                     }}
                     options={[
@@ -436,7 +450,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                       className="input mono mt-2 max-w-[320px]"
                       value={listenIP}
                       onChange={(e) => {
-                        setListenIP(e.target.value);
+                        set.listenIP(e.target.value);
                         clearError("listen");
                       }}
                       placeholder="10.0.0.5"
@@ -459,7 +473,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                       className="input mono"
                       value={clientServer}
                       onChange={(e) => {
-                        setClientServer(e.target.value);
+                        set.clientServer(e.target.value);
                         clearError("client.server");
                       }}
                       placeholder={t("inbounds.clientServerDefault")}
@@ -476,7 +490,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                       inputMode="numeric"
                       value={clientPort}
                       onChange={(e) => {
-                        setClientPort(e.target.value);
+                        set.clientPort(e.target.value);
                         clearError("client.port");
                       }}
                       placeholder={inbound?.port}
@@ -492,7 +506,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                       className="input mono"
                       value={clientSni}
                       onChange={(e) => {
-                        setClientSni(e.target.value);
+                        set.clientSni(e.target.value);
                         clearError("client.sni");
                       }}
                       placeholder={t("inbounds.clientSniDefault")}
@@ -522,7 +536,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                   on={autoPort}
                   globalOff={settings.data?.auto_port === false}
                   locked={behindProxy ? t("inbounds.autoPortProxy") : undefined}
-                  onChange={setAutoPort}
+                  onChange={set.autoPort}
                 />
                 {inbound?.dest !== undefined ? (
                   <AutoSwitch
@@ -531,21 +545,21 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                     on={autoSni}
                     globalOff={settings.data?.auto_sni === false}
                     locked={behindProxy ? t("inbounds.autoSniProxy") : undefined}
-                    onChange={setAutoSni}
+                    onChange={set.autoSni}
                   />
                 ) : null}
               </Disclosure>
             </>
           ) : tab === "xhttp" ? (
             <XhttpTuning value={xhttp} onChange={(x) => {
-              setXhttp(x);
+              set.xhttp(x);
               clearError("xhttp");
             }} error={errors.xhttp} />
           ) : (
             <Field label={t("inbounds.configLabel")} hint={t("inbounds.configHint")} error={errors.config}>
               <Editor value={config} onChange={editConfig} invalid={!!errors.config} />
               <div className="mt-2 flex flex-wrap items-center gap-3">
-                <Button size="sm" loading={validate.isPending} onClick={() => validate.mutate({ config, node_id: inbound?.node_id, port: port.trim() || undefined })}>
+                <Button size="sm" loading={validate.isPending} onClick={() => validate.mutate({ config, node_id: inbound?.node_id, inbound_id: inbound?.id, port: port.trim() || undefined })}>
                   {t("inbounds.validate")}
                 </Button>
                 <Button size="sm" variant="ghost" disabled={!configChanged} onClick={() => inbound && editConfig(inbound.config)}>

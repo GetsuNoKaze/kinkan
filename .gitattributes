@@ -7,3 +7,6 @@ Dockerfile text eol=lf
 
 # The patched mihomo is kept byte for byte as scripts/tt/mihomo.sh generates it.
 third_party/** -text
+
+# Golden files of the bot's wire: compared byte for byte, so LF on every checkout.
+internal/panel/model/testdata/* text eol=lf
