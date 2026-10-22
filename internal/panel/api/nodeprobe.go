@@ -61,14 +61,14 @@ func (h *handlers) probeNode(ctx context.Context, in *nodeProbeInput) (*nodeProb
 	defer cancel()
 	referenceHost := strings.TrimSpace(in.Body.ReferenceHost)
 	if referenceHost != "" && (!netaddr.PublicHost(referenceHost) || strings.ContainsAny(referenceHost, ":/?#@[]%\\ \t\r\n")) {
-		return nil, huma.Error422UnprocessableEntity("probe_public_host")
+		return nil, refusal("probe_public_host")
 	}
 	node, err := h.nodeOf(ctx, in.ID)
 	if err != nil {
 		return nil, err
 	}
 	if node.Enabled == 0 {
-		return nil, huma.Error422UnprocessableEntity("probe_disabled_node")
+		return nil, refusal("probe_disabled_node")
 	}
 	rows, err := h.d.Store.Q.ListInbounds(ctx)
 	if err != nil {
@@ -95,7 +95,7 @@ func (h *handlers) probeNode(ctx context.Context, in *nodeProbeInput) (*nodeProb
 	_, ip, err := publicProbeDialer(resolveCtx, host, h.d.Resolve)
 	stop()
 	if err != nil {
-		return nil, huma.Error422UnprocessableEntity("probe_public_host")
+		return nil, refusal("probe_public_host")
 	}
 	for _, ib := range rows {
 		if ib.NodeID != node.ID || ib.Enabled == 0 || (in.Body.InboundID != 0 && ib.ID != in.Body.InboundID) {
@@ -179,7 +179,7 @@ func (h *handlers) probeNode(ctx context.Context, in *nodeProbeInput) (*nodeProb
 		return nil, huma.Error404NotFound("probe_no_inbounds")
 	}
 	if len(views) > 64 {
-		return nil, huma.Error422UnprocessableEntity("probe_too_many_inbounds")
+		return nil, refusal("probe_too_many_inbounds")
 	}
 	started := h.d.Now()
 	h.audit(ctx, sessionOf(ctx).AdminID, "node.protocol_probe", "node", strconv.FormatInt(node.ID, 10), map[string]any{"inbound_id": in.Body.InboundID, "reference_port": in.Body.ReferencePort})

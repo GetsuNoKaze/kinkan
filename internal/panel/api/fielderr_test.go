@@ -20,6 +20,9 @@ var direct422 = []struct{ file, title, why string }{
 	{"inbounds.go", `"bad_dest"`, "the camouflage site; the detail says why"},
 	{"inbounds.go", `"invalid_config"`, "the template; the detail says why, with the line"},
 	{"targets.go", `"bad_dest"`, "the camouflage site; the detail says why"},
+	{"kinkan_sites.go", `"invalid_site"`, "Kinkan: the node site's archive; the detail names the file"},                  // Kinkan
+	{"kinkan_sites.go", `"unknown_site"`, "Kinkan: the site given to a node is not in the panel"},                        // Kinkan
+	{"kinkan_tt_connections.go", `pe.Code`, "Kinkan: TrustTunnel's max-connections; the code says which bound it broke"}, // Kinkan
 }
 
 // A refused input is built in fielderr.go, so that the UI reads one shape (ApiError in

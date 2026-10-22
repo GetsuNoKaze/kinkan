@@ -50,7 +50,7 @@ func (h *handlers) ttTemplate(ctx context.Context, id int64) (proto.Template, er
 	}
 	t, err := proto.Parse(row.Config)
 	if err != nil || t.Type() != "trusttunnel" {
-		return nil, huma.Error422UnprocessableEntity("not_trusttunnel")
+		return nil, refusal("not_trusttunnel")
 	}
 	return t, nil
 }

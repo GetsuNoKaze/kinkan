@@ -55,7 +55,7 @@ func (h *handlers) getLeakPolicy(ctx context.Context, _ *struct{}) (*leakPolicyO
 }
 func (h *handlers) setLeakPolicy(ctx context.Context, in *leakPolicyInput) (*leakPolicyOutput, error) {
 	if !in.Body.Valid() {
-		return nil, huma.Error422UnprocessableEntity("leak_policy_invalid")
+		return nil, refusal("leak_policy_invalid")
 	}
 	if err := h.d.Store.SetLeakPolicy(ctx, in.Body); err != nil {
 		return nil, err

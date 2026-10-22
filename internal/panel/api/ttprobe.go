@@ -69,11 +69,11 @@ func (h *handlers) probeTrustTunnel(ctx context.Context, in *ttProbeInput) (*ttP
 	}
 	template, err := proto.Parse(ib.Config)
 	if err != nil || template.Type() != "trusttunnel" || ib.Enabled == 0 || node.Enabled == 0 {
-		return nil, huma.Error422UnprocessableEntity("probe_not_trusttunnel")
+		return nil, refusal("probe_not_trusttunnel")
 	}
 	port, err := strconv.Atoi(ib.Port)
 	if err != nil || port < 1 || port > 65535 {
-		return nil, huma.Error422UnprocessableEntity("probe_bad_port")
+		return nil, refusal("probe_bad_port")
 	}
 	host := domain.NodeHost(node)
 	if node.Address == "" {
@@ -92,7 +92,7 @@ func (h *handlers) probeTrustTunnel(ctx context.Context, in *ttProbeInput) (*ttP
 	dialer, ip, err := publicProbeDialer(resolveCtx, host, h.d.Resolve)
 	stop()
 	if err != nil {
-		return nil, huma.Error422UnprocessableEntity("probe_public_host")
+		return nil, refusal("probe_public_host")
 	}
 	cfg := ttprobe.Config{Target: "https://" + net.JoinHostPort(host, strconv.Itoa(port)), Timeout: 2 * time.Second, DialContext: dialer}
 	if in.Body.ReferencePort != 0 {
