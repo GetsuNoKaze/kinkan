@@ -13,7 +13,7 @@ require (
 	github.com/metacubex/mihomo v1.19.32
 	github.com/metacubex/quic-go v0.61.1-0.20260727080200-2548683b76f4
 	github.com/metacubex/tls v0.1.8
-	github.com/oschwald/maxminddb-golang v1.12.0
+	github.com/oschwald/maxminddb-golang v1.13.1
 	github.com/pquerna/otp v1.5.0
 	github.com/pressly/goose/v3 v3.29.0
 	go.yaml.in/yaml/v3 v3.0.5
