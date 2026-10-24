@@ -16,6 +16,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -242,6 +243,20 @@ func (s *siteServer) ownHost(host string) bool {
 	return s.hosts[strings.ToLower(strings.TrimSuffix(host, "."))]
 }
 
+// ownName is one of the names the site answers for (the first in order), "" when it
+// answers any.
+func (s *siteServer) ownName() string {
+	names := make([]string, 0, len(s.hosts))
+	for h := range s.hosts {
+		names = append(names, h)
+	}
+	slices.Sort(names)
+	if len(names) == 0 {
+		return ""
+	}
+	return names[0]
+}
+
 // siteRetryEvery is how often a site that could not listen (a port another program held)
 // tries again: the panel sends the same state only when it changes.
 const siteRetryEvery = 15 * time.Second
@@ -271,7 +286,21 @@ func (s *siteServer) listen(certs *nodeapi.TLSFiles, log *slog.Logger) {
 			errs = append(errs, err.Error())
 			return ""
 		}
-		srv := &http.Server{Handler: s, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute, ErrorLog: slog.NewLogLogger(log.Handler(), slog.LevelDebug),
+		var handler http.Handler = s
+		if conf == nil {
+			// The plain port is TrustTunnel's fallback alone, and Citrus binds the Host of
+			// what it forwards to its target, this address (a stranger must not pick another
+			// vhost). Here that Host is the site's own name; elsewhere it stays a stranger's,
+			// which Caddy answers with an empty 200 (the site was blank behind TT, 24.10).
+			handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Host == addr {
+					r = r.Clone(r.Context())
+					r.Host = s.ownName()
+				}
+				s.ServeHTTP(w, r)
+			})
+		}
+		srv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute, ErrorLog: slog.NewLogLogger(log.Handler(), slog.LevelDebug),
 			// Caddy's request header limit, as TrustTunnel's fallback front has it: HTTP/2
 			// announces it (MAX_HEADER_LIST_SIZE 16704), and Go's 1 MB would set REALITY's
 			// own site apart from the TrustTunnel port on the same node.

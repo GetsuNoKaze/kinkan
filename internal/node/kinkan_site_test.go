@@ -295,3 +295,51 @@ func TestTargetOptionsDialTheSite(t *testing.T) {
 		t.Fatal("the site is not an allowed target")
 	}
 }
+
+// TrustTunnel's fallback forwards with Host set to the plain port's own address (Citrus binds
+// it): that is the site, while a stranger's name there, and that address on the TLS port,
+// still meet Caddy's empty 200.
+func TestSiteBehindTrustTunnelFallback(t *testing.T) {
+	e := testEngine(t)
+	s, archive := packedSite(t, "Night")
+	pair, err := nodetls.Generate("node.example", x509.ExtKeyUsageServerAuth, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.PutSite(s.Hash, archive); err != nil {
+		t.Fatal(err)
+	}
+	st := nodeapi.DesiredState{TLS: &nodeapi.TLSFiles{CertPEM: pair.CertPEM, KeyPEM: pair.KeyPEM},
+		Site: &nodeapi.SiteState{Hash: s.Hash, HTTPPort: kinkanFreePort(t), HTTPSPort: kinkanFreePort(t)}}
+	if e.applySite(st) {
+		t.Fatal("missing")
+	}
+	defer e.stopSite()
+	status := e.siteStatus()
+	get := func(c *http.Client, url, host string) (int, string) {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodGet, url, nil)
+		req.Host = host
+		r, err := c.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer r.Body.Close()
+		b, _ := io.ReadAll(r.Body)
+		return r.StatusCode, string(b)
+	}
+	plain := http.DefaultClient
+	if code, body := get(plain, "http://"+status.HTTP+"/", status.HTTP); code != 200 || !strings.Contains(body, "<title>Night</title>") {
+		t.Errorf("TT fallback (Host = the port's address): %d %q, want the site", code, body)
+	}
+	if code, body := get(plain, "http://"+status.HTTP+"/", "node.example"); code != 200 || !strings.Contains(body, "Night") {
+		t.Errorf("own name: %d %q", code, body)
+	}
+	if code, body := get(plain, "http://"+status.HTTP+"/", "other.example"); code != 200 || body != "" {
+		t.Errorf("a stranger's name on the plain port: %d %q, want an empty 200", code, body)
+	}
+	secure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	if code, body := get(secure, "https://"+status.HTTPS+"/", status.HTTP); code != 200 || body != "" {
+		t.Errorf("the plain port's address on the TLS port: %d %q, want an empty 200", code, body)
+	}
+}
