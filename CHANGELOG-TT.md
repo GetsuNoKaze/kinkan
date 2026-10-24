@@ -2,6 +2,13 @@
 
 Fork release notes. Upstream history remains in CHANGELOG.md.
 
+## 0.5.2.1-tt.2
+Stable, on Mikan 0.5.2.0. One node fix: update the nodes after the panel (Nodes → Update all).
+### en
+- The TrustTunnel port shows the node's site again instead of a blank page. Citrus sends what TT's fallback forwards with the Host set to the fallback address (`127.0.0.1:<port>`), so that a stranger cannot pick another site behind it. The node's site answers like Caddy and gave that unknown Host an empty 200, so every visitor of the TT port saw a blank page. On the plain port, which only TT's fallback reaches, that address now means the site's own name. A stranger's name there, and the same address on the TLS port that REALITY uses, still get Caddy's empty 200.
+### ru
+- Порт TrustTunnel снова показывает сайт ноды, а не пустую страницу. Citrus пересылает запросы fallback с Host, равным адресу fallback (`127.0.0.1:<порт>`), чтобы посторонний не мог выбрать другой сайт за ним. Сайт ноды отвечает как Caddy и на незнакомый Host отдавал пустой 200, поэтому любой посетитель порта TT видел пустую страницу. На обычном порту, куда ходит только fallback TT, этот адрес теперь считается именем самого сайта. Чужое имя на этом порту и тот же адрес на TLS-порту, которым пользуется REALITY, по-прежнему получают пустой 200, как у Caddy.
+
 ## 0.5.2.1-tt.1
 Stable, on Mikan 0.5.2.0 (the 0.5.1.1 betas released). From here on Kinkan follows Mikan's stable releases, not every candidate. After the panel, update the nodes (Nodes → Update all): the new core and much of the list below work only on updated nodes.
 ### en
