@@ -198,13 +198,23 @@ func TestSiteServingTLS(t *testing.T) {
 	if status.HTTPS == "" || status.Error != "" {
 		t.Fatalf("status = %+v", status)
 	}
-	conn, err := tls.Dial("tcp", status.HTTPS, &tls.Config{InsecureSkipVerify: true, NextProtos: []string{"h2", "http/1.1"}})
+	conn, err := tls.Dial("tcp", status.HTTPS, &tls.Config{ServerName: "node.example", InsecureSkipVerify: true, NextProtos: []string{"h2", "http/1.1"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer conn.Close()
 	if p := conn.ConnectionState().NegotiatedProtocol; p != "h2" {
 		t.Errorf("negotiated %q, want h2", p)
+	}
+	// By bare IP or under a stranger's name Caddy fails the handshake instead of
+	// showing its certificate, and so does the site.
+	for _, name := range []string{"", "other.example"} {
+		if c, err := tls.Dial("tcp", status.HTTPS, &tls.Config{ServerName: name, InsecureSkipVerify: true}); err == nil {
+			c.Close()
+			t.Errorf("SNI %q: handshake done, want it refused", name)
+		} else if !strings.Contains(err.Error(), "internal error") {
+			t.Errorf("SNI %q: %v, want Caddy's internal_error alert", name, err)
+		}
 	}
 	// The same state again changes nothing; a port another program holds is reported.
 	if e.applySite(st) || e.siteStatus().HTTPS != status.HTTPS {
@@ -250,7 +260,7 @@ func TestSiteHeaderLimitLikeCaddy(t *testing.T) {
 	}
 	e.applySite(nodeapi.DesiredState{TLS: &nodeapi.TLSFiles{CertPEM: pair.CertPEM, KeyPEM: pair.KeyPEM}, Site: &nodeapi.SiteState{Hash: s.Hash, HTTPPort: kinkanFreePort(t), HTTPSPort: kinkanFreePort(t)}})
 	defer e.stopSite()
-	conn, err := tls.Dial("tcp", e.siteStatus().HTTPS, &tls.Config{InsecureSkipVerify: true, NextProtos: []string{"h2"}})
+	conn, err := tls.Dial("tcp", e.siteStatus().HTTPS, &tls.Config{ServerName: "node.example", InsecureSkipVerify: true, NextProtos: []string{"h2"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -379,8 +389,31 @@ func TestSiteBehindTrustTunnelFallback(t *testing.T) {
 	if code, body := get(plain, front.URL+"/", "other.example"); code != 200 || body != "" {
 		t.Errorf("through the TT front, a stranger's name: %d %q, want an empty 200", code, body)
 	}
-	secure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	secure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{ServerName: "node.example", InsecureSkipVerify: true}}}
 	if code, body := get(secure, "https://"+status.HTTPS+"/", status.HTTP); code != 200 || body != "" {
 		t.Errorf("the plain port's address on the TLS port: %d %q, want an empty 200", code, body)
+	}
+}
+
+// A wildcard name covers one label, as in a browser and in Caddy.
+func TestSiteCoversWildcard(t *testing.T) {
+	s := &siteServer{hosts: map[string]bool{"*.example.net": true, "node.example": true}}
+	for host, want := range map[string]bool{
+		"node.example": true, "NODE.example.": true, "a.example.net": true, "a.example.net:4443": true,
+		"example.net": false, "a.b.example.net": false, "other.example": false, "": false,
+	} {
+		if got := s.ownHost(host); got != want {
+			t.Errorf("ownHost(%q) = %v, want %v", host, got, want)
+		}
+	}
+	pair := &tls.Certificate{}
+	if _, err := s.certFor(pair)(&tls.ClientHelloInfo{ServerName: "a.example.net"}); err != nil {
+		t.Errorf("a name under the wildcard: %v", err)
+	}
+	if _, err := s.certFor(pair)(&tls.ClientHelloInfo{}); err == nil {
+		t.Error("no SNI: the certificate was handed out")
+	}
+	if c, err := (&siteServer{}).certFor(pair)(&tls.ClientHelloInfo{}); err != nil || c != pair {
+		t.Errorf("a site for any name: %v %v, want its certificate", c, err)
 	}
 }

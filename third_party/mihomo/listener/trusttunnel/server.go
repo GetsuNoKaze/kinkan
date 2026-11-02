@@ -51,6 +51,12 @@ func New(config LC.TrustTunnelServer, lc C.InboundListenConfig, tunnel C.Tunnel,
 		tlsConfig.GetCertificate = func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 			return certLoader()
 		}
+		if config.Fallback != "" {
+			// A server that poses as a website answers only its own names, as Caddy does:
+			// a handshake by bare IP or under a stranger's name fails instead of telling
+			// a scanner the server's domain.
+			tlsConfig.GetCertificate = trusttunnel.NamedOnly(tlsConfig.GetCertificate)
+		}
 
 		if config.EchKey != "" {
 			err = ech.LoadECHKey(config.EchKey, tlsConfig)

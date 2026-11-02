@@ -240,8 +240,34 @@ func (s *siteServer) ownHost(host string) bool {
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		host = h
 	}
-	return s.hosts[strings.ToLower(strings.TrimSuffix(host, "."))]
+	return s.covers(host)
 }
+
+// covers says whether the certificate names host, a wildcard covering one label.
+func (s *siteServer) covers(host string) bool {
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	if s.hosts[host] {
+		return true
+	}
+	i := strings.IndexByte(host, '.')
+	return i > 0 && s.hosts["*"+host[i:]]
+}
+
+// certFor hands the certificate only to a client that names the site, as Caddy does
+// with sites under their names alone: a handshake by bare IP, with no SNI or a
+// stranger's, fails with internal_error (checked against Caddy 2.11.7, 02.11.2026)
+// instead of telling a scanner the node's name. A site that answers any name keeps
+// answering any handshake.
+func (s *siteServer) certFor(pair *tls.Certificate) func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+	return func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		if s.hosts != nil && !s.covers(hello.ServerName) {
+			return nil, errNoSiteForName
+		}
+		return pair, nil
+	}
+}
+
+var errNoSiteForName = errors.New("site: no certificate for this name")
 
 // ownName is one of the names the site answers for (the first in order), "" when it
 // answers any.
@@ -328,7 +354,7 @@ func (s *siteServer) listen(certs *nodeapi.TLSFiles, log *slog.Logger) {
 		if err != nil {
 			errs = append(errs, "certificate: "+err.Error())
 		} else {
-			s.status.HTTPS = serve(s.state.HTTPSPort, &tls.Config{Certificates: []tls.Certificate{pair}, NextProtos: []string{"h2", "http/1.1"}, MinVersion: tls.VersionTLS12})
+			s.status.HTTPS = serve(s.state.HTTPSPort, &tls.Config{GetCertificate: s.certFor(&pair), NextProtos: []string{"h2", "http/1.1"}, MinVersion: tls.VersionTLS12})
 		}
 	}
 	s.status.Error = strings.Join(errs, "; ")
