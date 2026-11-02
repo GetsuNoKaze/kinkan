@@ -19,7 +19,7 @@ Plans: [ROADMAP.md](ROADMAP.md).
 | HTTP/2 without ALPN | spoken on TLS that negotiated `http/1.1` or nothing | with `fallback`, only after negotiating `h2`; a bare preface gets an HTTP/1 answer | done |
 | Wrong credentials in the log | logged | logged at most once per 10 seconds with a count of the rest; requests without credentials at debug level only | done |
 | Requests without credentials behind a fallback | Citrus reports none: they are cover-site visits | a CONNECT is reported (no browser sends one to a site), so the scanner journal sees proxy scans | done |
-| TLS by bare IP or a stranger's SNI | the certificate, and with it the domain, goes to anyone | with `fallback`, a handshake that does not name the server fails with `internal_error`, as on Caddy (`patches/mihomo/0004`); the node's own site and the panel's port do the same (the panel lets loopback and a certificate for an IP through) | done |
+| TLS by bare IP or a stranger's SNI | the certificate, and with it the domain, goes to anyone | with `fallback`, a handshake that does not name the server fails with `internal_error`, as on Caddy (`patches/mihomo/0004`); the node's own site does the same; the panel's port refuses only a handshake with no name (Cloudflare dials it under the subscription domain) and lets loopback and a certificate for an IP through | done |
 | `fallback` in the panel | | checked when saved: `host:port`, no link-local address (cloud metadata) | done |
 | Stalled clients on the fallback | | idle limit, 256 concurrent requests at most and 64 per client network (/32, IPv6 /64), cancelled on restart | done |
 | Fallback backend address | | link-local, multicast and unspecified addresses refused when dialing, also behind a host name | done |

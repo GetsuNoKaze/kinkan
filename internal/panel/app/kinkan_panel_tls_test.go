@@ -57,7 +57,8 @@ func TestKinkanPanelAnswersItsNameOnly(t *testing.T) {
 	for _, tc := range []struct {
 		sni string
 		ok  bool
-	}{{"panel.example", true}, {"PANEL.example.", true}, {"a.sub.example", true}, {"", false}, {"other.example", false}} {
+		// Cloudflare in front of a subscription domain names that domain, not the panel's.
+	}{{"panel.example", true}, {"PANEL.example.", true}, {"a.sub.example", true}, {"files.example", true}, {"", false}} {
 		err := kinkanHandshake(t, named, ext, tc.sni)
 		if tc.ok && err != nil {
 			t.Errorf("SNI %q from %s: %v, want the handshake", tc.sni, ext, err)
