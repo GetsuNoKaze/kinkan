@@ -240,8 +240,34 @@ func (s *siteServer) ownHost(host string) bool {
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		host = h
 	}
-	return s.hosts[strings.ToLower(strings.TrimSuffix(host, "."))]
+	return s.covers(host)
 }
+
+// covers says whether the certificate names host, a wildcard covering one label.
+func (s *siteServer) covers(host string) bool {
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	if s.hosts[host] {
+		return true
+	}
+	i := strings.IndexByte(host, '.')
+	return i > 0 && s.hosts["*"+host[i:]]
+}
+
+// certFor hands the certificate only to a client that names the site, as Caddy does
+// with sites under their names alone: a handshake by bare IP, with no SNI or a
+// stranger's, fails with internal_error (checked against Caddy 2.11.7, 02.11.2026)
+// instead of telling a scanner the node's name. A site that answers any name keeps
+// answering any handshake.
+func (s *siteServer) certFor(pair *tls.Certificate) func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+	return func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		if s.hosts != nil && !s.covers(hello.ServerName) {
+			return nil, errNoSiteForName
+		}
+		return pair, nil
+	}
+}
+
+var errNoSiteForName = errors.New("site: no certificate for this name")
 
 // ownName is one of the names the site answers for (the first in order), "" when it
 // answers any.
@@ -290,12 +316,19 @@ func (s *siteServer) listen(certs *nodeapi.TLSFiles, log *slog.Logger) {
 		if conf == nil {
 			// The plain port is TrustTunnel's fallback alone, and Citrus binds the Host of
 			// what it forwards to its target, this address (a stranger must not pick another
-			// vhost). Here that Host is the site's own name; elsewhere it stays a stranger's,
-			// which Caddy answers with an empty 200 (the site was blank behind TT, 24.10).
+			// vhost). The client's own Host comes in X-Forwarded-Host: the site answers it as
+			// Caddy does, its own name with the page, a stranger's or none (an absolute-form
+			// request, a raw HTTP/2 preface) with an empty 200, the same as REALITY's port
+			// (checked against Caddy 2.11.7, 02.11.2026). Without the header the Host is the
+			// site's own name (the site was blank behind TT, 24.10).
 			handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Host == addr {
 					r = r.Clone(r.Context())
-					r.Host = s.ownName()
+					if fwd, ok := r.Header["X-Forwarded-Host"]; ok && len(fwd) > 0 {
+						r.Host = fwd[0]
+					} else {
+						r.Host = s.ownName()
+					}
 				}
 				s.ServeHTTP(w, r)
 			})
@@ -321,7 +354,7 @@ func (s *siteServer) listen(certs *nodeapi.TLSFiles, log *slog.Logger) {
 		if err != nil {
 			errs = append(errs, "certificate: "+err.Error())
 		} else {
-			s.status.HTTPS = serve(s.state.HTTPSPort, &tls.Config{Certificates: []tls.Certificate{pair}, NextProtos: []string{"h2", "http/1.1"}, MinVersion: tls.VersionTLS12})
+			s.status.HTTPS = serve(s.state.HTTPSPort, &tls.Config{GetCertificate: s.certFor(&pair), NextProtos: []string{"h2", "http/1.1"}, MinVersion: tls.VersionTLS12})
 		}
 	}
 	s.status.Error = strings.Join(errs, "; ")

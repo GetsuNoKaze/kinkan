@@ -2,6 +2,17 @@
 
 Fork release notes. Upstream history remains in CHANGELOG.md.
 
+## 0.5.2.1-tt.3
+Stable, on Mikan 0.5.2.0. Node and panel fixes for what a scanner sees: update the nodes after the panel (Nodes → Update all).
+### en
+- A TLS handshake that does not name the server fails with `internal_error`, as on Caddy, instead of handing out the certificate and with it the domain. A scanner that walks IP addresses learned each node's name from its certificate and then every other name in the same domain. This covers the node's own site behind REALITY and the TrustTunnel port with a `fallback` (`patches/mihomo/0004`). The panel's port refuses only a handshake with no name: any host name passes, since Cloudflare in front of a subscription domain dials the panel under that domain; its own checks on `127.0.0.1` and a panel with a certificate for its IP address pass too. VPN clients always send the name, so they keep working; open the panel by its domain, not by the IP.
+- The TrustTunnel port answers a stranger's Host and a raw HTTP/2 preface like Caddy and like the REALITY port of the same node: an empty 200. It showed the site for any Host and answered the preface with 405, and `kinkan probe` marked the REALITY port as different from the cover. The site now reads the client's own Host from `X-Forwarded-Host`, which TrustTunnel's fallback sets.
+- A wildcard certificate (`*.example.com`) covers the names under it on the node's site; before, only the exact names in the certificate counted.
+### ru
+- TLS-рукопожатие, в котором не названо имя сервера, завершается ошибкой `internal_error`, как у Caddy, а не получает сертификат, а вместе с ним и домен. Сканер, перебирающий IP-адреса, узнавал из сертификата имя каждой ноды, а по нему все остальные имена того же домена. Это касается сайта ноды за REALITY и порта TrustTunnel с `fallback` (`patches/mihomo/0004`). Порт панели отказывает только рукопожатию совсем без имени: любое доменное имя проходит, потому что Cloudflare перед доменом подписки подключается к панели под этим доменом; свои проверки на `127.0.0.1` и панель с сертификатом на IP-адрес тоже проходят. VPN-клиенты всегда передают имя и продолжают работать; панель открывайте по домену, а не по IP.
+- Порт TrustTunnel отвечает на чужой Host и на голое начало HTTP/2 как Caddy и как порт REALITY той же ноды: пустым 200. Раньше он показывал сайт на любой Host и отвечал на начало HTTP/2 кодом 405, и `kinkan probe` отмечал, что порт REALITY отличается от прикрытия. Теперь сайт берёт настоящий Host клиента из `X-Forwarded-Host`, который ставит fallback TrustTunnel.
+- Wildcard-сертификат (`*.example.com`) на сайте ноды покрывает имена под ним; раньше учитывались только имена, записанные в сертификате буквально.
+
 ## 0.5.2.1-tt.2
 Stable, on Mikan 0.5.2.0. One node fix: update the nodes after the panel (Nodes → Update all).
 ### en

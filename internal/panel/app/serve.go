@@ -160,7 +160,7 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 	}
 	var panelTLS *tls.Config
 	if !cfg.Dev {
-		panelTLS = &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: names.Get, NextProtos: []string{"h2", "http/1.1"}}
+		panelTLS = &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: kinkanNamedOnly(names.Get), NextProtos: []string{"h2", "http/1.1"}} // Kinkan
 	}
 	listenHost, _, err := net.SplitHostPort(cfg.Listen)
 	if err != nil {
