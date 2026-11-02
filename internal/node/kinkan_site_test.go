@@ -10,6 +10,8 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -337,6 +339,45 @@ func TestSiteBehindTrustTunnelFallback(t *testing.T) {
 	}
 	if code, body := get(plain, "http://"+status.HTTP+"/", "other.example"); code != 200 || body != "" {
 		t.Errorf("a stranger's name on the plain port: %d %q, want an empty 200", code, body)
+	}
+	// What TrustTunnel's fallback really sends: the port's address as Host and the
+	// client's own in X-Forwarded-Host (httputil.ProxyRequest.SetXForwarded).
+	viaTT := func(method, uri, clientHost string) (int, string) {
+		t.Helper()
+		req, _ := http.NewRequest(method, "http://"+status.HTTP+uri, nil)
+		req.Host = status.HTTP
+		req.Header.Set("X-Forwarded-Host", clientHost)
+		r, err := plain.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer r.Body.Close()
+		b, _ := io.ReadAll(r.Body)
+		return r.StatusCode, string(b)
+	}
+	if code, body := viaTT(http.MethodGet, "/", "node.example:4443"); code != 200 || !strings.Contains(body, "Night") {
+		t.Errorf("TT fallback, the client's own name: %d %q, want the site", code, body)
+	}
+	if code, body := viaTT(http.MethodGet, "/", "kinkan-probe.invalid"); code != 200 || body != "" {
+		t.Errorf("TT fallback, a stranger's name (absolute-form): %d %q, want an empty 200 like Caddy", code, body)
+	}
+	if code, body := viaTT("PRI", "/", ""); code != 200 || body != "" {
+		t.Errorf("TT fallback, no name (a raw HTTP/2 preface): %d %q, want an empty 200 like Caddy", code, body)
+	}
+	// The same through a ReverseProxy rewritten as TrustTunnel's (transport/trusttunnel).
+	target := status.HTTP
+	front := httptest.NewServer(&httputil.ReverseProxy{Rewrite: func(r *httputil.ProxyRequest) {
+		r.Out.URL.Scheme = "http"
+		r.Out.URL.Host = target
+		r.Out.Host = target
+		r.SetXForwarded()
+	}})
+	defer front.Close()
+	if code, body := get(plain, front.URL+"/", "node.example"); code != 200 || !strings.Contains(body, "Night") {
+		t.Errorf("through the TT front, own name: %d %q, want the site", code, body)
+	}
+	if code, body := get(plain, front.URL+"/", "other.example"); code != 200 || body != "" {
+		t.Errorf("through the TT front, a stranger's name: %d %q, want an empty 200", code, body)
 	}
 	secure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
 	if code, body := get(secure, "https://"+status.HTTPS+"/", status.HTTP); code != 200 || body != "" {

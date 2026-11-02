@@ -290,12 +290,19 @@ func (s *siteServer) listen(certs *nodeapi.TLSFiles, log *slog.Logger) {
 		if conf == nil {
 			// The plain port is TrustTunnel's fallback alone, and Citrus binds the Host of
 			// what it forwards to its target, this address (a stranger must not pick another
-			// vhost). Here that Host is the site's own name; elsewhere it stays a stranger's,
-			// which Caddy answers with an empty 200 (the site was blank behind TT, 24.10).
+			// vhost). The client's own Host comes in X-Forwarded-Host: the site answers it as
+			// Caddy does, its own name with the page, a stranger's or none (an absolute-form
+			// request, a raw HTTP/2 preface) with an empty 200, the same as REALITY's port
+			// (checked against Caddy 2.11.7, 02.11.2026). Without the header the Host is the
+			// site's own name (the site was blank behind TT, 24.10).
 			handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Host == addr {
 					r = r.Clone(r.Context())
-					r.Host = s.ownName()
+					if fwd, ok := r.Header["X-Forwarded-Host"]; ok && len(fwd) > 0 {
+						r.Host = fwd[0]
+					} else {
+						r.Host = s.ownName()
+					}
 				}
 				s.ServeHTTP(w, r)
 			})
