@@ -356,6 +356,7 @@ func (s *Service) Start(tcpListener net.Listener, udpConn net.PacketConn, tlsCon
 				PingTimeout:     h2PingTimeout,
 			},
 		}
+		s.httpServer.Handler = kinkanWithPadding(s.httpServer.Handler) // Kinkan
 		listener := tcpListener
 		s.tcpListener = tcpListener
 		if tlsConfig != nil {
