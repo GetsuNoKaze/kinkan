@@ -2,6 +2,13 @@
 
 Fork release notes. Upstream history remains in CHANGELOG.md.
 
+## 0.5.2.1-tt.4
+Stable, on Mikan 0.5.2.0. Panel only: the nodes need no update.
+### en
+- A client tagged `все-ноды` or `all-nodes` is left out of load balancing: their subscription keeps every node of every balance group, the way it looked before the groups. For the admin and the people they look after, who pick a server by hand when one is blocked, while everyone else is split over the nodes. Their subscriptions are not counted in the groups' load either.
+### ru
+- Пользователь с тегом `все-ноды` или `all-nodes` не участвует в балансировке: в его подписке остаются все ноды всех групп балансировки, как до групп. Это для администратора и близких, кто сам выбирает сервер, когда какой-то заблокирован, пока остальные распределены по нодам. В нагрузке групп такие подписки тоже не учитываются.
+
 ## 0.5.2.1-tt.3
 Stable, on Mikan 0.5.2.0. Node and panel fixes for what a scanner sees: update the nodes after the panel (Nodes → Update all).
 ### en

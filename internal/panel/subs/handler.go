@@ -483,7 +483,7 @@ func (h *Handler) profile(ctx context.Context, u db.User, cfg Config, slot db.Sl
 	}
 	// One node of each balance group: the client's own. A balancer that fails shows the
 	// group whole rather than leave the client without servers.
-	if h.balance != nil && u.ID != 0 {
+	if h.balance != nil && u.ID != 0 && balanced(u) { // Kinkan: the tag все-ноды keeps every node (kinkan_balance.go)
 		if picked, err := h.balance.Nodes(ctx, u.ID, nodes); err != nil {
 			h.warn("balance", "subscriptions: load balancing", "err", err)
 		} else {
