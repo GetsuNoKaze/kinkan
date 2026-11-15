@@ -343,7 +343,7 @@ func (h *Handler) serveProfile(w http.ResponseWriter, r *http.Request, u db.User
 		w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
 		// Clash apps name the profile after the file: the same name as Profile-Title.
 		w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(fileName(profileTitle(cfg, vars)))+".yaml")
-		_, _ = w.Write(body)
+		_, _ = w.Write(geoMirror(body, r.Host)) // Kinkan: geodata from the panel's mirror (kinkan_geomirror.go)
 	case "singbox":
 		prof.Rules, prof.Routes, prof.Lang = cfg.Rules, cfg.Routes, cfg.Lang
 		body, err := SingBox(r.Context(), prof, cfg.Groups, cfg.Routing, cfg.Template)
