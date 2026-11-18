@@ -526,6 +526,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	subHandler.SetLogger(o.Log)
 	subHandler.SetTelegram(p.Gateway)
 	subHandler.SetReissuer(deps.Users)
+	subs.GeoMirrorDir = filepath.Join(o.DataDir, "www", "geo", "meta") // Kinkan: Clash geodata mirror (subs/kinkan_geomirror.go)
 	subHandler.SetShop(p.Billing)
 	subHandler.SetPromo(promos)
 	subHandler.SetPages(pages)

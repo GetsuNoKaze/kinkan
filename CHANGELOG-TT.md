@@ -2,6 +2,15 @@
 
 Fork release notes. Upstream history remains in CHANGELOG.md.
 
+## 0.5.2.1-tt.4
+Stable, on Mikan 0.5.2.0. Panel only: the nodes need no update.
+### en
+- A client tagged `все-ноды` or `all-nodes` is left out of load balancing: their subscription keeps every node of every balance group, the way it looked before the groups. For the admin and the people they look after, who pick a server by hand when one is blocked, while everyone else is split over the nodes. Their subscriptions are not counted in the groups' load either.
+- Clash profiles take their geodata (geoip, geosite, mmdb, ASN) from the panel's mirror when it holds the files: `data/panel/www/geo/meta/`, served as `/geo/meta/` at the address the app fetched the subscription from. GitHub's release downloads are slow or cut off from Russian networks, and an app without the files cannot start the profile. Fill the mirror from MetaCubeX meta-rules-dat on a schedule; with no mirror the profile keeps GitHub's links.
+### ru
+- Пользователь с тегом `все-ноды` или `all-nodes` не участвует в балансировке: в его подписке остаются все ноды всех групп балансировки, как до групп. Это для администратора и близких, кто сам выбирает сервер, когда какой-то заблокирован, пока остальные распределены по нодам. В нагрузке групп такие подписки тоже не учитываются.
+- Профили Clash берут гео-базы (geoip, geosite, mmdb, ASN) с зеркала на панели, если в нём есть файлы: `data/panel/www/geo/meta/`, отдаётся как `/geo/meta/` по тому адресу, с которого приложение скачало подписку. Загрузки с релизов GitHub из российских сетей медленные или обрываются, а без этих файлов приложение не запускает профиль. Зеркало наполняется из MetaCubeX meta-rules-dat по расписанию; без зеркала в профиле остаются ссылки на GitHub.
+
 ## 0.5.2.1-tt.3
 Stable, on Mikan 0.5.2.0. Node and panel fixes for what a scanner sees: update the nodes after the panel (Nodes → Update all).
 ### en
