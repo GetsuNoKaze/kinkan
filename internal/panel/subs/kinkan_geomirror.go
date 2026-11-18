@@ -14,7 +14,11 @@ import (
 // profile (Kinkan, 15.11.2026). "" or an empty mirror: the profile keeps GitHub's links.
 var GeoMirrorDir string
 
+// geoxGitHub covers the MetaCubeX mirror; geoxGitHubLoyalsoldier the full GeoIP (RU and
+// every country) the geoip slot points at. A Loyalsoldier geox-url is mirrored only when
+// the mirror holds the file under the same name (geoip.dat).
 const geoxGitHub = "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/"
+const geoxGitHubLoyalsoldier = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/"
 
 var hostName = regexp.MustCompile(`^[A-Za-z0-9.-]+(:[0-9]{1,5})?$`)
 
@@ -24,10 +28,12 @@ func geoMirror(body []byte, host string) []byte {
 	if GeoMirrorDir == "" || !hostName.MatchString(host) {
 		return body
 	}
-	for _, f := range []string{"geoip-lite.dat", "geosite.dat", "geoip.metadb", "GeoLite2-ASN.mmdb"} {
+	for _, f := range []string{"geoip.dat", "geosite.dat", "geoip.metadb", "GeoLite2-ASN.mmdb"} {
 		if st, err := os.Stat(filepath.Join(GeoMirrorDir, f)); err != nil || st.Size() == 0 {
 			return body
 		}
 	}
-	return bytes.ReplaceAll(body, []byte(geoxGitHub), []byte("https://"+host+"/geo/meta/"))
+	return bytes.ReplaceAll(bytes.ReplaceAll(body,
+		[]byte(geoxGitHubLoyalsoldier), []byte("https://"+host+"/geo/meta/")),
+		[]byte(geoxGitHub), []byte("https://"+host+"/geo/meta/"))
 }

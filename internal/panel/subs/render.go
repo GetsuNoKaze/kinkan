@@ -77,7 +77,7 @@ func ParseRouting(s string) Routing {
 // geoxURL is the geodata Koala Clash ships (MetaCubeX meta-rules-dat, mihomo's own
 // default). Apps without the files download them from here before the profile starts.
 var geoxURL = map[string]string{
-	"geoip":   "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat",
+	"geoip":   "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat",
 	"geosite": "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat",
 	"mmdb":    "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.metadb",
 	"asn":     "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb",
